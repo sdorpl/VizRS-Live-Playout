@@ -45,6 +45,11 @@ const STATIC: &[(&str, &str, &str)] = &[
         include_str!("../web/parts.js"),
     ),
     (
+        "/when.js",
+        "text/javascript; charset=utf-8",
+        include_str!("../web/when.js"),
+    ),
+    (
         "/views/antena.js",
         "text/javascript; charset=utf-8",
         include_str!("../web/views/antena.js"),
@@ -90,9 +95,19 @@ const STATIC: &[(&str, &str, &str)] = &[
         include_str!("../web/views/playouty.js"),
     ),
     (
-        "/views/ramowka.js",
+        "/views/bloki.js",
         "text/javascript; charset=utf-8",
-        include_str!("../web/views/ramowka.js"),
+        include_str!("../web/views/bloki.js"),
+    ),
+    (
+        "/views/deco.js",
+        "text/javascript; charset=utf-8",
+        include_str!("../web/views/deco.js"),
+    ),
+    (
+        "/views/kalendarz.js",
+        "text/javascript; charset=utf-8",
+        include_str!("../web/views/kalendarz.js"),
     ),
     (
         "/views/harmonogramy.js",

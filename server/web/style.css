@@ -197,3 +197,22 @@ img.thumb.sm { max-width: 64px; max-height: 32px; }
 .wm-grid button.on { background: var(--acc); border-color: var(--acc); }
 /* zakładki rodzajów na całym ekranie (Kolekcje) */
 .page-tabs { margin: 0 0 14px; border: 1px solid var(--line); border-radius: 3px; }
+/* bloki, szablony, deco, kalendarz tygodnia (R6) */
+.daybar { position: relative; height: 34px; margin: 10px 12px; border: 1px solid var(--line); border-radius: 3px; background: repeating-linear-gradient(90deg, #15171a 0 calc(100% / 24 - 1px), #23262c calc(100% / 24 - 1px) calc(100% / 24)); }
+.daybar .tick { position: absolute; top: -1px; font: 9px var(--mono); color: var(--dim); padding-left: 2px; pointer-events: none; }
+.daybar .seg { position: absolute; top: 11px; bottom: 2px; background: #2a2212; border: 1px solid var(--acc-d); border-radius: 2px; font-size: 10px; padding: 1px 3px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.daybar .seg.deco { background: #1b2a33; border-color: #3d6b84; }
+.daybar .seg.bad { background: #3a1717; border-color: var(--red); }
+.daybar .empty-bar { position: absolute; left: 8px; top: 13px; font-size: 11px; color: var(--dim); }
+.daybar.thin { height: 18px; margin-top: 0; }
+.daybar.thin .seg { top: 2px; line-height: 12px; padding-top: 0; }
+.week { display: grid; grid-template-columns: 150px minmax(520px, 1fr); align-items: center; overflow-x: auto; }
+.week .day { padding: 4px 12px; border-bottom: 1px solid #23262c; display: grid; gap: 1px; font-size: 12px; }
+.week .day b { font-size: 13px; }
+.week .day span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.week .day.today b { color: var(--acc); }
+.week .bars { border-bottom: 1px solid #23262c; }
+.week .bars .daybar { margin: 6px 12px 2px; }
+.week .bars .daybar.thin { margin: 0 12px 6px; }
+td.log { font-family: var(--mono, monospace); font-size: 12px; white-space: pre-wrap; word-break: break-word; }
+.logbar select { width: auto; } .logbar input[type=search] { width: auto; flex: 1 1 220px; max-width: 420px; }

@@ -224,6 +224,10 @@ export const PL = {
   // pojedyncze pozycje (pozycje playlisty)
   Movie: 'film', Episode: 'odcinek', MusicVideo: 'teledysk', OtherVideo: 'inne wideo', Song: 'utwór', Image: 'obraz', RemoteStream: 'strumień zdalny',
   // kolejność odtwarzania
+  // deco i bloki (R6)
+  Inherit: 'dziedzicz', Disable: 'wyłącz', Override: 'zastąp', Merge: 'scal', RandomRotation: 'losowa rotacja',
+  BlockStart: 'start bloku', BlockFinish: 'koniec bloku', BetweenBlockItems: 'między pozycjami', ChapterMarkers: 'znaczniki rozdziałów',
+  BeforeDurationEnd: 'nie przekraczaj długości', AfterDurationEnd: 'może wyjść poza koniec',
   Chronological: 'chronologicznie', Random: 'losowo', Shuffle: 'tasuj', ShuffleInOrder: 'tasuj z zachowaniem kolejności', SeasonEpisode: 'sezon, odcinek',
 };
 export const isFiller = (it) => it.FillerKind != null && it.FillerKind !== 'None';

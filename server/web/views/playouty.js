@@ -6,10 +6,12 @@
 // ostatnią pozycję (Id = −1, najwyższy Index); ReplacePlayoutAlternateScheduleItems zapisuje pozycję
 // o najwyższym Index jako harmonogram główny. Panel pokazuje harmonogram główny jako osobne pole edytora.
 
-import { VIEWS, h, btn, panel, pill, cmd, pl, pad2, table, toast, confirmDlg, route, dateTime, isFiller, cmdNote } from '../core.js';
+import { VIEWS, h, btn, panel, pill, cmd, pl, table, toast, confirmDlg, route, dateTime, isFiller, cmdNote } from '../core.js';
 import { form } from '../form.js';
 import { crudView, itemsEditor } from '../parts.js';
 import { build } from './antena.js';
+import { fromWhen, newWhen, whenEditor, daysText, rangeText, monthsText, dateRangeText } from '../when.js';
+import { CAL_COMMANDS, loadCalendar, calendarPanels, saveCalendar } from './kalendarz.js';
 
 const CREATE = {
   Classic: 'CreateClassicPlayout', Block: 'CreateBlockPlayout', Sequential: 'CreateSequentialPlayout',
@@ -30,105 +32,11 @@ const hasFile = (kind) => kind in UPDATE_FILE;
 const chanName = (p) => `${p.ChannelNumber} · ${p.ChannelName}`;
 
 // ---------- harmonogramy zastępcze ----------
-const DAYS = [['Monday', 'pon'], ['Tuesday', 'wt'], ['Wednesday', 'śr'], ['Thursday', 'czw'], ['Friday', 'pt'], ['Saturday', 'sob'], ['Sunday', 'nd']];
-const ALL_DAYS = DAYS.map(([d]) => d);
-const MONTHS = ['sty', 'lut', 'mar', 'kwi', 'maj', 'cze', 'lip', 'sie', 'wrz', 'paź', 'lis', 'gru'];
-const range = (a, b) => Array.from({ length: b - a + 1 }, (_, i) => a + i);
-const ALL_MDAYS = range(1, 31);
-const ALL_MONTHS = range(1, 12);
-
-/** „1-5, 7, 9-10” z listy liczb; `każdy`, gdy są wszystkie. */
-function rangeText(nums, all) {
-  const l = [...new Set(nums)].sort((a, b) => a - b);
-  if (l.length === all) return 'każdy';
-  if (!l.length) return 'żaden';
-  const out = [];
-  for (let i = 0; i < l.length; i++) {
-    const s = l[i];
-    while (i < l.length - 1 && l[i + 1] === l[i] + 1) i++;
-    out.push(s === l[i] ? String(s) : `${s}-${l[i]}`);
-  }
-  return out.join(', ');
-}
-const daysText = (d) => (d.length === 7 ? 'każdy' : d.length ? DAYS.filter(([k]) => d.includes(k)).map(([, t]) => t).join(', ') : 'żaden');
-const monthsText = (m) => (m.length === 12 ? 'każdy' : m.length ? [...m].sort((a, b) => a - b).map((x) => MONTHS[x - 1]).join(', ') : 'żaden');
-const dayMonth = (d, m, y) => `${d}.${pad2(m)}${y ? '.' + y : ''}`;
-const dateRangeText = (a) => (a.LimitToDateRange ? `${dayMonth(a.StartDay, a.StartMonth, a.StartYear)} – ${dayMonth(a.EndDay, a.EndMonth, a.EndYear)}` : '—');
-
 /** Pozycja z GetPlayoutAlternateSchedules w kształcie ReplacePlayoutAlternateSchedule. */
-const fromLegacy = (a) => ({
-  Id: a.Id, ProgramScheduleId: a.ProgramScheduleId,
-  DaysOfWeek: [...(a.DaysOfWeek || [])], DaysOfMonth: [...(a.DaysOfMonth || [])], MonthsOfYear: [...(a.MonthsOfYear || [])],
-  LimitToDateRange: !!a.LimitToDateRange, StartMonth: a.StartMonth || 1, StartDay: a.StartDay || 1, StartYear: a.StartYear ?? null,
-  EndMonth: a.EndMonth || 12, EndDay: a.EndDay || 31, EndYear: a.EndYear ?? null,
-});
-/** Nowa pozycja – jak AddAlternateSchedule w legacy: każdy dzień i miesiąc, bez zakresu dat. */
-const newAlternate = (scheduleId) => fromLegacy({
-  Id: 0, ProgramScheduleId: scheduleId, DaysOfWeek: ALL_DAYS, DaysOfMonth: ALL_MDAYS, MonthsOfYear: ALL_MONTHS,
-  StartMonth: 1, StartDay: 1, EndMonth: 1, EndDay: 1,
-});
-
-/** Grupa pól wyboru ze skrótami (np. „robocze”, „weekend”); read() wymaga co najmniej jednej wartości. */
-function checks(id, label, options, value, shortcuts, tight) {
-  const set = new Set(value || []);
-  const boxes = options.map(([v, t]) => {
-    const c = h('input', { type: 'checkbox', value: String(v), checked: set.has(v) });
-    return [v, c, h('label', { class: 'chk' }, c, t)];
-  });
-  const el = h('div', { id, role: 'group', 'aria-label': label });
-  const setAll = (vals) => {
-    for (const [v, c] of boxes) c.checked = vals.includes(v);
-    el.dispatchEvent(new Event('change', { bubbles: true }));
-  };
-  el.append(h('div', { class: 'multi' + (tight ? ' tight' : '') }, boxes.map((b) => b[2])),
-    h('div', { class: 'bar' }, shortcuts.map(([t, vals]) => btn(t, () => setAll(vals)))));
-  const peek = () => boxes.filter((b) => b[1].checked).map((b) => b[0]);
-  return {
-    el,
-    peek,
-    read() {
-      const v = peek();
-      if (!v.length) {
-        boxes[0][1].focus();
-        throw new Error(`Pole „${label}”: zaznacz co najmniej jedną wartość – inaczej harmonogram zastępczy nigdy się nie włączy.`);
-      }
-      return v;
-    },
-  };
-}
-
-function alternateEditor(item, schedules) {
-  const monthOpts = MONTHS.map((m, i) => [i + 1, m]);
-  const f = form('', [
-    { key: 'ProgramScheduleId', label: 'Harmonogram', options: schedules.map((s) => [s.Id, s.Name]), optional: false },
-    { sec: 'Kiedy' },
-    { key: 'DaysOfWeek', label: 'Dni tygodnia', render: (v) => checks('alt-DaysOfWeek', 'Dni tygodnia', DAYS, v,
-      [['wszystkie', ALL_DAYS], ['robocze', ALL_DAYS.slice(0, 5)], ['weekend', ALL_DAYS.slice(5)], ['żaden', []]]) },
-    { key: 'DaysOfMonth', label: 'Dni miesiąca', render: (v) => checks('alt-DaysOfMonth', 'Dni miesiąca', ALL_MDAYS.map((d) => [d, String(d)]), v,
-      [['wszystkie', ALL_MDAYS], ['żaden', []]], true) },
-    { key: 'MonthsOfYear', label: 'Miesiące', render: (v) => checks('alt-MonthsOfYear', 'Miesiące', monthOpts, v, [['wszystkie', ALL_MONTHS], ['żaden', []]]) },
-    { key: 'LimitToDateRange', label: 'Zakres dat', kind: 'check', text: 'tylko w zakresie dat' },
-    { label: 'Od', show: (v) => v.LimitToDateRange, group: [
-      { key: 'StartDay', label: 'Od: dzień', kind: 'number', step: 1, optional: false, attrs: { min: 1, max: 31, 'aria-label': 'Od: dzień' } },
-      { key: 'StartMonth', label: 'Od: miesiąc', options: monthOpts, optional: false, attrs: { 'aria-label': 'Od: miesiąc' } },
-      { key: 'StartYear', label: 'Od: rok', kind: 'number', step: 1, placeholder: 'rok', attrs: { 'aria-label': 'Od: rok' } }] },
-    { label: 'Do', show: (v) => v.LimitToDateRange, hint: 'Bez roku zakres powtarza się co roku (może przechodzić przez Nowy Rok). Rok podaj w obu polach albo w żadnym.', group: [
-      { key: 'EndDay', label: 'Do: dzień', kind: 'number', step: 1, optional: false, attrs: { min: 1, max: 31, 'aria-label': 'Do: dzień' } },
-      { key: 'EndMonth', label: 'Do: miesiąc', options: monthOpts, optional: false, attrs: { 'aria-label': 'Do: miesiąc' } },
-      { key: 'EndYear', label: 'Do: rok', kind: 'number', step: 1, placeholder: 'rok', attrs: { 'aria-label': 'Do: rok' } }] },
-  ], item, { idPrefix: 'alt-' });
-  return {
-    el: f.el,
-    read() {
-      const v = f.read();
-      if (v.LimitToDateRange) {
-        for (const k of ['StartDay', 'EndDay']) if (!(v[k] >= 1 && v[k] <= 31)) throw new Error('Zakres dat: dzień od 1 do 31.');
-        if ((v.StartYear == null) !== (v.EndYear == null)) throw new Error('Zakres dat: podaj rok w obu polach albo w żadnym.');
-      }
-      return v;
-    },
-  };
-}
+const fromLegacy = (a) => ({ Id: a.Id, ProgramScheduleId: a.ProgramScheduleId, ...fromWhen(a) });
+const newAlternate = (scheduleId) => ({ Id: 0, ProgramScheduleId: scheduleId, ...newWhen() });
+const alternateEditor = (item, schedules) =>
+  whenEditor(item, [{ key: 'ProgramScheduleId', label: 'Harmonogram', options: schedules.map((s) => [s.Id, s.Name]), optional: false }], 'alt-');
 
 // ---------- utrzymanie playoutu ----------
 async function maintenance(p, command, title, text, done) {
@@ -153,7 +61,7 @@ VIEWS.playouty = crudView({
   listCmd: 'GetPagedPlayouts',
   needs: ['GetAllChannels', 'GetAllProgramSchedules', 'GetFuturePlayoutItemsById', 'BuildPlayout', 'ResetAllPlayouts',
     ...Object.values(CREATE), ...Object.values(UPDATE_FILE), 'ErasePlayoutItems', 'ErasePlayoutHistory', 'CheckForOverlappingPlayoutItems',
-    'GetPlayoutAlternateSchedules', 'ReplacePlayoutAlternateScheduleItems'],
+    'GetPlayoutAlternateSchedules', 'ReplacePlayoutAlternateScheduleItems', ...CAL_COMMANDS],
   commands: { create: 'CreateClassicPlayout', update: 'UpdatePlayout', delete: 'DeletePlayout' },
   createCmd: (data) => CREATE[data.Kind],
   noun: {
@@ -177,7 +85,8 @@ VIEWS.playouty = crudView({
     ]);
     const sorted = [...alts].sort((a, b) => a.Index - b.Index);
     const main = sorted.pop() || null;  // najwyższy Index = harmonogram główny
-    return { alternates: sorted.map(fromLegacy), main, items };
+    const cal = p.ScheduleKind === 'Block' ? await loadCalendar(p) : {};
+    return { alternates: sorted.map(fromLegacy), main, items, cal: null, ...cal };
   },
   id: (p) => p.PlayoutId,
   cols: [
@@ -196,7 +105,7 @@ VIEWS.playouty = crudView({
     const is = (...k) => (v) => k.includes(p ? kind : v.Kind);
     const f = form(p ? 'UpdatePlayout' : 'CreateClassicPlayout', [
       !p && { key: 'Kind', label: 'Rodzaj', options: Object.keys(CREATE).map((k) => [k, KIND_TEXT[k]]), optional: false,
-        hint: (v) => (v.Kind === 'Block' ? 'Playout blokowy startuje pusty: szablony dni i deco przypisuje się w ekranie Bloki i szablony (kolejny etap panelu).' : null) },
+        hint: (v) => (v.Kind === 'Block' ? 'Playout blokowy startuje pusty: po założeniu przypisz szablony dni i deco w kalendarzu tygodnia tego playoutu.' : null) },
       !p && { key: 'ChannelId', label: 'Kanał', options: free.map((c) => [c.Id, `${c.Number} · ${c.Name}`]), optional: false,
         hint: free.length ? 'Tylko kanały bez playoutu.' : 'Wszystkie kanały mają już playout – najpierw załóż kanał w widoku Kanały.' },
       (!p || kind === 'Classic') && { key: 'ProgramScheduleId', label: p ? 'Harmonogram główny' : 'Harmonogram', options: ctx.schedules.map((s) => [s.Id, s.Name]),
@@ -234,7 +143,7 @@ VIEWS.playouty = crudView({
     return h('div', { class: 'maint' },
       h('h3', null, 'Budowa i konserwacja'),
       h('div', { class: 'bar' },
-        k === 'Classic' ? btn('Przebuduj', () => build(p, 'Refresh')) : null,
+        ['Classic', 'Block'].includes(k) ? btn('Przebuduj', () => build(p, 'Refresh')) : null,
         btn('Od nowa', () => build(p, 'Reset'), 'danger'),
         ['Block', 'Sequential', 'Scripted'].includes(k) ? btn('Wyczyść pozycje', () => maintenance(p, 'ErasePlayoutItems', 'Wyczyść pozycje',
           `Usunąć przyszłe pozycje playoutu kanału ${chanName(p)}? Historia odtwarzania do teraz zostaje; kanał będzie bez ramówki do przebudowy.`, 'wyczyszczono pozycje'), 'danger') : null,
@@ -253,9 +162,12 @@ VIEWS.playouty = crudView({
         [(i) => (isFiller(i) ? h('span', { class: 'dim' }, i.Title + ' (wypełniacz)') : i.Title), 'Pozycja', { class: 'w' }], ['Duration', 'Czas']],
       { empty: 'Brak przyszłych pozycji – przebuduj playout.' }),
       cmdNote('GetFuturePlayoutItemsById', 'BuildPlayout'));
-    return [alt, items];
+    return [alt, ...(ctx.cal ? calendarPanels(p, ctx) : []), items];
   },
   beforeSave: (ctx) => {
+    if (ctx.calEd) {
+      try { ctx.calEd.commit(); } catch (e) { throw new Error('Szablon dnia w edycji: ' + e.message); }
+    }
     if (ctx.altEd) {
       try { ctx.altEd.commit(); } catch (e) { throw new Error('Harmonogram zastępczy w edycji: ' + e.message); }
     }
@@ -273,6 +185,9 @@ VIEWS.playouty = crudView({
       return;
     }
     const k = p.ScheduleKind;
+    if (k === 'Block' && ctx.cal && (await saveCalendar(id, ctx))) {
+      setTimeout(() => toast(`${chanName(p)}: kalendarz zapisany. Na antenie po przebudowie („Przebuduj” albo „Od nowa”).`, 'ok'), 50);
+    }
     if (hasFile(k) && data.ScheduleFile.trim() !== (p.ScheduleFile || '')) {
       try { await cmd(UPDATE_FILE[k], { PlayoutId: id, ScheduleFile: data.ScheduleFile.trim() }); }
       catch (e) { throw new Error('Godzina przebudowy zapisana, ale legacy odrzucił ścieżkę pliku: ' + e.message); }

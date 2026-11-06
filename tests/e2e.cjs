@@ -26,7 +26,7 @@ function check(cond, msg) {
   page.on('response', (r) => r.status() >= 400 && errors.push(`${r.status()} ${r.request().method()} ${r.url()}`));
 
   const views = ['antena', 'epg', 'kanaly', 'profile', 'znaki', 'media', 'przegladarka', 'kosz', 'kolekcje', 'playlisty', 'wypelniacze',
-    'harmonogramy', 'bloki', 'deco', 'playouty', 'grafika', 'live', 'ustawienia', 'diagnostyka'];
+    'harmonogramy', 'bloki', 'deco', 'playouty', 'grafika', 'live', 'ustawienia', 'logi', 'diagnostyka'];
   for (const v of views) {
     await page.goto(`${BASE}/#${v}`);
     await page.waitForSelector(`main[data-view="${v}"]`);
@@ -575,6 +575,302 @@ function check(cond, msg) {
     await rerender(() => page.click('#dlg-buttons button:has-text("Usuń")'));
     check(!(await page.$(`td:text-is("${nm}")`)), `${tab.toLowerCase()}: usunięto „${nm}”`);
   }
+
+  // ---------- R6: bloki, szablony dnia, deco, playout blokowy z kalendarzem tygodnia ----------
+  const r6 = 'E2E ' + tag;
+  // zrzuty ekranu nowych widoków do obejrzenia: E2E_SHOTS=<katalog poza repo>
+  const shot = (n) => (process.env.E2E_SHOTS ? page.screenshot({ path: `${process.env.E2E_SHOTS}/${n}.png`, fullPage: true }) : null);
+  const bgName = r6 + ' bloki', blkA = r6 + ' blok A', blkB = r6 + ' blok B';
+  await page.goto(`${BASE}/#bloki`);
+  await page.waitForSelector('main[data-view="bloki"]');
+  await page.click('button:has-text("+ Grupa")');
+  await page.fill('#bg-name', bgName);
+  await rerender(() => page.click('#dlg-buttons button:has-text("Załóż")'));
+  await rerender(() => page.click('text=+ Nowy blok'));
+  await page.selectOption('#blk-BlockGroupId', { label: bgName });
+  await page.fill('#blk-Name', blkA);
+  await page.fill('#blk-Minutes', '30');
+  await page.click('button:has-text("Załóż blok")');
+  await page.waitForSelector(`td:text-is("${blkA}")`);
+  await rerender(() => page.click(`td:text-is("${blkA}")`));
+  // 3 pozycje: inteligentna chronologicznie, wyszukiwanie, inteligentna losowo
+  await page.click('text=+ Dodaj pozycję');
+  await page.selectOption('#bi-cp-kind', 'SmartCollection');
+  await page.click('#bi-cp .picks button:has-text("Archiwum INFO24")');
+  await page.click('.items-side button:has-text("Zastosuj")');
+  await page.click('text=+ Dodaj pozycję');
+  await page.selectOption('#bi-cp-kind', 'SearchQuery');
+  await page.fill('#bi-cp-title', 'Pogoda');
+  await page.fill('#bi-cp-query', 'title:Pogoda');
+  await page.click('.items-side button:has-text("Zastosuj")');
+  await page.click('text=+ Dodaj pozycję');
+  await page.selectOption('#bi-cp-kind', 'SmartCollection');
+  await page.click('#bi-cp .picks button:has-text("Archiwum INFO24")');
+  await page.selectOption('#bi-PlaybackOrder', 'Random');
+  await page.click('.items-side button:has-text("Zastosuj")');
+  await rerender(() => page.click('main .panel header button:has-text("Zapisz")'));
+  const bA = (await api('GetAllBlocks')).result.find((b) => b.Name === blkA);
+  const bItems = (await api('GetBlockItems', { BlockId: bA.Id })).result.sort((a, b) => a.Index - b.Index);
+  check(bA.Minutes === 30 && bItems.length === 3 && bItems[1].CollectionType === 'SearchQuery' && bItems[2].PlaybackOrder === 'Random', `blok 30 min z 3 pozycjami (${bA.Minutes} min, ${bItems.length} poz.)`);
+  await page.click('button:has-text("Pokaż podgląd")');
+  await page.waitForSelector('#blk-preview table');
+  check((await page.$$('#blk-preview tbody tr')).length >= 3 && await page.isVisible('#blk-preview .daybar .seg'), 'blok: podgląd wypełnienia');
+  await page.click('main .panel header button:has-text("Kopiuj")');
+  await page.fill('#copy-name', blkB);
+  await rerender(() => page.click('#dlg-buttons button:has-text("Kopiuj")'));
+  const bB = (await api('GetAllBlocks')).result.find((b) => b.Name === blkB);
+  await shot('r6-blok');
+  check(bB && bB.Minutes === 30 && (await api('GetBlockItems', { BlockId: bB.Id })).result.length === 3, 'blok skopiowany z pozycjami');
+
+  // szablon dnia z dwoma blokami; godziny w czasie kontenera legacy (UTC – stack.sh nie ustawia TZ), tuż po teraz
+  const nowUtc = new Date();
+  let s0 = Math.ceil((nowUtc.getUTCHours() * 60 + nowUtc.getUTCMinutes() + 10) / 5) * 5;
+  if (s0 > 1440 - 60) s0 = 0;
+  const hhmm = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+  const tgName = r6 + ' szablony', tplName = r6 + ' dzień';
+  await rerender(() => page.click('.page-tabs button:has-text("Szablony dnia")'));
+  await page.click('button:has-text("+ Grupa")');
+  await page.fill('#tg-name', tgName);
+  await rerender(() => page.click('#dlg-buttons button:has-text("Załóż")'));
+  await rerender(() => page.click('text=+ Nowy szablon'));
+  await page.selectOption('#tpl-TemplateGroupId', { label: tgName });
+  await page.fill('#tpl-Name', tplName);
+  await page.click('button:has-text("Załóż szablon")');
+  await page.waitForSelector(`td:text-is("${tplName}")`);
+  await rerender(() => page.click(`td:text-is("${tplName}")`));
+  for (const [b, m] of [[blkA, s0], [blkB, s0 + 30]]) {
+    await page.click('text=+ Dodaj blok');
+    await page.selectOption('#ti-BlockId', { label: `${bgName} / ${b} (30 min)` });
+    await page.fill('#ti-StartTime', hhmm(m));
+    await page.click('.items-side button:has-text("Zastosuj")');
+  }
+  check((await page.$$('#tpl-bar .seg')).length === 2, 'szablon: dwa bloki na osi doby');
+  await rerender(() => page.click('main .panel header button:has-text("Zapisz")'));
+  const tpl = (await api('GetAllTemplates')).result.find((t) => t.Name === tplName);
+  const tItems = (await api('GetTemplateItems', { TemplateId: tpl.Id })).result;
+  check(tItems.length === 2 && tItems.some((i) => i.BlockId === bA.Id) && tItems.some((i) => i.BlockId === bB.Id), `szablon dnia z dwoma blokami (od ${hhmm(s0)} UTC)`);
+  // nakładanie bloków – legacy odrzuca, panel pokazuje błąd
+  await page.click('text=+ Dodaj blok');
+  await page.fill('#ti-StartTime', hhmm(s0 + 10));
+  await page.click('.items-side button:has-text("Zastosuj")');
+  await shot('r6-szablon');
+  check((await page.$$('#tpl-bar .seg.bad')).length >= 1, 'szablon: nakładanie zaznaczone na czerwono');
+  await page.click('main .panel header button:has-text("Zapisz")');
+  await page.waitForSelector('#toast.bad');
+  check((await api('GetTemplateItems', { TemplateId: tpl.Id })).result.length === 2, 'szablon: nakładanie odrzucone przez legacy');
+
+  // deco z przerwą (playlista na początku bloku) i bez znaku wodnego
+  const brkGroup = r6 + ' przerwy', brkName = r6 + ' reklamy';
+  await api('CreatePlaylistGroup', { Name: brkGroup });
+  const brkGid = (await api('GetAllPlaylistGroups')).result.find((g) => g.Name === brkGroup).Id;
+  const brkPl = (await api('CreatePlaylist', { PlaylistGroupId: brkGid, Name: brkName })).result;
+  const dgName = r6 + ' deco', decoName = r6 + ' oprawa';
+  await page.goto(`${BASE}/#deco`);
+  await page.waitForSelector('main[data-view="deco"]');
+  await rerender(() => page.click('.page-tabs button:has-text("Deco")'));
+  await page.click('button:has-text("+ Grupa")');
+  await page.fill('#dg-name', dgName);
+  await rerender(() => page.click('#dlg-buttons button:has-text("Załóż")'));
+  await rerender(() => page.click('text=+ Nowe deco'));
+  await page.selectOption('#deco-DecoGroupId', { label: dgName });
+  await page.fill('#deco-Name', decoName);
+  await page.click('button:has-text("Załóż deco")');
+  await page.waitForSelector(`td:text-is("${decoName}")`);
+  await rerender(() => page.click(`td:text-is("${decoName}")`));
+  await page.selectOption('#deco-WatermarkMode', 'Disable');
+  check(!(await page.isVisible('#deco-breaks')), 'deco: treść przerw ukryta przy „dziedzicz”');
+  await page.selectOption('#deco-BreakContentMode', 'Override');
+  await page.click('#deco-breaks button:has-text("+ Dodaj treść przerwy")');
+  await page.click(`#brk-cp .picks button:has-text("${brkName}")`);
+  await page.click('#deco-breaks .items-side button:has-text("Zastosuj")');
+  await page.selectOption('#deco-DeadAirFallbackMode', 'Override');
+  await page.selectOption('#dair-cp-kind', 'SmartCollection');
+  await page.click('#dair-cp .picks button:has-text("Archiwum INFO24")');
+  await rerender(() => page.click('main .panel header button:has-text("Zapisz")'));
+  const decoId = (await api('GetDecosByDecoGroupId', { DecoGroupId: (await api('GetAllDecoGroups')).result.find((g) => g.Name === dgName).Id })).result[0]?.Id;
+  const decoRow = (await api('GetDecoById', { DecoId: decoId })).result;
+  check(decoRow && decoRow.WatermarkMode === 'Disable' && decoRow.BreakContentMode === 'Override' && decoRow.BreakContent.length === 1 && decoRow.BreakContent[0].Playlist?.Id === brkPl.Id
+    && decoRow.DeadAirFallbackMode === 'Override' && decoRow.DeadAirFallbackSmartCollection?.Name === 'Archiwum INFO24', 'deco z przerwą (playlista) i martwym powietrzem zapisane');
+  await rerender(() => page.click(`td:text-is("${decoName}")`));
+  check(/Archiwum INFO24/.test(await page.textContent('#dair-cp .picked')) && (await page.$$('#deco-breaks tbody tr')).length === 1, 'deco: po ponownym otwarciu treść z nazwą');
+  await shot('r6-deco');
+  await rerender(() => page.click('main .panel header button:has-text("Zapisz")'));
+  const deco2 = (await api('GetDecoById', { DecoId: decoId })).result;
+  check(deco2.BreakContent[0]?.Playlist?.Id === brkPl.Id && deco2.DeadAirFallbackSmartCollection?.Name === 'Archiwum INFO24', 'deco: ponowny zapis nie gubi treści przerw i martwego powietrza');
+
+  // szablon deco: deco na całą dobę
+  const dtgName = r6 + ' szablony deco', dtName = r6 + ' doba';
+  await rerender(() => page.click('.page-tabs button:has-text("Szablony deco")'));
+  await page.click('button:has-text("+ Grupa")');
+  await page.fill('#dtg-name', dtgName);
+  await rerender(() => page.click('#dlg-buttons button:has-text("Załóż")'));
+  await rerender(() => page.click('text=+ Nowy szablon deco'));
+  await page.selectOption('#dt-DecoTemplateGroupId', { label: dtgName });
+  await page.fill('#dt-Name', dtName);
+  await page.click('button:has-text("Załóż szablon")');
+  await page.waitForSelector(`td:text-is("${dtName}")`);
+  await rerender(() => page.click(`td:text-is("${dtName}")`));
+  await page.click('text=+ Dodaj deco');
+  await page.selectOption('#dti-DecoId', { label: `${dgName} / ${decoName}` });
+  await page.fill('#dti-StartTime', '00:00');
+  await page.fill('#dti-EndTime', '23:59');
+  await page.click('.items-side button:has-text("Zastosuj")');
+  await rerender(() => page.click('main .panel header button:has-text("Zapisz")'));
+  const dt = (await api('GetDecoTemplatesByDecoTemplateGroupId', { DecoTemplateGroupId: (await api('GetAllDecoTemplateGroups')).result.find((g) => g.Name === dtgName).Id })).result[0];
+  check(dt && (await api('GetDecoTemplateItems', { DecoTemplateId: dt.Id })).result.length === 1, 'szablon deco z jednym deco');
+
+  // playout blokowy: szablon dnia na cały tydzień, szablon deco, deco domyślne; przebudowa i EPG
+  const bCh = String(Math.max(...(await api('GetAllChannels', { ShowDisabled: true })).result.map((c) => parseFloat(c.Number) || 0)) + 1);
+  const bChName = r6 + ' kanał blokowy';
+  await api('CreateChannel', { Name: bChName, Number: bCh, Group: 'Test', FFmpegProfileId: profiles[0].Id, Logo: { Path: '', ContentType: '' }, StreamingEngine: 'Next', StreamingMode: 'HttpLiveStreamingSegmenter', PlayoutSource: 'Generated', PlayoutMode: 'Continuous', IsEnabled: true, ShowInEpg: true });
+  await page.goto(`${BASE}/#playouty`);
+  await page.waitForSelector('main[data-view="playouty"]');
+  await rerender(() => page.click('text=+ Nowy playout'));
+  await page.selectOption('#f-Kind', 'Block');
+  await page.selectOption('#f-ChannelId', { label: `${bCh} · ${bChName}` });
+  await page.click('button:has-text("Załóż playout")');
+  await page.waitForSelector(`td:text-is("${bChName}")`);
+  await rerender(() => page.click(`td:text-is("${bChName}")`));
+  check(/brak szablonu/.test(await page.textContent('#cal-week')), 'kalendarz: pusty playout – dni bez szablonu');
+  await page.click('text=+ Dodaj szablon dnia');
+  await page.selectOption('#pt-TemplateId', { label: `${tgName} / ${tplName}` });
+  await page.selectOption('#pt-DecoTemplateId', { label: `${dtgName} / ${dtName}` });
+  await page.click('.items-side button:has-text("Zastosuj")');
+  await page.selectOption('#cal-DecoId', { label: `${dgName} / ${decoName}` });
+  const weekText = await page.textContent('#cal-week');
+  check(weekText.split(tplName).length - 1 === 7 && (await page.$$('#cal-week .daybar:not(.thin) .seg')).length >= 14, 'kalendarz tygodnia: szablon dnia w każdym dniu, bloki na osi');
+  await rerender(() => page.click('main .panel header button:has-text("Zapisz")'));
+  const bPo = (await api('GetPagedPlayouts', { Query: '', PageNum: 0, PageSize: 500 })).result.Page.find((p) => p.ChannelName === bChName);
+  const pts = (await api('GetPlayoutTemplates', { PlayoutId: bPo.PlayoutId })).result;
+  const defDeco = (await api('GetDecoByPlayoutId', { PlayoutId: bPo.PlayoutId })).result;
+  check(pts.length === 1 && pts[0].Template.Id === tpl.Id && pts[0].DecoTemplate?.Id === dt.Id && pts[0].DaysOfWeek.length === 7 && defDeco?.Id === decoRow.Id,
+    'playout blokowy: kalendarz i deco domyślne zapisane');
+  await page.click('main button:has-text("Od nowa")');
+  await page.click('#dlg-buttons button:has-text("Buduj od nowa")');
+  let bFut = [];
+  for (let i = 0; i < 30 && !bFut.length; i++) {
+    await page.waitForTimeout(1000);
+    bFut = (await api('GetFuturePlayoutItemsById', { PlayoutId: bPo.PlayoutId, ShowFiller: false, PageNum: 0, PageSize: 50 })).result?.Page || [];
+  }
+  check(bFut.length >= 2, `playout blokowy zbudowany (${bFut.length} poz.)`);
+  await page.goto(`${BASE}/#epg`);
+  await page.waitForSelector('main[data-view="epg"]');
+  const epgRow = await page.evaluate((n) => {
+    const ch = [...document.querySelectorAll('.epg .ch')].find((c) => c.textContent.includes(n));
+    return ch ? ch.nextElementSibling.querySelectorAll('.p').length : -1;
+  }, bChName);
+  check(epgRow > 0, `pozycje playoutu blokowego w EPG (${epgRow})`);
+  await page.goto(`${BASE}/#playouty`);
+  await page.waitForSelector('main[data-view="playouty"]');
+  await rerender(() => page.click(`td:text-is("${bChName}")`));
+  await shot('r6-kalendarz');
+
+  // sprzątanie R6 (UI: playout, szablony, deco, bloki; reszta przez API)
+  await page.click('main .panel header button:has-text("Usuń")');
+  await rerender(() => page.click('#dlg-buttons button:has-text("Usuń")'));
+  await api('DeleteChannel', { ChannelId: bPo.ChannelId ?? (await api('GetAllChannels', { ShowDisabled: true })).result.find((c) => c.Name === bChName).Id });
+  await page.goto(`${BASE}/#deco`);
+  await page.waitForSelector('main[data-view="deco"]');
+  await rerender(() => page.click(`td:text-is("${dtName}")`));
+  await page.click('main .panel header button:has-text("Usuń")');
+  await rerender(() => page.click('#dlg-buttons button:has-text("Usuń")'));
+  await page.click('button:has-text("Usuń grupę…")');
+  await page.selectOption('#dtg-del', { label: `${dtgName} (0 szabl.)` });
+  await rerender(() => page.click('#dlg-buttons button:has-text("Usuń")'));
+  await rerender(() => page.click('.page-tabs button:has-text("Deco")'));
+  await rerender(() => page.click(`td:text-is("${decoName}")`));
+  await page.click('main .panel header button:has-text("Usuń")');
+  await rerender(() => page.click('#dlg-buttons button:has-text("Usuń")'));
+  check(!(await page.$(`td:text-is("${decoName}")`)), 'deco usunięte');
+  await page.click('button:has-text("Usuń grupę…")');
+  await page.selectOption('#dg-del', { label: `${dgName} (0 deco)` });
+  await rerender(() => page.click('#dlg-buttons button:has-text("Usuń")'));
+  await page.goto(`${BASE}/#bloki`);
+  await page.waitForSelector('main[data-view="bloki"]');
+  await rerender(() => page.click(`td:text-is("${tplName}")`));
+  await page.click('main .panel header button:has-text("Usuń")');
+  await rerender(() => page.click('#dlg-buttons button:has-text("Usuń")'));
+  await api('DeleteTemplateGroup', { TemplateGroupId: tpl.TemplateGroupId });
+  await rerender(() => page.click('.page-tabs button:has-text("Bloki")'));
+  for (const b of [blkB, blkA]) {
+    await rerender(() => page.click(`td:text-is("${b}")`));
+    await page.click('main .panel header button:has-text("Usuń")');
+    await rerender(() => page.click('#dlg-buttons button:has-text("Usuń")'));
+  }
+  check(!(await page.$(`td:text-is("${blkA}")`)) && !(await page.$(`td:text-is("${blkB}")`)), 'bloki usunięte');
+  await page.click('button:has-text("Usuń grupę…")');
+  await page.selectOption('#bg-del', { label: bgName });
+  await rerender(() => page.click('#dlg-buttons button:has-text("Usuń")'));
+  await api('DeletePlaylistGroup', { PlaylistGroupId: brkGid });
+  const r6left = [(await api('GetAllBlockGroups')).result, (await api('GetAllTemplateGroups')).result, (await api('GetAllDecoGroups')).result, (await api('GetAllDecoTemplateGroups')).result]
+    .flat().filter((g) => g.Name.startsWith(r6));
+  check(!r6left.length, 'R6: grupy posprzątane');
+
+  // ---------- R7: ustawienia legacy, logi, konserwacja, test odtwarzania
+  const tab = async (view, label) => {
+    await page.goto(`${BASE}/#${view}`);
+    await page.waitForSelector(`main[data-view="${view}"]`);
+    if (label) await rerender(() => page.click(`.page-tabs button:has-text("${label}")`));
+  };
+  const saveSettings = (title) => rerender(() => page.click(`.panel:has(h2:text-is("${title}")) header button:has-text("Zapisz")`));
+  await tab('ustawienia', 'Przewodnik XMLTV');
+  const xmlDays = Number(await page.inputValue('#s-xmltv-DaysToBuild'));
+  await page.fill('#s-xmltv-DaysToBuild', '0');
+  await page.click('.panel header button:has-text("Zapisz")');
+  await page.waitForSelector('#toast.bad');
+  check(/co najmniej 1/.test(await page.textContent('#toast')), 'ustawienia: 0 dni XMLTV odrzucone przez panel (legacy tego nie sprawdza)');
+  const poDays = (await api('GetPlayoutSettings')).result.DaysToBuild;
+  await page.fill('#s-xmltv-DaysToBuild', String(poDays + 1));
+  await page.click('.panel header button:has-text("Zapisz")');
+  await page.waitForFunction(() => /cannot be greater/.test(document.querySelector('#toast.bad')?.textContent || ''));
+  check(true, 'ustawienia: walidacja legacy (XMLTV dłuższy niż playout) pokazana operatorowi');
+  const xmlNew = xmlDays > 1 ? xmlDays - 1 : xmlDays + 1;
+  await page.fill('#s-xmltv-DaysToBuild', String(xmlNew));
+  await saveSettings('Przewodnik XMLTV');
+  let xs = (await api('GetXmltvSettings')).result;
+  check(xs.DaysToBuild === xmlNew && (await page.inputValue('#s-xmltv-DaysToBuild')) === String(xmlNew), `ustawienia: dni XMLTV ${xmlDays} → ${xs.DaysToBuild} zapisane w legacy`);
+  await shot('r7-ustawienia');
+  await page.fill('#s-xmltv-DaysToBuild', String(xmlDays));
+  await saveSettings('Przewodnik XMLTV');
+  xs = (await api('GetXmltvSettings')).result;
+  check(xs.DaysToBuild === xmlDays && xs.TimeZone && xs.BlockBehavior, `ustawienia: dni XMLTV przywrócone (${xs.DaysToBuild})`);
+  for (const [t, id] of [['FFmpeg i strumienie', '#s-ffmpeg-FFmpegPath'], ['Playouty', '#s-playout-DaysToBuild'], ['Skaner i HDHomeRun', '#s-skaner-TunerCount'], ['Web GUI legacy', '#s-gui-IsDarkMode']]) {
+    await rerender(() => page.click(`.page-tabs button:has-text("${t}")`));
+    check(!!(await page.inputValue(id)), `ustawienia: sekcja „${t}” wczytana z legacy`);
+  }
+
+  // logi: poziom Debug z panelu → „Zwolnij pamięć” (Diagnostyka) → wpis w Logach
+  const logStart = Date.now() - 2000;
+  await tab('ustawienia', 'Poziomy logów');
+  await page.selectOption('#s-logi-DefaultMinimumLogLevel', 'Debug');
+  await saveSettings('Poziomy logów');
+  check((await api('GetLoggingSettings')).result.DefaultMinimumLogLevel === 'Debug', 'ustawienia: domyślny poziom logów = Debug');
+  await tab('diagnostyka');
+  check(/v\d+\./.test(await page.textContent('.panel:has(h2:text-is("Wersje i sprzęt"))')), 'diagnostyka: wersja legacy i sprzęt');
+  const hls = await page.getAttribute('#pt-hls', 'href');
+  check(/\/iptv\/channel\/[^/]+\.m3u8$/.test(hls || ''), `test odtwarzania: odnośnik do strumienia (${hls})`);
+  await page.click('#maint button:has-text("Zwolnij pamięć")');
+  await page.click('#dlg-buttons button:has-text("Zwolnij pamięć")');
+  await page.waitForSelector('#toast.ok');
+  check(/w tle/.test(await page.textContent('#toast')), 'konserwacja: zadanie zlecone w tle legacy');
+  await shot('r7-diagnostyka');
+  await tab('logi');
+  await page.selectOption('#log-level', 'Debug');
+  await page.waitForSelector('main[data-view="logi"] #log-level');
+  let found = false;
+  for (let i = 0; i < 10 && !found; i++) {
+    await page.fill('#log-q', 'garbage collection');
+    await rerender(() => page.click('.logbar button:has-text("Szukaj")'));
+    const r = (await api('GetRecentLogEntries', { PageNum: 0, PageSize: 5, Filter: 'Completed garbage collection' })).result.Page;
+    found = r.some((e) => Date.parse(e.Timestamp) >= logStart) && (await page.isVisible('td.log:has-text("garbage collection")'));
+    if (!found) await page.waitForTimeout(1000);
+  }
+  check(found, 'logi: wpis po akcji z panelu (zwolnienie pamięci) widoczny w Logach');
+  await shot('r7-logi');
+  await tab('ustawienia', 'Poziomy logów');
+  await page.selectOption('#s-logi-DefaultMinimumLogLevel', 'Information');
+  await saveSettings('Poziomy logów');
+  check((await api('GetLoggingSettings')).result.DefaultMinimumLogLevel === 'Information', 'ustawienia: poziom logów przywrócony');
 
   check(errors.length === 0, 'brak błędów JS' + (errors.length ? ': ' + errors.join(' | ') : ''));
   await browser.close();

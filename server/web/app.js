@@ -1,7 +1,8 @@
 // VizRS Live – panel kanału. Wejście UI: start, stan mostu w pasku górnym, router.
 // Dane: komendy ErsatzTV legacy przez most (POST /api/cmd/{Nazwa}); moduły:
 //   core.js (DOM, API, komunikaty, router, PL) · form.js (formularz z metadanych)
-//   parts.js („lista + edytor”, edytor pozycji, wybór treści) · views/*.js (ekrany po grupach menu)
+//   parts.js („lista + edytor”, edytor pozycji, wybór treści, grupy, oś doby) · when.js (dni, miesiące, zakres dat)
+//   · views/*.js (ekrany po grupach menu)
 
 import { S, main, h, btn, head, api, cmd, ApiError, route, hms } from './core.js';
 import './views/antena.js';
@@ -12,7 +13,8 @@ import './views/media.js';
 import './views/listy.js';
 import './views/playlisty.js';
 import './views/wypelniacze.js';
-import './views/ramowka.js';
+import './views/bloki.js';
+import './views/deco.js';
 import './views/playouty.js';
 import './views/harmonogramy.js';
 import './views/grafika.js';

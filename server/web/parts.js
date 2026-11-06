@@ -323,3 +323,66 @@ export function contentPicker(value, opts = {}) {
     label: () => (CONTENT_KINDS[kind].query ? `${pl(kind)}: ${title.value || query.value}` : chosen ? `${pl(kind)}: ${chosen[1]}` : '—'),
   };
 }
+
+// ---------- grupy (bloków, szablonów, deco, szablonów deco, playlist) ----------
+/**
+ * Przyciski „+ Grupa” i „Usuń grupę…” nad ekranem z pozycjami w grupach.
+ * cfg = { what: 'bloków', create: 'CreateBlockGroup', del: 'DeleteBlockGroup', idKey: 'BlockGroupId',
+ *         groups: [{Id, Name}], count?: (grupa) => liczba, prefix: 'bg', placeholder? }
+ */
+export function groupActions(cfg) {
+  const add = async () => {
+    const input = h('input', { id: cfg.prefix + '-name', placeholder: cfg.placeholder || 'np. Dzienne' });
+    const ok = await dialog(`Nowa grupa ${cfg.what}`, h('div', { class: 'form' }, h('label', { for: cfg.prefix + '-name' }, 'Nazwa grupy'), input), [['Anuluj', false], ['Załóż', true, 'acc']]);
+    if (!ok || !input.value.trim()) return;
+    try { await cmd(cfg.create, { Name: input.value.trim() }); toast('Założono grupę.', 'ok'); route(true); }
+    catch (e) { toast('Legacy odrzucił: ' + e.message, 'bad'); }
+  };
+  const del = async () => {
+    if (!cfg.groups.length) return toast('Nie ma grup do usunięcia.', 'bad');
+    const sel = h('select', { id: cfg.prefix + '-del' }, cfg.groups.map((g) => h('option', { value: String(g.Id) }, cfg.count ? `${g.Name} (${cfg.count(g)})` : g.Name)));
+    const ok = await dialog(`Usuń grupę ${cfg.what}`, h('div', { class: 'form' }, h('label', { for: cfg.prefix + '-del' }, 'Grupa'), sel,
+      h('div', { class: 'hint' }, 'Usunięcie grupy usuwa też wszystko, co w niej jest. Tego nie da się cofnąć.')), [['Anuluj', false], ['Usuń', true, 'danger']]);
+    if (!ok) return;
+    try { await cmd(cfg.del, { [cfg.idKey]: Number(sel.value) }); toast('Usunięto grupę.', 'ok'); route(true); }
+    catch (e) { toast('Legacy odrzucił: ' + e.message, 'bad'); }
+  };
+  return [btn('+ Grupa', add), btn('Usuń grupę…', del)];
+}
+
+// ---------- oś doby (szablon dnia, szablon deco, kalendarz tygodnia) ----------
+/** Minuty od północy z „06:30:00” albo z DateTime legacy „2026-11-06T06:30:00” (bez strefy – czas szablonu). */
+export function minutesOf(s) {
+  const m = /(?:T|^)(\d{1,2}):(\d{2})/.exec(s || '');
+  return m ? +m[1] * 60 + +m[2] : 0;
+}
+export const hhmm = (min) => `${String(Math.floor(min / 60) % 24).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
+export const span = (min) => `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}:00`;
+
+/**
+ * Pasek 24 h: segs = [{ start, end (minuty, end może przekroczyć 1440), label, cls?, title? }].
+ * Segmenty po północy zawijają się na początek doby.
+ */
+export function dayBar(segs, opts = {}) {
+  const el = h('div', { class: 'daybar' + (opts.cls ? ' ' + opts.cls : ''), role: 'img', 'aria-label': opts.label || 'Oś doby' });
+  if (opts.ruler !== false) {
+    for (let hh = 0; hh <= 24; hh += 3) {
+      const t = h('span', { class: 'tick' }, hh < 24 ? String(hh).padStart(2, '0') : '');
+      t.style.left = (hh / 24) * 100 + '%';
+      el.append(t);
+    }
+  }
+  const put = (s, a, b) => {
+    const x = h('div', { class: 'seg' + (s.cls ? ' ' + s.cls : ''), title: s.title || `${hhmm(s.start)}–${hhmm(s.end)} ${s.label}` }, s.label);
+    x.style.left = (a / 1440) * 100 + '%';
+    x.style.width = `calc(${((b - a) / 1440) * 100}% - 1px)`;
+    el.append(x);
+  };
+  for (const s of segs) {
+    const a = Math.max(0, s.start), b = Math.min(s.end, 2880);
+    if (b <= 1440) put(s, a, b);
+    else { put(s, a, 1440); put(s, 0, b - 1440); }
+  }
+  if (!segs.length) el.append(h('span', { class: 'empty-bar' }, opts.empty || 'pusto'));
+  return el;
+}

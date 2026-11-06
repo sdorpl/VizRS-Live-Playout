@@ -132,9 +132,54 @@ DeleteProgramSchedule
 GetProgramScheduleItems
 ReplaceProgramScheduleItems
 # AddProgramScheduleItem – legacy 26.11.6 zapisuje pozycję, ale zwraca błąd (Mapper.ProjectToViewModel); UI legacy używa ReplaceProgramScheduleItems
+
+# --- bloki, szablony dnia, deco, szablony deco (R6)
+# nazwę, długość i tryb zatrzymania bloku zapisuje ReplaceBlockItems (UpdateBlock nie istnieje); nazwę szablonu – ReplaceTemplateItems
+GetAllBlockGroups
+CreateBlockGroup
+DeleteBlockGroup
 GetAllBlocks
+GetBlocksByBlockGroupId
+GetBlockById
+CreateBlock
+CopyBlock
+DeleteBlock
+GetBlockItems
+ReplaceBlockItems
+PreviewBlockPlayout
+GetAllTemplateGroups
+CreateTemplateGroup
+DeleteTemplateGroup
 GetAllTemplates
+GetTemplatesByTemplateGroupId
+GetTemplateById
+CreateTemplate
+CopyTemplate
+DeleteTemplate
+GetTemplateItems
+ReplaceTemplateItems
 GetAllDecoGroups
+CreateDecoGroup
+DeleteDecoGroup
+GetDecosByDecoGroupId
+GetDecoById
+CreateDeco
+UpdateDeco
+DeleteDeco
+GetAllDecoTemplateGroups
+CreateDecoTemplateGroup
+DeleteDecoTemplateGroup
+GetDecoTemplatesByDecoTemplateGroupId
+GetDecoTemplateById
+CreateDecoTemplate
+DeleteDecoTemplate
+GetDecoTemplateItems
+ReplaceDecoTemplateItems
+# playout blokowy: kalendarz szablonów i deco domyślne
+GetPlayoutTemplates
+ReplacePlayoutTemplateItems
+GetDecoByPlayoutId
+UpdateDefaultDeco
 
 # --- playouty
 GetPagedPlayouts
@@ -158,10 +203,35 @@ CheckForOverlappingPlayoutItems
 GetPlayoutWarningsCount
 GetPlayoutAlternateSchedules
 ReplacePlayoutAlternateScheduleItems
-# GetBlockPlayoutHistory (podgląd historii bloku) – z ekranem Bloki (R6), potrzebuje id bloku
+# GetBlockPlayoutHistory – pominięte: legacy pokazuje je tylko jako podgląd historii w edytorze playoutu blokowego
 
 # --- grafika
 GetAllGraphicsElements
 
 # --- system
 GetAllHealthCheckResults
+# ustawienia legacy (R7): każda sekcja to para Get…/Update… (Update przyjmuje cały obiekt sekcji)
+GetFFmpegSettings
+UpdateFFmpegSettings
+GetMpegTsScripts
+GetLoggingSettings
+UpdateLoggingSettings
+GetPlayoutSettings
+UpdatePlayoutSettings
+GetXmltvSettings
+UpdateXmltvSettings
+GetUiSettings
+UpdateUiSettings
+UpdateLibraryRefreshInterval
+GetHDHRTunerCount
+UpdateHDHRTunerCount
+GetHDHRUUID
+# logi, konserwacja, informacje (R7)
+GetRecentLogEntries
+DeleteOrphanedArtwork
+DeleteOrphanedSubtitles
+ReleaseMemory
+# RebuildSearchIndex – legacy 26.11.6 uruchamia ją tylko przy starcie; z kolejki skanera: „Unsupported request type” (DOKUMENTACJA §5)
+RefreshFFmpegCapabilities
+GetTroubleshootingInfo
+# test odtwarzania: PrepareTroubleshootingPlayback/StartTroubleshootingPlayback – patrz DOKUMENTACJA §5
