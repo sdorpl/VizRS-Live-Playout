@@ -15,6 +15,8 @@ cd "$(dirname "$0")/.."
 
 DIR="${VIZRS_LIVE_TEST_DIR:-/tmp/vizrs-live-test}"
 TOKEN="test-token-0123456789"
+# VizRS CG Playout w testach: atrapa z tests/e2e.cjs na 127.0.0.1:18700 (R9)
+CG_TOKEN="test-cg-token-0123456789"
 NAME="vizrs-live-test-legacy"
 BRIDGE="http://127.0.0.1:18409/vizrs-bridge"
 PANEL="http://127.0.0.1:18090"
@@ -52,7 +54,7 @@ case "${1:-}" in
     wait_bridge
     pkill -f "[v]izrs-live --port 18090" 2>/dev/null || true
     nohup server/target/release/vizrs-live --port 18090 --bridge http://127.0.0.1:18409 --bridge-token "$TOKEN" \
-      --stream-url http://127.0.0.1:18409 >"$DIR/panel.log" 2>&1 &
+      --stream-url http://127.0.0.1:18409 --cg-url http://127.0.0.1:18700 --cg-token "$CG_TOKEN" >"$DIR/panel.log" 2>&1 &
     sleep 1
     # smoke: most i jego zabezpieczenia
     expect "most: zdrowie" 200 curl -s -H "X-VizRS-Token: $TOKEN" "$BRIDGE/health"

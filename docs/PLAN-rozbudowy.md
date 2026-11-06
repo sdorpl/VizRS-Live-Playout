@@ -34,7 +34,7 @@ Cel końcowy: **operator nie korzysta z web GUI ErsatzTV legacy** – wszystko, 
 | R6 | Bloki, szablony, deco: edycja i kalendarz tygodnia | R4, R5 | zrobione (2026-11-07) |
 | R7 | Ustawienia legacy, logi, konserwacja, test odtwarzania | R0 | zrobione (2026-11-07) |
 | R8 | Źródła zewnętrzne: Jellyfin, Emby, Plex (PIN), strumienie zdalne | R3 | zrobione (2026-11-07) |
-| R9 | Grafika VizRS i sloty na żywo (VizRS CG Playout) | R2 | do zrobienia |
+| R9 | Grafika VizRS i sloty na żywo (VizRS CG Playout) | R2 | zrobione (2026-11-07) |
 | R10 | Zamknięcie web GUI legacy, proxy, aktualizacje legacy, CI | R1–R8 | do zrobienia |
 | R11 | Wydanie 1.0: instrukcja operatora, obrazy, przegląd bezpieczeństwa | R10 | do zrobienia |
 
@@ -145,6 +145,8 @@ Cel końcowy: **operator nie korzysta z web GUI ErsatzTV legacy** – wszystko, 
 **Zakres:** przeczytać API CG Playout (konfiguracja kanałów, element VizRS, `/ingest`, `/ingest/state`); w panelu: **Grafika kanału** – reguły (start pozycji ± s, przed końcem audycji, przerwa reklamowa, slot na żywo → strona VizRS z polami `{title}`, `{next_title}`…) zapisane tam, gdzie CG Playout je trzyma; podgląd `/output` VizRS; **Sloty na żywo** – wejścia, stan sygnału, audycje na żywo jako pozycje ramówki (Remote Stream w legacy). Elementy graficzne legacy: `GetAllGraphicsElements`, `RefreshGraphicsElements` (pliki YAML – R2 zdecydował: panel nie zapisuje plików; jeśli R9 tego potrzebuje, dodaje jeden ogólny endpoint mostu do zapisu w jednym katalogu, wspólny dla playoutów i grafiki – DOKUMENTACJA §4).
 
 **Decyzja (2026-11-06): panel łączy się z VizRS CG Playout przez jego API** – bez wspólnych plików konfiguracyjnych. Wzorem mostu: serwer panelu (Rust) jest pośrednikiem, adres i token CG Playout tylko po stronie serwera (nowe opcje `--cg-url`/`VIZRS_LIVE_CG_URL`, `--cg-token`/`VIZRS_LIVE_CG_TOKEN`), przeglądarka woła `/api/cg/...`. Na starcie sesji: spisać z dokumentacji CG Playout endpointy potrzebne panelowi (konfiguracja kanałów i reguł, `/ingest`, `/ingest/state`, stan połączenia z VizRS) i sprawdzić, czego API jeszcze nie ma – braki dopisać w CG Playout (osobne repo, osobny commit tam) albo jako punkt jego planu, nie obchodzić przez pliki.
+
+**Zrobione (2026-11-07) – decyzje:** pośrednik `/api/cg/…` w serwerze (biała lista, token CG tylko w serwerze); Sloty na żywo na API Live Panelu CG (`/api/live/*`); Grafika kanału: stan CG, strony VizRS, podgląd `/output`, elementy legacy + `RefreshGraphicsElements`. **Reguły grafiki bez edycji** – CG Playout nie ma API reguł (są w jego `config.json`); dopisanie `GET/PUT` reguł w CG Playout to krok ręczny / punkt planu CG Playout (sesja automatu nie zmienia innych repo), potem edytor w panelu. Endpoint zapisu plików w moście niepotrzebny (element `vizrs.yml` zakłada CG). Pozycję harmonogramu audycji LIVE operator dodaje w Harmonogramach. Testy na atrapie CG (DOKUMENTACJA §4).
 
 ## R10 – Zamknięcie web GUI legacy, aktualizacje, CI
 

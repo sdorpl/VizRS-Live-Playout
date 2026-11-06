@@ -145,6 +145,8 @@ pub struct Config {
     pub token: Option<String>,
     pub stream_url: String,
     pub vizrs_url: String,
+    pub cg_url: String,
+    pub cg_token: String,
     pub web: Option<PathBuf>,
 }
 
@@ -159,6 +161,8 @@ Użycie: vizrs-live [opcje]
   --token T             token panelu dla operatorów (VIZRS_LIVE_TOKEN; wymagany poza 127.0.0.1)
   --stream-url URL      publiczny adres strumieni legacy do odnośników (VIZRS_LIVE_STREAM_URL)
   --vizrs-url URL       VizRS CG System do podglądu grafiki i odnośnika do Trio (VIZRS_LIVE_VIZRS_URL)
+  --cg-url URL          VizRS CG Playout (sidecar, np. http://cg:7700) – grafika i sloty na żywo (VIZRS_LIVE_CG_URL)
+  --cg-token T          token panelu CG Playout, = panel_token / VIZRS_PANEL_TOKEN tam (VIZRS_LIVE_CG_TOKEN)
   --web KATALOG         UI z dysku zamiast wbudowanego (praca nad UI)
   --healthcheck         sprawdź działający panel (GET /health), kod wyjścia 0/1
   --version, --help
@@ -180,6 +184,8 @@ pub fn parse_config(
         token: env("VIZRS_LIVE_TOKEN").filter(|t| !t.is_empty()),
         stream_url: env("VIZRS_LIVE_STREAM_URL").unwrap_or_default(),
         vizrs_url: env("VIZRS_LIVE_VIZRS_URL").unwrap_or_default(),
+        cg_url: env("VIZRS_LIVE_CG_URL").unwrap_or_default(),
+        cg_token: env("VIZRS_LIVE_CG_TOKEN").unwrap_or_default(),
         web: None,
     };
     let mut it = args.iter();
@@ -201,11 +207,21 @@ pub fn parse_config(
             "--token" => c.token = Some(val()?).filter(|t| !t.is_empty()),
             "--stream-url" => c.stream_url = val()?,
             "--vizrs-url" => c.vizrs_url = val()?,
+            "--cg-url" => c.cg_url = val()?,
+            "--cg-token" => c.cg_token = val()?,
             "--web" => c.web = Some(PathBuf::from(val()?)),
             other => return Err(format!("nieznana opcja: {other} (--help)")),
         }
     }
     bridge::parse_url(&c.bridge_url)?;
+    if !c.cg_url.is_empty() {
+        bridge::parse_url(&c.cg_url).map_err(|e| format!("--cg-url: {e}"))?;
+        if c.cg_token.is_empty() || c.cg_token.contains(['\r', '\n']) {
+            return Err(
+                "--cg-url wymaga tokenu panelu CG Playout: --cg-token / VIZRS_LIVE_CG_TOKEN".into(),
+            );
+        }
+    }
     if c.bridge_token.len() < 16 {
         return Err("brak tokenu mostu: --bridge-token / VIZRS_LIVE_BRIDGE_TOKEN (min. 16 znaków, ten sam co VIZRS_BRIDGE_TOKEN w legacy)".into());
     }
@@ -229,7 +245,7 @@ pub fn parse_config(
             c.bind
         ));
     }
-    for u in [&mut c.stream_url, &mut c.vizrs_url] {
+    for u in [&mut c.stream_url, &mut c.vizrs_url, &mut c.cg_url] {
         while u.ends_with('/') {
             u.pop();
         }
@@ -240,6 +256,16 @@ pub fn parse_config(
 struct App {
     cfg: Config,
     bridge: Bridge,
+    cg: Option<Bridge>,
+}
+
+fn cg_client(c: &Config) -> Option<Bridge> {
+    (!c.cg_url.is_empty()).then(|| Bridge {
+        target: bridge::parse_url(&c.cg_url).expect("sprawdzone w parse_config"),
+        token: c.cg_token.clone(),
+        prefix: "",
+        auth: "Authorization",
+    })
 }
 
 fn main() {
@@ -267,7 +293,10 @@ fn main() {
         bridge: Bridge {
             target,
             token: cfg.bridge_token.clone(),
+            prefix: "/vizrs-bridge",
+            auth: "X-VizRS-Token",
         },
+        cg: cg_client(&cfg),
         cfg,
     });
 
@@ -384,7 +413,7 @@ fn route(app: &App, req: &Request) -> Response {
     if !path.starts_with("/api/") {
         return static_file(app, req);
     }
-    if req.method == "POST" && req.header("x-vizrs-live") != Some("1") {
+    if req.method != "GET" && req.method != "HEAD" && req.header("x-vizrs-live") != Some("1") {
         return Response::error(
             403,
             "brak nagłówka X-VizRS-Live (ochrona przed obcymi stronami)",
@@ -411,6 +440,7 @@ fn route(app: &App, req: &Request) -> Response {
         ),
         _ if !authorized(app, req) => Response::error(401, "zaloguj się tokenem panelu"),
         ("GET", "/api/status") => status(app),
+        (m, p) if p.starts_with("/api/cg/") => cg_proxy(app, m, &p["/api/cg/".len()..], &req.body),
         ("GET", "/api/commands") => forward(app.bridge.get("/commands"), "commands"),
         ("POST", p) if p.starts_with(http::UPLOAD_PREFIX) => {
             upload(app, req, &p[http::UPLOAD_PREFIX.len()..])
@@ -550,6 +580,124 @@ fn forward(r: Result<bridge::Reply, String>, what: &str) -> Response {
     }
 }
 
+/// Numer kanału ErsatzTV albo id audycji CG Playout: litery, cyfry, kropka, myślnik, podkreślnik.
+fn cg_segment(s: &str) -> bool {
+    (1..=120).contains(&s.len())
+        && s.chars()
+            .all(|c| c.is_ascii_alphanumeric() || "-._".contains(c))
+        && s != "."
+        && s != ".."
+}
+
+/// Biała lista pośrednika CG Playout: (metoda, ścieżka w panelu) → ścieżka w CG Playout.
+pub fn cg_path(method: &str, rest: &str) -> Option<String> {
+    let seg: Vec<&str> = rest.split('/').collect();
+    if !seg.iter().skip(1).all(|s| cg_segment(s)) {
+        return None;
+    }
+    let p = match (method, seg.as_slice()) {
+        ("GET", ["health"]) => "/health".into(),
+        ("GET", ["ingest", ch]) => format!("/ingest/state?channel={ch}"),
+        ("GET", ["pages", ch]) => format!("/etv/pages?channel={ch}"),
+        ("GET", ["live", "state"]) => "/api/live/state".into(),
+        ("GET", ["live", "shows"]) | ("POST", ["live", "shows"]) => "/api/live/shows".into(),
+        ("POST", ["live", "shows", "scan"]) => "/api/live/shows/scan".into(),
+        ("PUT" | "DELETE", ["live", "shows", id]) => format!("/api/live/shows/{id}"),
+        ("PUT", ["live", "channels", ch]) => format!("/api/live/channels/{ch}"),
+        ("POST", ["live", "channels", ch, a @ ("hold" | "release" | "rebuild")]) => {
+            format!("/api/live/channels/{ch}/{a}")
+        }
+        _ => return None,
+    };
+    Some(p)
+}
+
+/// Pośrednik `/api/cg/…` → VizRS CG Playout (R9): token CG zostaje w serwerze,
+/// odpowiedź w kopercie panelu `{"ok":true,"result":…}` albo `{"ok":false,"error":…}`.
+fn cg_proxy(app: &App, method: &str, rest: &str, body: &[u8]) -> Response {
+    let Some(cg) = &app.cg else {
+        return Response::error(
+            409,
+            "VizRS CG Playout nie jest podłączony (--cg-url / VIZRS_LIVE_CG_URL)",
+        );
+    };
+    let Some(path) = cg_path(method, rest) else {
+        return Response::error(404, "nieznany adres CG Playout");
+    };
+    let body = if method == "GET" || method == "DELETE" {
+        &[][..]
+    } else {
+        body
+    };
+    match cg.send(method, &path, body) {
+        Ok(r) if (200..300).contains(&r.status) => {
+            let inner = if r.body.is_empty() {
+                b"null".to_vec()
+            } else {
+                r.body
+            };
+            if !matches!(inner.first(), Some(b'{' | b'[' | b'n')) {
+                return Response::error(502, "CG Playout: odpowiedź bez JSON");
+            }
+            let mut out = b"{\"ok\":true,\"result\":".to_vec();
+            out.extend_from_slice(&mask_secrets(&inner));
+            out.push(b'}');
+            eprintln!("cg {method} {path} -> {}", r.status);
+            Response::json(200, out)
+        }
+        Ok(r) => {
+            let text = String::from_utf8_lossy(&r.body);
+            let msg = cg_error(&text).unwrap_or_else(|| text.chars().take(300).collect());
+            eprintln!("cg {method} {path} -> {}", r.status);
+            // jak przy legacy: odrzucenie (walidacja CG Playout) = 200 z ok:false, awaria = 502
+            let status = match r.status {
+                401 | 404 => 502,
+                400..=499 => 200,
+                s => s,
+            };
+            let msg = match r.status {
+                401 => "CG Playout odrzucił token panelu (--cg-token = panel_token CG Playout)"
+                    .to_string(),
+                404 if msg.is_empty() => {
+                    "CG Playout: brak tej funkcji (panel_token pusty albo starsza wersja)"
+                        .to_string()
+                }
+                _ => format!("CG Playout odrzucił: {msg}"),
+            };
+            Response::error(status, &msg)
+        }
+        Err(e) => Response::error(502, &e.replace("most", "CG Playout")),
+    }
+}
+
+/// Komunikat z `{"error":"…"}` CG Playout (bez parsera JSON: pierwszy napis po kluczu).
+pub fn cg_error(body: &str) -> Option<String> {
+    let i = body.find("\"error\"")? + 7;
+    let rest = body[i..]
+        .trim_start()
+        .strip_prefix(':')?
+        .trim_start()
+        .strip_prefix('"')?;
+    let mut out = String::new();
+    let mut esc = false;
+    for c in rest.chars() {
+        match (esc, c) {
+            (true, 'n') => {
+                out.push(' ');
+                esc = false
+            }
+            (true, c) => {
+                out.push(c);
+                esc = false
+            }
+            (false, '\\') => esc = true,
+            (false, '"') => return Some(out),
+            (false, c) => out.push(c),
+        }
+    }
+    None
+}
+
 fn status(app: &App) -> Response {
     let (bridge, err) = match app.bridge.get("/health") {
         Ok(r) if r.status == 200 && r.body.first() == Some(&b'{') => (
@@ -569,11 +717,12 @@ fn status(app: &App) -> Response {
     Response::json(
         200,
         format!(
-            "{{\"ok\":true,\"result\":{{\"panel\":{},\"bridgeUrl\":{},\"streamUrl\":{},\"vizrsUrl\":{},\"auth\":{},\"bridge\":{bridge},\"bridgeError\":{err}}}}}",
+            "{{\"ok\":true,\"result\":{{\"panel\":{},\"bridgeUrl\":{},\"streamUrl\":{},\"vizrsUrl\":{},\"cg\":{},\"auth\":{},\"bridge\":{bridge},\"bridgeError\":{err}}}}}",
             json_str(VERSION),
             json_str(&app.cfg.bridge_url),
             json_str(&app.cfg.stream_url),
             json_str(&app.cfg.vizrs_url),
+            app.cg.is_some(),
             app.cfg.token.is_some()
         ),
     )
@@ -721,6 +870,67 @@ mod tests {
     }
 
     #[test]
+    fn cg_config() {
+        let t = "--bridge-token";
+        let k = "0123456789abcdef";
+        assert!(cfg(&[t, k, "--cg-url", "http://cg:7700"], &[]).is_err());
+        assert!(cfg(
+            &[t, k, "--cg-url", "https://cg"],
+            &[("VIZRS_LIVE_CG_TOKEN", "x")]
+        )
+        .is_err());
+        let c = cfg(
+            &[t, k],
+            &[
+                ("VIZRS_LIVE_CG_URL", "http://cg:7700/"),
+                ("VIZRS_LIVE_CG_TOKEN", "x"),
+            ],
+        )
+        .unwrap();
+        assert_eq!(
+            (c.cg_url.as_str(), c.cg_token.as_str()),
+            ("http://cg:7700", "x")
+        );
+    }
+
+    #[test]
+    fn cg_whitelist() {
+        assert_eq!(cg_path("GET", "health").as_deref(), Some("/health"));
+        assert_eq!(
+            cg_path("GET", "ingest/24").as_deref(),
+            Some("/ingest/state?channel=24")
+        );
+        assert_eq!(
+            cg_path("GET", "pages/1.5").as_deref(),
+            Some("/etv/pages?channel=1.5")
+        );
+        assert_eq!(
+            cg_path("POST", "live/channels/24/hold").as_deref(),
+            Some("/api/live/channels/24/hold")
+        );
+        assert_eq!(
+            cg_path("DELETE", "live/shows/24-wiadomosci").as_deref(),
+            Some("/api/live/shows/24-wiadomosci")
+        );
+        assert_eq!(cg_path("PUT", "live/settings"), None);
+        assert_eq!(cg_path("GET", "ingest/24&x=1"), None);
+        assert_eq!(cg_path("GET", "pages/.."), None);
+        assert_eq!(cg_path("DELETE", "live/channels/24"), None);
+        assert_eq!(cg_path("POST", "live/channels/24/delete"), None);
+        assert_eq!(
+            cg_error("{\"error\": \"zły \\\"tytuł\\\"\"}").as_deref(),
+            Some("zły \"tytuł\"")
+        );
+        assert_eq!(cg_error("nic"), None);
+        let a = app(None);
+        assert_eq!(route(&a, &req("GET", "/api/cg/health", &[])).status, 409);
+        assert_eq!(
+            route(&a, &req("PUT", "/api/cg/live/channels/1", &[])).status,
+            403
+        );
+    }
+
+    #[test]
     fn constant_time_eq() {
         assert!(eq_ct("abc", "abc"));
         assert!(!eq_ct("abc", "abd"));
@@ -738,7 +948,10 @@ mod tests {
             bridge: Bridge {
                 target: bridge::parse_url(&c.bridge_url).unwrap(),
                 token: T.into(),
+                prefix: "/vizrs-bridge",
+                auth: "X-VizRS-Token",
             },
+            cg: None,
             cfg: c,
         }
     }

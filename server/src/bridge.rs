@@ -37,9 +37,14 @@ pub fn parse_url(url: &str) -> Result<Target, String> {
     })
 }
 
+/// Klient HTTP usługi w sieci wewnętrznej: most w legacy albo VizRS CG Playout (R9).
 pub struct Bridge {
     pub target: Target,
     pub token: String,
+    /// Przedrostek ścieżek: `/vizrs-bridge` (most) albo pusty (CG Playout).
+    pub prefix: &'static str,
+    /// Nagłówek z tokenem: `X-VizRS-Token` (most) albo `Authorization` (CG Playout, `Bearer …`).
+    pub auth: &'static str,
 }
 
 pub struct Reply {
@@ -54,6 +59,11 @@ impl Bridge {
 
     pub fn post(&self, path: &str, body: &[u8]) -> Result<Reply, String> {
         self.call("POST", path, body, "application/json")
+    }
+
+    /// Dowolna metoda z treścią JSON (pośrednik CG Playout).
+    pub fn send(&self, method: &str, path: &str, body: &[u8]) -> Result<Reply, String> {
+        self.call(method, path, body, "application/json")
     }
 
     /// POST z własnym typem treści (wgrywanie obrazu).
@@ -73,10 +83,13 @@ impl Bridge {
         let _ = s.set_read_timeout(Some(Duration::from_secs(60)));
         let _ = s.set_write_timeout(Some(Duration::from_secs(10)));
         let head = format!(
-            "{method} {}/vizrs-bridge{path} HTTP/1.1\r\nHost: {}:{}\r\nX-VizRS-Token: {}\r\nContent-Type: {ct}\r\nContent-Length: {}\r\nConnection: close\r\nUser-Agent: vizrs-live/{}\r\n\r\n",
+            "{method} {}{}{path} HTTP/1.1\r\nHost: {}:{}\r\n{}: {}{}\r\nX-Operator: VizRS Live\r\nContent-Type: {ct}\r\nContent-Length: {}\r\nConnection: close\r\nUser-Agent: vizrs-live/{}\r\n\r\n",
             t.base,
+            self.prefix,
             t.host,
             t.port,
+            self.auth,
+            if self.auth == "Authorization" { "Bearer " } else { "" },
             self.token,
             body.len(),
             env!("CARGO_PKG_VERSION")

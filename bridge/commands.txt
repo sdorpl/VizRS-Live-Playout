@@ -207,6 +207,7 @@ ReplacePlayoutAlternateScheduleItems
 
 # --- grafika
 GetAllGraphicsElements
+RefreshGraphicsElements
 
 # --- system
 GetAllHealthCheckResults

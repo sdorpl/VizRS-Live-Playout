@@ -25,6 +25,49 @@ function check(cond, msg) {
   page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
   page.on('response', (r) => r.status() >= 400 && errors.push(`${r.status()} ${r.request().method()} ${r.url()}`));
 
+
+  // ---------- R9: atrapa VizRS CG Playout (127.0.0.1:18700, panel uruchomiony z --cg-url przez tests/stack.sh) ----------
+  // Stan jak w CG Playout: kanały z sygnałem studia, wstrzymanie, audycje LIVE; sprawdza token panelu CG i brak Origin.
+  const CG_TOKEN = 'test-cg-token-0123456789';
+  const cgSeen = [];
+  const CG = {
+    hold: false, anytime: true,
+    shows: [{ id: '24-poranek-na-zywo', channel: '24', title: 'Poranek na żywo', duration: '01:00:00', plot: '', collection: true, collection_name: 'LIVE · Poranek na żywo', next: null }],
+  };
+  const cgServer = require('http').createServer((q, r) => {
+    let raw = '';
+    q.on('data', (d) => (raw += d));
+    q.on('end', () => {
+      const send = (code, b) => { r.writeHead(code, { 'Content-Type': 'application/json' }); r.end(JSON.stringify(b)); };
+      cgSeen.push(`${q.method} ${q.url} ${q.headers.authorization === 'Bearer ' + CG_TOKEN ? 'token' : 'BEZ TOKENU'}${q.headers.origin ? ' origin' : ''}`);
+      if (q.headers.authorization !== 'Bearer ' + CG_TOKEN) return send(401, { error: 'zły token panelu' });
+      const body = raw ? JSON.parse(raw) : {};
+      const now = Date.now();
+      const u = q.url;
+      if (u === '/health') return send(200, { sessions: 1, overlay: ['24'], ingest: { channels: ['24'] }, captures: [{ channel: '24', size: '1280x720', fps: 25, mode: 'frames', drawn_by: 'native', status: 'capturing' }] });
+      if (u === '/etv/pages?channel=24') return send(200, { pages: [{ number: 1001, name: 'Belka tytułowa' }, { number: 3001, name: 'Wracamy po reklamie' }] });
+      if (u === '/api/live/state') return send(200, {
+        ingest: true, now,
+        channels: [{ number: '24', name: 'INFO24', source: { live: true, audio: true, video: 'h264', seconds: 75 }, on_air: !CG.hold && CG.anytime, hold: CG.hold, anytime: CG.anytime,
+          now: { title: 'Wiadomosci', start: now - 60000, stop: now + 60000, live: false }, next_live: { title: 'Poranek na żywo', start: now + 3600000, stop: now + 7200000, live: true } }],
+        events: [{ at: now - 5000, channel: '24', text: 'nadawca połączony' }],
+      });
+      if (u === '/api/live/shows' && q.method === 'GET') return send(200, { shows: CG.shows, error: null, channels: [{ number: '24', name: 'INFO24' }] });
+      if (u === '/api/live/shows' && q.method === 'POST') {
+        if (!/[\p{L}\d]/u.test(body.title || '')) return send(400, { error: 'tytuł: 1–200 znaków, choć jedna litera albo cyfra' });
+        const show = { id: `${body.channel}-${body.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`, channel: body.channel, title: body.title, duration: body.duration, plot: body.plot, collection: true, collection_name: 'LIVE · ' + body.title, next: null };
+        CG.shows.push(show);
+        return send(200, { show, steps: [{ step: 'plik', ok: true, detail: '' }, { step: 'kolekcja', ok: true, detail: '' }] });
+      }
+      let m;
+      if ((m = u.match(/^\/api\/live\/shows\/([\w.-]+)$/)) && q.method === 'DELETE') { CG.shows = CG.shows.filter((x) => x.id !== m[1]); return send(200, { ok: true }); }
+      if ((m = u.match(/^\/api\/live\/channels\/24\/(hold|release)$/))) { CG.hold = m[1] === 'hold'; return send(200, { ok: true }); }
+      if (u === '/api/live/channels/24' && q.method === 'PUT') { CG.anytime = body.anytime; return send(200, { ok: true }); }
+      send(404, { error: 'nie ma' });
+    });
+  });
+  await new Promise((ok) => cgServer.listen(18700, '127.0.0.1', ok));
+
   const views = ['antena', 'epg', 'kanaly', 'profile', 'znaki', 'media', 'zrodla', 'przegladarka', 'kosz', 'kolekcje', 'playlisty', 'wypelniacze',
     'harmonogramy', 'bloki', 'deco', 'playouty', 'grafika', 'live', 'ustawienia', 'logi', 'diagnostyka'];
   for (const v of views) {
@@ -949,6 +992,53 @@ function check(cond, msg) {
   check(/is_live/.test(await page.textContent('main pre')), 'strumienie zdalne: przykład pliku .yml');
   await shot('r8-strumienie');
   await tab('antena');
+
+
+  // ---------- R9: grafika VizRS i sloty na żywo (atrapa CG Playout) ----------
+  await page.goto(`${BASE}/#grafika`);
+  await page.waitForSelector('main[data-view="grafika"] [data-cg-sessions]');
+  check(await page.textContent('[data-cg-sessions]') === '1', 'grafika: stan CG Playout (sesje elementu VizRS)');
+  await page.waitForSelector('[data-cg-pages] td:has-text("Belka tytułowa")');
+  check(true, 'grafika: strony VizRS kanału 24 z /etv/pages');
+  check(await page.isVisible('button:has-text("Wczytaj pliki elementów")'), 'grafika: przycisk RefreshGraphicsElements (komenda na liście mostu)');
+  await rerender(() => page.click('button:has-text("Wczytaj pliki elementów")'));
+  check(/wczytał/.test(await page.textContent('#toast')), 'grafika: RefreshGraphicsElements wykonane w legacy');
+  await shot('r9-grafika');
+
+  await page.goto(`${BASE}/#live`);
+  await page.waitForSelector('main[data-view="live"] [data-live-channel="24"]');
+  check(/NA ANTENIE/.test(await page.textContent('main')), 'sloty: kanał 24 z sygnałem studia NA ANTENIE');
+  check(/Poranek na żywo/.test(await page.textContent('main')), 'sloty: audycja LIVE na liście');
+  await page.click('button:has-text("■ ZDEJMIJ")');
+  await rerender(() => page.click('#dlg-buttons button:has-text("Zdejmij")'));
+  await page.waitForSelector('button:has-text("▶ WPUŚĆ")');
+  check(CG.hold === true && /WSTRZYMANY/.test(await page.textContent('main')), 'sloty: ZDEJMIJ (z potwierdzeniem) wstrzymuje studio w CG Playout');
+  await rerender(() => page.click('button:has-text("▶ WPUŚĆ")'));
+  check(CG.hold === false, 'sloty: WPUŚĆ');
+  await rerender(() => page.click('input[aria-label="Studio poza audycjami 24"]'));
+  check(CG.anytime === false, 'sloty: „poza audycjami” zapisane w CG Playout');
+  await rerender(() => page.click('input[aria-label="Studio poza audycjami 24"]'));
+  // nowa audycja: najpierw błąd walidacji CG wraca do operatora, potem poprawna
+  await page.click('button:has-text("+ Nowa audycja LIVE")');
+  await page.fill('#ls-title', '***');
+  await rerender(() => page.click('#dlg-buttons button:has-text("Utwórz w ErsatzTV")'));
+  check(/tytuł/.test(await page.textContent('#toast')) && (await page.getAttribute('#toast', 'class')).includes('bad'), 'sloty: błąd walidacji CG Playout pokazany operatorowi');
+  await page.click('button:has-text("+ Nowa audycja LIVE")');
+  await page.fill('#ls-title', 'Debata E2E');
+  await page.fill('#ls-duration', '00:30:00');
+  await rerender(() => page.click('#dlg-buttons button:has-text("Utwórz w ErsatzTV")'));
+  await page.waitForSelector('td:has-text("Debata E2E")');
+  check(CG.shows.some((x) => x.title === 'Debata E2E' && x.duration === '00:30:00' && x.channel === '24'), 'sloty: audycja LIVE założona w CG Playout');
+  await shot('r9-sloty');
+  await page.click('tr:has(td:has-text("Debata E2E")) button:has-text("🗑")');
+  await rerender(() => page.click('#dlg-buttons button:has-text("Usuń")'));
+  check(!CG.shows.some((x) => x.title === 'Debata E2E'), 'sloty: audycja LIVE usunięta (z potwierdzeniem)');
+  check(cgSeen.length > 0 && cgSeen.every((x) => x.endsWith('token')), 'CG Playout: każde żądanie z tokenem z serwera panelu, bez Origin przeglądarki');
+  check(!(await page.content()).includes(CG_TOKEN), 'CG Playout: token nie trafia do przeglądarki');
+  const cgBad = (await fetch(`${BASE}/api/cg/live/settings`, { method: 'PUT', headers: { 'X-VizRS-Live': '1' }, body: '{}' })).status;
+  check(cgBad === 404, 'CG Playout: adres spoza białej listy odrzucony (404)');
+  await tab('antena');
+  cgServer.close();
 
   check(errors.length === 0, 'brak błędów JS' + (errors.length ? ': ' + errors.join(' | ') : ''));
   await browser.close();

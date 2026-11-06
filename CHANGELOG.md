@@ -2,6 +2,11 @@
 
 ## Niewydane
 
+- **Grafika kanału** (R9): stan VizRS CG Playout (sesje elementu VizRS, nakładka ffmpeg, live ingest, przechwytywanie grafiki per kanał), **strony VizRS kanału**, podgląd anteny `/output`, elementy graficzne legacy z „Wczytaj pliki elementów” (`RefreshGraphicsElements`). Reguł grafiki panel nie edytuje – CG Playout nie ma do nich API (krok ręczny, DOKUMENTACJA §4).
+- **Sloty na żywo** (R9): sygnał studia per kanał, NA ANTENIE / WSTRZYMANY / RAMÓWKA, **ZDEJMIJ** (z potwierdzeniem) / **WPUŚĆ**, „studio także poza audycjami”, przebudowa ramówki; **audycje LIVE** (nowa, zmiana, usunięcie, skan) ze stanem kolekcji w legacy i najbliższą emisją; zdarzenia.
+- Serwer: opcje `--cg-url`/`VIZRS_LIVE_CG_URL` i `--cg-token`/`VIZRS_LIVE_CG_TOKEN`, pośrednik `/api/cg/…` z białą listą adresów CG Playout (token CG zostaje w serwerze); `X-VizRS-Live` wymagany dla każdego żądania zmieniającego (też `PUT`, `DELETE`); `/api/status` → `cg`.
+- e2e: atrapa CG Playout (stan, strony, ZDEJMIJ/WPUŚĆ, tryb kanału, audycja LIVE z błędem walidacji, usuwanie, token tylko w serwerze, adres spoza listy odrzucony).
+
 - **Źródła zewnętrzne** (R8, nowy ekran Media → Źródła zewnętrzne): **Jellyfin** i **Emby** (adres, klucz API, połącz / rozłącz), **Plex** (logowanie kodem PIN na stronie Plex, inne konto, wyloguj, usuń serwer); dla każdego serwera wybór bibliotek do synchronizacji, synchronizacja biblioteki i kolekcji, odświeżenie listy bibliotek, **zamiany ścieżek**; zakładka **strumienie zdalne** (format pliku .yml, biblioteki tego rodzaju).
 - **Sekrety tylko do zapisu**: serwer panelu maskuje w odpowiedziach komend pola `…apikey`, `…token`, `…password`, `…secret` (`********`); klucz API nie wraca do przeglądarki.
 - Biała lista: komendy Jellyfin, Emby i Plex (DOKUMENTACJA §4); bez `Get…ConnectionParameters` i `TryCompletePlexPinFlow`.
