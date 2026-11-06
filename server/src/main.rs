@@ -30,6 +30,61 @@ const STATIC: &[(&str, &str, &str)] = &[
         include_str!("../web/app.js"),
     ),
     (
+        "/core.js",
+        "text/javascript; charset=utf-8",
+        include_str!("../web/core.js"),
+    ),
+    (
+        "/form.js",
+        "text/javascript; charset=utf-8",
+        include_str!("../web/form.js"),
+    ),
+    (
+        "/parts.js",
+        "text/javascript; charset=utf-8",
+        include_str!("../web/parts.js"),
+    ),
+    (
+        "/views/antena.js",
+        "text/javascript; charset=utf-8",
+        include_str!("../web/views/antena.js"),
+    ),
+    (
+        "/views/kanaly.js",
+        "text/javascript; charset=utf-8",
+        include_str!("../web/views/kanaly.js"),
+    ),
+    (
+        "/views/media.js",
+        "text/javascript; charset=utf-8",
+        include_str!("../web/views/media.js"),
+    ),
+    (
+        "/views/listy.js",
+        "text/javascript; charset=utf-8",
+        include_str!("../web/views/listy.js"),
+    ),
+    (
+        "/views/ramowka.js",
+        "text/javascript; charset=utf-8",
+        include_str!("../web/views/ramowka.js"),
+    ),
+    (
+        "/views/harmonogramy.js",
+        "text/javascript; charset=utf-8",
+        include_str!("../web/views/harmonogramy.js"),
+    ),
+    (
+        "/views/grafika.js",
+        "text/javascript; charset=utf-8",
+        include_str!("../web/views/grafika.js"),
+    ),
+    (
+        "/views/system.js",
+        "text/javascript; charset=utf-8",
+        include_str!("../web/views/system.js"),
+    ),
+    (
         "/style.css",
         "text/css; charset=utf-8",
         include_str!("../web/style.css"),
@@ -492,6 +547,49 @@ mod tests {
                 .map(|(k, v)| (k.to_string(), v.to_string()))
                 .collect(),
             ..Default::default()
+        }
+    }
+
+    #[test]
+    fn every_static_file_served() {
+        let a = app(Some(T));
+        for (p, ct, body) in STATIC {
+            let r = route(&a, &req("GET", p, &[]));
+            assert_eq!(r.status, 200, "{p}");
+            assert!(!body.is_empty(), "{p} pusty");
+            assert_eq!(r.content_type, *ct, "{p}");
+        }
+    }
+
+    /// Każdy import modułu w UI (`from './x.js'`, `import './views/y.js'`) wskazuje plik ze STATIC.
+    #[test]
+    fn module_imports_resolve() {
+        for (p, _, body) in STATIC.iter().filter(|(p, _, _)| p.ends_with(".js")) {
+            let dir = &p[..p.rfind('/').unwrap() + 1];
+            for line in body.lines() {
+                let l = line.trim_start();
+                if !l.starts_with("import ") {
+                    continue;
+                }
+                let Some(spec) = l.split(['\'', '"']).nth(1) else {
+                    continue;
+                };
+                let mut parts: Vec<&str> = dir.split('/').filter(|s| !s.is_empty()).collect();
+                for seg in spec.split('/') {
+                    match seg {
+                        "." => {}
+                        ".." => {
+                            parts.pop();
+                        }
+                        s => parts.push(s),
+                    }
+                }
+                let target = format!("/{}", parts.join("/"));
+                assert!(
+                    STATIC.iter().any(|(q, _, _)| *q == target),
+                    "{p}: import {spec} -> {target} nie ma w STATIC"
+                );
+            }
         }
     }
 

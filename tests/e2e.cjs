@@ -23,6 +23,7 @@ function check(cond, msg) {
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
+  page.on('response', (r) => r.status() >= 400 && errors.push(`${r.status()} ${r.request().method()} ${r.url()}`));
 
   const views = ['antena', 'epg', 'kanaly', 'profile', 'znaki', 'media', 'kolekcje', 'playlisty', 'wypelniacze',
     'harmonogramy', 'bloki', 'deco', 'playouty', 'grafika', 'live', 'ustawienia', 'diagnostyka'];
@@ -71,6 +72,132 @@ function check(cond, msg) {
   await page.click('button:has-text("Załóż kanał")');
   await page.waitForSelector('#toast.bad');
   check(/odrzucił/.test(await page.textContent('#toast')), 'walidacja legacy pokazana operatorowi');
+
+  // formularz z metadanych: pole warunkowe (kanał lustrzany tylko dla źródła „Mirror”)
+  await page.goto(`${BASE}/#kanaly`);
+  await page.waitForSelector('main[data-view="kanaly"]');
+  await rerender(() => page.click('text=+ Nowy kanał'));
+  const mirrorHidden = !(await page.isVisible('#f-MirrorSourceChannelId'));
+  await page.selectOption('#f-PlayoutSource', 'Mirror');
+  check(mirrorHidden && (await page.isVisible('#f-MirrorSourceChannelId')), 'formularz: pole „Kanał lustrzany” pokazuje się dla źródła Mirror');
+  const opts = await page.$$eval('#f-StreamingMode option', (o) => o.map((x) => x.value));
+  check(opts.includes('HttpLiveStreamingSegmenter'), `formularz: wartości wyliczenia z mostu (${opts.length})`);
+
+  // wybór treści (Diagnostyka): wyszukiwanie w legacy i pola treści pozycji
+  await page.goto(`${BASE}/#diagnostyka`);
+  await page.waitForSelector('main[data-view="diagnostyka"]');
+  await page.selectOption('#cp-kind', 'SmartCollection');
+  await page.fill('#cp-q', 'INFO');
+  await page.click('.picks button:has-text("Archiwum INFO24")');
+  await page.waitForSelector('.picked b:has-text("Archiwum INFO24")');
+  let out = JSON.parse(await page.textContent('#cp-out'));
+  check(out.CollectionType === 'SmartCollection' && out.SmartCollectionId > 0, `wybór treści: kolekcja inteligentna → SmartCollectionId=${out.SmartCollectionId}`);
+  await page.selectOption('#cp-kind', 'Collection');
+  await page.fill('#cp-q', 'nie-ma-takiej-kolekcji');
+  await page.waitForSelector('.picks:has-text("Nic nie znaleziono")');
+  check(true, 'wybór treści: brak wyników opisany');
+  await page.selectOption('#cp-kind', 'RerunFirstRun');
+  const miss = await page.textContent('.picker .missing');
+  check(/SearchRerunCollections/.test(miss) && /białej liście/.test(miss), 'wybór treści: brakująca komenda opisana (SearchRerunCollections)');
+  await page.selectOption('#cp-kind', 'SearchQuery');
+  await page.fill('#cp-query', 'type:other_video');
+  out = JSON.parse(await page.textContent('#cp-out'));
+  check(out.CollectionType === 'SearchQuery' && out.SearchQuery === 'type:other_video', 'wybór treści: zapytanie wyszukiwania');
+
+  // edytor listy pozycji (parts.js; pierwszy ekran z nim to R1) – zamontowany wprost w stronie
+  await page.evaluate(async () => {
+    const { itemsEditor } = await import('/parts.js');
+    const { form } = await import('/form.js');
+    const ed = itemsEditor({
+      items: [{ Name: 'A', Minutes: 10 }, { Name: 'B', Minutes: 20 }, { Name: 'C', Minutes: 30 }],
+      cols: [[(it) => it.Name, 'Nazwa'], [(it) => it.Minutes, 'Min']],
+      newItem: () => ({ Name: 'Nowa', Minutes: 5 }),
+      edit: (it) => form('', [{ key: 'Name', label: 'Nazwa', required: true }, { key: 'Minutes', label: 'Minuty', kind: 'number', optional: false }], it, { idPrefix: 'it-' }),
+    });
+    window.__items = ed;
+    document.getElementById('main').replaceChildren(ed.el);
+  });
+  const names = () => page.evaluate(() => window.__items.value().map((x) => x.Name + x.Minutes).join(','));
+  await page.click('button[aria-label="Pozycja 1 w dół"]');
+  check((await names()) === 'B20,A10,C30', 'edytor pozycji: w dół');
+  await page.click('button[aria-label="Pozycja 3 w górę"]');
+  check((await names()) === 'B20,C30,A10', 'edytor pozycji: w górę');
+  await page.click('.items tbody tr:nth-child(2) td:nth-child(2)');
+  await page.fill('#it-Name', 'C2');
+  await page.fill('#it-Minutes', '');
+  await page.click('.items-side button:has-text("Zastosuj")');
+  await page.waitForSelector('#toast.bad');
+  check(/Minuty/.test(await page.textContent('#toast')), 'edytor pozycji: walidacja pola w panelu bocznym');
+  await page.fill('#it-Minutes', '45');
+  await page.click('.items-side button:has-text("Zastosuj")');
+  check((await names()) === 'B20,C245,A10' && !(await page.$('.items-side')), 'edytor pozycji: edycja wiersza w panelu bocznym');
+  await page.click('button[aria-label="Usuń pozycję 1"]');
+  await page.click('.items button:has-text("+ Dodaj pozycję")');
+  check((await names()) === 'C245,A10,Nowa5' && (await page.inputValue('#it-Name')) === 'Nowa', 'edytor pozycji: usuń i dodaj (nowa otwarta do edycji)');
+
+  // harmonogram (R1): dwie pozycje, zmiana kolejności, zapis, ponowne otwarcie, walidacja legacy, usunięcie
+  const sched = 'E2E harm ' + Date.now().toString(36);
+  const itemRows = () => page.$$eval('.items tbody tr', (trs) => trs.map((tr) => [...tr.querySelectorAll('td')].slice(1, 4).map((td) => td.textContent).join(' | ')));
+  await page.goto(`${BASE}/#harmonogramy`);
+  await page.waitForSelector('main[data-view="harmonogramy"]');
+  await rerender(() => page.click('text=+ Nowy harmonogram'));
+  await page.fill('#f-Name', sched);
+  await page.click('.items button:has-text("+ Dodaj pozycję")');
+  await page.selectOption('#si-StartType', 'Fixed');
+  await page.fill('#si-StartTime', '6:00');
+  await page.selectOption('#si-cp-kind', 'SmartCollection');
+  await page.fill('#si-cp-q', 'INFO');
+  await page.click('.items-side .picks button:has-text("Archiwum INFO24")');
+  await page.selectOption('#si-PlayoutMode', 'Flood');
+  check(!(await page.isVisible('#si-MultipleCount')) && (await page.isVisible('#si-FixedStartTimeBehavior')), 'harmonogram: pola warunkowe pozycji (stała godzina, tryb)');
+  await page.click('.items-side button:has-text("Zastosuj")');
+  await page.click('.items button:has-text("+ Dodaj pozycję")');
+  await page.selectOption('#si-cp-kind', 'SearchQuery');
+  await page.fill('#si-cp-title', 'Wszystko');
+  await page.fill('#si-cp-query', 'type:other_video');
+  await page.selectOption('#si-PlayoutMode', 'Multiple');
+  await page.fill('#si-MultipleCount', '2');
+  await page.click('.items-side button:has-text("Zastosuj")');
+  await page.click('button[aria-label="Pozycja 2 w górę"]');
+  await rerender(() => page.click('button:has-text("Załóż harmonogram")'));
+  await page.waitForSelector(`td:has-text("${sched}")`);
+  let rows = await itemRows();
+  check(rows.length === 2 && /dynamicznie \| wyszukiwanie: Wszystko \| kilka \(2\)/.test(rows[0]) && /06:00 \| kolekcja inteligentna: Archiwum INFO24 \| wypełnij/.test(rows[1]),
+    `harmonogram: założony z pozycjami w nowej kolejności (${rows.join(' / ')})`);
+  await page.click('.items tbody tr:nth-child(2) td:nth-child(3)');
+  check((await page.inputValue('#si-StartTime')) === '06:00:00' && (await page.inputValue('#si-PlayoutMode')) === 'Flood'
+    && /Archiwum INFO24/.test(await page.textContent('.items-side .picked')), 'harmonogram: ponowne otwarcie – te same wartości pozycji');
+  await page.click('.items-side button:has-text("Anuluj")');
+  await page.click('.items tbody tr:nth-child(1) td:nth-child(3)');
+  check((await page.inputValue('#si-MultipleCount')) === '2', 'harmonogram: liczba trybu „kilka” wraca z legacy (podtyp pozycji)');
+
+  // walidacja legacy: reszta czasu = wypełniacz bez wypełniacza ogona
+  await page.selectOption('#si-PlayoutMode', 'Duration');
+  await page.fill('#si-PlayoutDuration', '0:30');
+  await page.selectOption('#si-TailMode', 'Filler');
+  await page.click('main .panel header button:has-text("Zapisz")');
+  await page.waitForSelector('#toast.bad');
+  const terr = await page.textContent('#toast');
+  check(/odrzucił pozycje/.test(terr) && /Tail Filler/.test(terr), `harmonogram: błąd legacy z polskim wstępem (${terr})`);
+  await page.goto(`${BASE}/#antena`);
+  await page.waitForSelector('main[data-view="antena"]');
+  await page.goto(`${BASE}/#harmonogramy`);
+  await page.waitForSelector('main[data-view="harmonogramy"]');
+  await rerender(() => page.click(`td:has-text("${sched}")`));
+  rows = await itemRows();
+  check(/kilka \(2\)/.test(rows[0] || ''), 'harmonogram: odrzucone pozycje nie zmieniły harmonogramu');
+
+  await rerender(() => page.click('main .panel header button:has-text("Kopiuj")').then(() => page.click('#dlg-buttons button:has-text("Kopiuj")')));
+  await page.waitForSelector(`main .panel header h2:has-text("${sched} (kopia)")`);
+  check((await itemRows()).length === 2, 'harmonogram: kopia z pozycjami');
+  await page.click('main .panel header button:has-text("Usuń")');
+  await page.click('#dlg-buttons button:has-text("Usuń")');
+  await page.waitForSelector(`td:has-text("${sched} (kopia)")`, { state: 'detached' });
+  await rerender(() => page.click(`td:has-text("${sched}")`));
+  await page.click('main .panel header button:has-text("Usuń")');
+  await page.click('#dlg-buttons button:has-text("Usuń")');
+  await page.waitForSelector(`td:has-text("${sched}")`, { state: 'detached' });
+  check(true, 'harmonogram usunięty');
 
   // playout: przebudowa przez kolejkę legacy
   await page.goto(`${BASE}/#playouty`);

@@ -3,10 +3,15 @@
 #   legacy z mostem: 127.0.0.1:18409, panel: 127.0.0.1:18090, dane: $VIZRS_LIVE_TEST_DIR (domyślnie /tmp/vizrs-live-test)
 #
 #   tests/stack.sh up      # buduje obraz mostu i panel, uruchamia, sprawdza most (smoke)
-#   tests/stack.sh seed    # wideo testowe + kanał INFO24 z ramówką – wszystko komendami przez panel
+#   tests/stack.sh seed    # wideo testowe + kanał INFO24 z ramówką – wszystko komendami przez panel (drugi raz nic nie dubluje)
+#   tests/stack.sh test    # e2e UI (tests/e2e.cjs) na działającym stosie; Playwright: PLAYWRIGHT_DIR albo tests/local.env
 #   tests/stack.sh down    # zatrzymuje (dane zostają)
+#   tests/stack.sh reset   # zatrzymuje i usuwa dane testowe ($VIZRS_LIVE_TEST_DIR)
+# Pełna bramka przed commitem: tests/gate.sh
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# lokalne ustawienia testów (nie w repo), np. PLAYWRIGHT_DIR=/ścieżka/z/node_modules/playwright
+[ -f tests/local.env ] && . tests/local.env
 
 DIR="${VIZRS_LIVE_TEST_DIR:-/tmp/vizrs-live-test}"
 TOKEN="test-token-0123456789"
@@ -59,6 +64,10 @@ case "${1:-}" in
     echo "panel: $PANEL/  ·  legacy: http://127.0.0.1:18409/  ·  dane: $DIR"
     ;;
   seed)
+    if cmd GetAllChannels | grep -q '"Number":"24"'; then
+      echo "seed: kanał 24 już jest – dane testowe gotowe (od zera: tests/stack.sh reset && tests/stack.sh up && tests/stack.sh seed)"
+      exit 0
+    fi
     docker exec "$NAME" sh -c 'mkdir -p /config/media/info24 && cd /config/media/info24 && for t in Wiadomosci Pogoda Reportaz; do [ -f "$t.mp4" ] || ffmpeg -loglevel error -y -f lavfi -i "testsrc2=size=1280x720:rate=25" -f lavfi -i "sine=frequency=440:sample_rate=48000" -t 120 -c:v libx264 -preset ultrafast -c:a aac "$t.mp4"; done'
     cmd CreateChannel '{"Name":"INFO24","Number":"24","Group":"Informacje","Categories":"wiadomości","FFmpegProfileId":1,"Logo":{"Path":"","ContentType":""},"StreamingEngine":"Next","StreamingMode":"HttpLiveStreamingSegmenter","PlayoutSource":"Generated","PlayoutMode":"Continuous","StreamSelectorMode":"Default","IdleBehavior":"StopOnDisconnect","SubtitleMode":"None","IsEnabled":true,"ShowInEpg":true}'
     lib=$(cmd CreateLocalLibrary '{"Name":"Archiwum INFO24","MediaKind":"OtherVideos","Paths":["/config/media/info24"]}' | sed -n 's/.*"Id":\([0-9]*\).*/\1/p')
@@ -72,13 +81,29 @@ case "${1:-}" in
     cmd BuildPlayout "{\"PlayoutId\":$po,\"Mode\":\"Reset\"}"
     echo "gotowe: kanał 24 · INFO24 z ramówką (playout $po). Panel: $PANEL/#antena"
     ;;
+  test)
+    if [ -z "${PLAYWRIGHT_DIR:-}" ]; then
+      echo "brak PLAYWRIGHT_DIR: ustaw zmienną albo wpisz PLAYWRIGHT_DIR=… do tests/local.env (katalog z node_modules/playwright)" >&2
+      exit 2
+    fi
+    PLAYWRIGHT_DIR="$PLAYWRIGHT_DIR" node tests/e2e.cjs "$PANEL"
+    ;;
+  reset)
+    case "$DIR" in /|/tmp|/home|"$HOME"|"") echo "reset: odmawiam usunięcia '$DIR'" >&2; exit 1 ;; esac
+    pkill -f "[v]izrs-live --port 18090" 2>/dev/null || true
+    docker rm -f "$NAME" >/dev/null 2>&1 || true
+    # pliki w config/ tworzy legacy w kontenerze (root) – usuwa je kontener
+    [ -d "$DIR" ] && docker run --rm -v "$DIR:/d" alpine sh -c 'rm -rf /d/* /d/.[!.]*' >/dev/null 2>&1 || true
+    rm -rf "$DIR"
+    echo "usunięte: $DIR"
+    ;;
   down)
     pkill -f "[v]izrs-live --port 18090" 2>/dev/null || true
     docker rm -f "$NAME" >/dev/null 2>&1 || true
     echo "zatrzymane; dane: $DIR"
     ;;
   *)
-    echo "użycie: tests/stack.sh up|seed|down" >&2
+    echo "użycie: tests/stack.sh up|seed|test|down|reset" >&2
     exit 2
     ;;
 esac

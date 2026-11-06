@@ -6,6 +6,7 @@ Cel końcowy: **operator nie korzysta z web GUI ErsatzTV legacy** – wszystko, 
 
 - **Jeden punkt = jedna sesja.** Każdy punkt jest opisany tak, żeby dało się go zrobić w świeżej sesji bez historii rozmowy. Nie łącz punktów w jednej sesji; po skończeniu punktu zakończ sesję.
 - **Kolejność:** od góry tabeli. Punkt można zacząć, gdy jego „Wymaga” jest zrobione.
+- **Automat:** `scripts/plan.sh run` bierze następny punkt (pierwszy „do zrobienia” ze spełnionym „Wymaga”) i uruchamia dla niego nową sesję `claude -p` bez operatora; `-n N` – kilka punktów po kolei, `-p Rk` – wskazany punkt, `--dry-run` – tylko pokaż. Po sesji automat sam sprawdza: Stan = „zrobione”, nowy commit, czyste drzewo, `tests/gate.sh` zielony; inaczej się zatrzymuje. Sesja, która nie może dokończyć punktu, ustawia Stan = „przerwane: powód” – taki punkt czeka na człowieka. Dzienniki: `.plan-logs/`. Koszt i czas: `PLAN_BUDGET_USD`, `PLAN_TIMEOUT`.
 - **Na początku sesji:**
   1. Przeczytaj `CLAUDE.md`, ten plik (tabelę i swój punkt), `docs/DOKUMENTACJA.md` (zwłaszcza §2 most, §4 ekrany, §5 ograniczenia), `git log -5`.
   2. Uruchom stos testowy: `tests/stack.sh up && tests/stack.sh seed` (porty 18409/18090, produkcyjnego ErsatzTV `virtrs-*` nie ruszaj).
@@ -13,7 +14,7 @@ Cel końcowy: **operator nie korzysta z web GUI ErsatzTV legacy** – wszystko, 
 - **Jak znaleźć komendy ekranu legacy:** w `ErsatzTV/Pages/<Ekran>.razor` (i `ErsatzTV/ViewModels/*EditViewModel.cs`) szukaj `Mediator.Send(` i `new <Komenda>(`; definicje w `ErsatzTV.Application/**/Commands|Queries/*.cs`. Parametry i wartości wyliczeń daje też działający most: `GET /api/commands` (konsola w Diagnostyce).
 - **Zasada mostu:** nowa funkcja = wiersze w `bridge/commands.txt` + kod w Ruście/JS. Nowy kod C# tylko, gdy ogólny dyspozytor nie wystarcza (np. wgrywanie pliku – R5); wtedy mały, ogólny endpoint, opisany w DOKUMENTACJA §2.
 - **Na końcu sesji (warunki „gotowe”):**
-  - bramka z `CLAUDE.md` zielona (`cargo fmt/clippy/test`, `tests/stack.sh up/seed`, `node tests/e2e.cjs`);
+  - bramka zielona: `tests/gate.sh` (`cargo fmt/clippy/test/build`, `tests/stack.sh up/seed`, e2e);
   - nowe przypadki e2e dla punktu w `tests/e2e.cjs` (i w razie potrzeby dane w `tests/stack.sh seed`);
   - zrzut ekranu nowych widoków obejrzany (Playwright, pliki PNG poza repo);
   - `docs/DOKUMENTACJA.md` (§4 tabela ekranów, §5 ograniczenia legacy), `CHANGELOG.md` (Niewydane), kolumna **Stan** w tabeli niżej;
@@ -24,8 +25,8 @@ Cel końcowy: **operator nie korzysta z web GUI ErsatzTV legacy** – wszystko, 
 
 | Punkt | Zakres | Wymaga | Stan |
 |---|---|---|---|
-| R0 | Fundament UI: moduły, formularz z metadanych, wspólne edytory | – | do zrobienia |
-| R1 | Harmonogramy (klasyczna ramówka): pełna edycja z pozycjami | R0 | do zrobienia |
+| R0 | Fundament UI: moduły, formularz z metadanych, wspólne edytory | – | zrobione (2026-11-06) |
+| R1 | Harmonogramy (klasyczna ramówka): pełna edycja z pozycjami | R0 | zrobione (2026-11-06) |
 | R2 | Playouty: zakładanie wszystkich rodzajów, edycja, usuwanie, harmonogramy zastępcze | R1 | do zrobienia |
 | R3 | Media: biblioteki lokalne, skan, przeglądarka i wyszukiwarka, kosz | R0 | do zrobienia |
 | R4 | Kolekcje (zwykłe, inteligentne, wielo-, powtórki) i playlisty | R3 | do zrobienia |

@@ -24,11 +24,25 @@ GetAllSmartCollections
 CreateSmartCollection
 GetAllMultiCollections
 GetAllPlaylistGroups
+GetPlaylistsByPlaylistGroupId
 GetAllFillerPresets
+
+# --- wybór treści (komponent w parts.js; pusty tekst = pierwsze 10 wyników)
+SearchCollections
+SearchSmartCollections
+SearchMultiCollections
+SearchTelevisionShows
+SearchTelevisionSeasons
+SearchArtists
 
 # --- ramówka
 GetAllProgramSchedules
+GetProgramScheduleById
 CreateProgramSchedule
+UpdateProgramSchedule
+CopyProgramSchedule
+DeleteProgramSchedule
+GetProgramScheduleItems
 ReplaceProgramScheduleItems
 # AddProgramScheduleItem – legacy 26.11.6 zapisuje pozycję, ale zwraca błąd (Mapper.ProjectToViewModel); UI legacy używa ReplaceProgramScheduleItems
 GetAllBlocks

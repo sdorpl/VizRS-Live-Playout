@@ -407,6 +407,7 @@ namespace VizRS.Bridge
             };
             o.Converters.Add(new JsonStringEnumConverter());
             o.Converters.Add(new OptionConverterFactory());
+            o.Converters.Add(new RuntimeTypeConverterFactory());
             return o;
         }
 
@@ -652,6 +653,29 @@ namespace VizRS.Bridge
             }
 
             public override bool HandleNull => true;
+        }
+    }
+
+    /// <summary>
+    /// Abstrakcyjne typy legacy (np. ProgramScheduleItemViewModel) zapisywane po typie rzeczywistym – inaczej
+    /// System.Text.Json pisze tylko pola typu deklarowanego i gubi pola podtypów (np. Count, PlayoutDuration).
+    /// Tylko zapis; odczyt typu abstrakcyjnego i tak nie jest możliwy.
+    /// </summary>
+    internal sealed class RuntimeTypeConverterFactory : JsonConverterFactory
+    {
+        public override bool CanConvert(Type t) =>
+            t.IsClass && t.IsAbstract && t.Namespace?.StartsWith("ErsatzTV", StringComparison.Ordinal) == true;
+
+        public override JsonConverter CreateConverter(Type typeToConvert, JsonSerializerOptions options) =>
+            (JsonConverter)Activator.CreateInstance(typeof(RuntimeTypeConverter<>).MakeGenericType(typeToConvert))!;
+
+        private sealed class RuntimeTypeConverter<T> : JsonConverter<T>
+        {
+            public override T Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
+                throw new NotSupportedException($"typ abstrakcyjny {typeToConvert.Name} – podaj typ konkretny");
+
+            public override void Write(Utf8JsonWriter writer, T value, JsonSerializerOptions options) =>
+                JsonSerializer.Serialize(writer, value, value!.GetType(), options);
         }
     }
 }

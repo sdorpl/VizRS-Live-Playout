@@ -6,3 +6,5 @@
 /media/
 .env
 *.png
+tests/local.env
+/.plan-logs/
