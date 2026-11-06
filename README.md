@@ -2,7 +2,7 @@
 
 Część rodziny **VizRS**. Polski panel do prowadzenia kanałów telewizyjnych **ErsatzTV**: kanały, ramówka, playouty, EPG, diagnostyka – bez używania web GUI ErsatzTV legacy. Logika (baza, skaner, planowanie, nadawanie przez ErsatzTV Next) zostaje w legacy; VizRS Live ją pokazuje i nią steruje.
 
-> **Stan: 0.3.0.** Działa end-to-end na ErsatzTV legacy v26.11.6: pełna edycja kanałów, harmonogramów (ramówka klasyczna z pozycjami), playoutów (wszystkie rodzaje, harmonogramy zastępcze), bibliotek i mediów (przeglądarka, kosz), kolekcji (zwykłe, inteligentne, wielo-, powtórki), playlist z podglądem, profili kodowania, znaków wodnych, wypełniaczy i logo kanału; podgląd ramówki i EPG, diagnostyka, konsola komend. Bloki, szablony, deco i grafika na razie tylko czytają dane z legacy; kolejne etapy: [docs/PLAN-rozbudowy.md](docs/PLAN-rozbudowy.md). Plan: [PLAN-vizrs-live.md](../VizRS%20CG%20System/docs/plany/PLAN-vizrs-live.md) w VizRS CG System.
+> **Stan: 0.4.0.** Działa end-to-end na ErsatzTV legacy v26.11.6: pełna edycja kanałów, harmonogramów (ramówka klasyczna z pozycjami), playoutów (wszystkie rodzaje, harmonogramy zastępcze, kalendarz tygodnia playoutu blokowego), bloków i szablonów dnia, deco i szablonów deco, bibliotek i mediów (przeglądarka, kosz), kolekcji (zwykłe, inteligentne, wielo-, powtórki), playlist z podglądem, profili kodowania, znaków wodnych, wypełniaczy i logo kanału, ustawień legacy; logi, konserwacja, test odtwarzania, podgląd ramówki i EPG, diagnostyka, konsola komend. Grafika i sloty na żywo – następne etapy; kolejne etapy: [docs/PLAN-rozbudowy.md](docs/PLAN-rozbudowy.md). Plan: [PLAN-vizrs-live.md](../VizRS%20CG%20System/docs/plany/PLAN-vizrs-live.md) w VizRS CG System.
 
 ## Jak to działa
 

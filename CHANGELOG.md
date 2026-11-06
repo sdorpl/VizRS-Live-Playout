@@ -2,6 +2,8 @@
 
 ## Niewydane
 
+## 0.4.0 – bloki, szablony, deco, ustawienia legacy, logi i konserwacja (2026-11-07)
+
 - **Ustawienia legacy w panelu** (R7), zakładki jak Settings legacy: **FFmpeg i strumienie** (ścieżki ffmpeg/ffprobe, profil nowych kanałów, preferowany język dźwięku, globalny znak wodny i wypełniacz zapasowy, napisy, przeplot, raporty, segmenter HLS, format HLS Direct, skrypt MPEG-TS), **playouty** (dni do zbudowania, pomijanie brakujących plików, limit skryptu), **przewodnik XMLTV** (dni, strefa, bloki), **skaner i HDHomeRun** (co ile godzin skan, liczba tunerów, UUID), **poziomy logów** (sześć obszarów, działa od razu), **web GUI legacy** (motyw, język). Zakresy sprawdzane w panelu (legacy ich nie sprawdza).
 - **Logi** (nowy ekran System → Logi): najnowsze wpisy logu legacy, próg poziomu, wyszukiwanie, stronicowanie, odświeżanie co 5 s.
 - **Diagnostyka**: „Sprawdź ponownie” kontrole legacy, **wersje i sprzęt** (legacy, ffmpeg, procesor, karty grafiki), „Odśwież możliwości ffmpeg”, **konserwacja** z potwierdzeniami (opróżnij kosz, osierocone grafiki i napisy, zwolnij pamięć), **test odtwarzania** (odnośniki HLS/TS do strumienia wybranego kanału).
