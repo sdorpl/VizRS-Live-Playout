@@ -17,8 +17,41 @@ GetAllWatermarks
 
 # --- media i listy
 GetAllLocalLibraries
+GetLocalLibraryById
+GetLocalLibraryPaths
 CreateLocalLibrary
+UpdateLocalLibrary
+MoveLocalLibraryPath
+DeleteLocalLibrary
+CountMediaItemsByLibrary
+CountMediaItemsByLibraryPath
 QueueLibraryScanByLibraryId
+QueueShowScanByLibraryId
+GetLibraryRefreshInterval
+# przeglądarka mediów i wyszukiwarka (R3)
+QuerySearchIndexAllItems
+QuerySearchIndexMovies
+QuerySearchIndexShows
+QuerySearchIndexSeasons
+QuerySearchIndexEpisodes
+QuerySearchIndexOtherVideos
+QuerySearchIndexSongs
+QuerySearchIndexMusicVideos
+QuerySearchIndexArtists
+QuerySearchIndexImages
+QuerySearchIndexRemoteStreams
+QuerySearchTargets
+GetMediaItemInfo
+GetMovieById
+GetTelevisionShowById
+GetTelevisionSeasonById
+GetRemoteStreamById
+GetImageFolders
+UpdateImageFolderDuration
+# kosz (R3)
+# RemoveMediaItems – wewnętrzna komenda indeksu wyszukiwania (SearchIndexService), nie dla operatora
+EmptyTrash
+DeleteItemsFromDatabase
 GetAllCollections
 GetAllSmartCollections
 CreateSmartCollection

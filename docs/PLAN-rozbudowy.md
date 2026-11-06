@@ -28,7 +28,7 @@ Cel końcowy: **operator nie korzysta z web GUI ErsatzTV legacy** – wszystko, 
 | R0 | Fundament UI: moduły, formularz z metadanych, wspólne edytory | – | zrobione (2026-11-06) |
 | R1 | Harmonogramy (klasyczna ramówka): pełna edycja z pozycjami | R0 | zrobione (2026-11-06) |
 | R2 | Playouty: zakładanie wszystkich rodzajów, edycja, usuwanie, harmonogramy zastępcze | R1 | zrobione (2026-11-06) |
-| R3 | Media: biblioteki lokalne, skan, przeglądarka i wyszukiwarka, kosz | R0 | do zrobienia |
+| R3 | Media: biblioteki lokalne, skan, przeglądarka i wyszukiwarka, kosz | R0 | zrobione (2026-11-06) |
 | R4 | Kolekcje (zwykłe, inteligentne, wielo-, powtórki) i playlisty | R3 | do zrobienia |
 | R5 | Profile kodowania, znaki wodne (z wgrywaniem obrazu), wypełniacze, logo kanału | R0 | do zrobienia |
 | R6 | Bloki, szablony, deco: edycja i kalendarz tygodnia | R4, R5 | do zrobienia |

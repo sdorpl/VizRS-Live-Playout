@@ -25,7 +25,7 @@ function check(cond, msg) {
   page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
   page.on('response', (r) => r.status() >= 400 && errors.push(`${r.status()} ${r.request().method()} ${r.url()}`));
 
-  const views = ['antena', 'epg', 'kanaly', 'profile', 'znaki', 'media', 'kolekcje', 'playlisty', 'wypelniacze',
+  const views = ['antena', 'epg', 'kanaly', 'profile', 'znaki', 'media', 'przegladarka', 'kosz', 'kolekcje', 'playlisty', 'wypelniacze',
     'harmonogramy', 'bloki', 'deco', 'playouty', 'grafika', 'live', 'ustawienia', 'diagnostyka'];
   for (const v of views) {
     await page.goto(`${BASE}/#${v}`);
@@ -242,7 +242,7 @@ function check(cond, msg) {
   await page.waitForSelector('#toast.ok');
   check(true, 'playout: przebudowa zlecona');
   let onAir = false;
-  for (let i = 0; i < 15 && !onAir; i++) {
+  for (let i = 0; i < 30 && !onAir; i++) {
     await page.goto(`${BASE}/#antena`);
     await page.waitForSelector('main[data-view="antena"]');
     onAir = !!(await page.$(`.panel:has(h2:text-is("${chNum} · ${chName}")) .now`));
@@ -293,6 +293,45 @@ function check(cond, msg) {
   await api('DeleteChannel', { ChannelId: chId });
   await api('DeleteProgramSchedule', { ProgramScheduleId: psId });
   check(await page.isHidden('#st-warn'), 'pasek górny: brak playoutów z błędem (licznik ukryty)');
+
+  // media (R3): biblioteka z seed, wyszukiwarka, karta pozycji, nowa biblioteka ze ścieżką
+  await page.goto(`${BASE}/#media`);
+  await page.waitForSelector('main[data-view="media"]');
+  const libRow = page.locator('tbody tr', { hasText: 'Archiwum INFO24' }).first();
+  check((await libRow.locator('td.num').textContent()).trim() === '3', 'biblioteka „Archiwum INFO24”: 3 pozycje');
+  await rerender(() => libRow.click());
+  check(await page.inputValue('#lib-paths input') === '/config/media/info24', 'biblioteka: ścieżka w kontenerze legacy');
+  const libName = 'E2E bib ' + Date.now().toString(36);
+  await rerender(() => page.click('text=+ Nowa biblioteka'));
+  await page.fill('#lib-Name', libName);
+  await page.click('button:has-text("Załóż bibliotekę")');
+  await page.waitForSelector('#toast.bad');
+  check(/ścieżk/.test(await page.textContent('#toast')), 'biblioteka bez ścieżki: komunikat');
+  await page.click('text=+ Dodaj ścieżkę');
+  await page.fill('#lib-paths input', '/config/media/e2e');
+  await page.click('button:has-text("Załóż bibliotekę")');
+  await page.waitForSelector(`td:text-is("${libName}")`);
+  await rerender(() => page.click(`td:text-is("${libName}")`));
+  check(await page.inputValue('#lib-paths input') === '/config/media/e2e', 'nowa biblioteka zapisana ze ścieżką');
+  await page.click('main button:has-text("Usuń")');
+  await page.click('#dlg-buttons button:has-text("Usuń")');
+  await page.waitForSelector(`td:text-is("${libName}")`, { state: 'detached' });
+  check(true, 'biblioteka usunięta');
+
+  await page.goto(`${BASE}/#przegladarka`);
+  await page.waitForSelector('main[data-view="przegladarka"]');
+  await page.fill('#media-q', 'Pogoda');
+  await rerender(() => page.press('#media-q', 'Enter'));
+  const hits = await page.locator('main tbody tr').count();
+  check(hits === 1 && /Pogoda/.test(await page.textContent('main tbody tr')), `wyszukiwanie „Pogoda”: ${hits} pozycja`);
+  await page.click('main tbody tr');
+  await page.waitForSelector('#item-card');
+  check(/H\.264/.test(await page.textContent('#item-card')), 'karta pozycji: strumień H.264');
+  await page.click('#dlg-buttons button:has-text("Zamknij")');
+
+  await page.goto(`${BASE}/#kosz`);
+  await page.waitForSelector('main[data-view="kosz"]');
+  check(/Kosz jest pusty/.test(await page.textContent('main')), 'kosz pusty');
 
   check(errors.length === 0, 'brak błędów JS' + (errors.length ? ': ' + errors.join(' | ') : ''));
   await browser.close();

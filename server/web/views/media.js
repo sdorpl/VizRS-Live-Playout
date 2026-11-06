@@ -1,8 +1,240 @@
-// Widoki grupy „Media”: Biblioteki.
+// Widoki grupy „Media”: Biblioteki (lokalne, ze ścieżkami i skanem), Przeglądarka (wyszukiwarka legacy
+// z zakładkami rodzajów, stronicowanie, karta pozycji) i Kosz (pliki, których skaner nie znalazł).
+// Odpowiednik Local Libraries, Library Editor, Search i Trash w legacy.
+//
+// Ścieżki bibliotek to ścieżki w kontenerze legacy (np. /config/media/…, /media/…), nie na komputerze operatora.
+// Postępu skanu legacy nie udostępnia zapytaniem (idzie przez zdarzenia Blazora) – panel odświeża liczbę pozycji.
 
-import { VIEWS, pl } from '../core.js';
-import { listView, READONLY } from '../parts.js';
+import { VIEWS, h, btn, head, panel, pill, cmd, pl, table, toast, dialog, confirmDlg, route, cmdNote, missing, missingNote, S } from '../core.js';
+import { form } from '../form.js';
+import { crudView } from '../parts.js';
 
-VIEWS.media = listView('Biblioteki', 'Skąd biorą się pliki. Odpowiednik Media Sources i Libraries (biblioteki lokalne).', [{
-  title: 'Biblioteki lokalne', cmd: 'GetAllLocalLibraries', cols: [['Name', 'Nazwa'], [(l) => pl(l.MediaKind), 'Rodzaj'], ['Id', 'Id', { class: 'num' }]],
-}], READONLY);
+// ---------- biblioteki lokalne ----------
+const KIND_HINT = {
+  Movies: 'Filmy: katalog na film (Tytuł (rok)/plik).', Shows: 'Seriale: Serial/Sezon 01/odcinek S01E01.',
+  OtherVideos: 'Inne wideo: dowolne pliki, foldery stają się tagami.', MusicVideos: 'Teledyski: Artysta/plik.',
+  Songs: 'Muzyka: dowolne pliki dźwiękowe.', Images: 'Obrazy: pliki graficzne; czas wyświetlania per folder.',
+  RemoteStreams: 'Strumienie zdalne: pliki .yml z adresem strumienia (np. audycje na żywo).',
+};
+
+/** Edytor ścieżek: wiersz = pole ścieżki, liczba pozycji, „Przenieś do…”, usuń. */
+function pathsEditor(paths, lib, libs) {
+  let rows = paths.map((p) => ({ ...p }));
+  const el = h('div', { class: 'paths', id: 'lib-paths' });
+  const render = () => {
+    el.replaceChildren(
+      rows.length ? null : h('div', { class: 'empty' }, 'Brak ścieżek – dodaj katalog w kontenerze legacy.'),
+      ...rows.map((r, i) => {
+        const input = h('input', { value: r.Path, class: 'mono grow', placeholder: '/config/media/…', 'aria-label': `Ścieżka ${i + 1}`,
+          oninput: (e) => (r.Path = e.target.value) });
+        const others = libs.filter((l) => l.Id !== lib?.Id && l.MediaKind === lib?.MediaKind);
+        return h('div', { class: 'bar path' }, input,
+          r.Id ? h('span', { class: 'dim num' }, `${r.Count ?? '?'} poz.`) : h('span', { class: 'dim' }, 'nowa'),
+          r.Id && others.length ? btn('Przenieś…', () => movePath(r, others)) : null,
+          h('button', { type: 'button', class: 'danger', title: 'Usuń ścieżkę', 'aria-label': `Usuń ścieżkę ${i + 1}`, onclick: async () => {
+            if (r.Id && r.Count && !(await confirmDlg('Usuń ścieżkę', `Usunąć ścieżkę „${r.Path}”? Po zapisie legacy usunie jej ${r.Count} poz. z bazy (pliki zostają).`, 'Usuń'))) return;
+            rows.splice(i, 1);
+            render();
+          } }, '✕'));
+      }),
+      h('div', { class: 'bar' }, btn('+ Dodaj ścieżkę', () => { rows.push({ Id: 0, Path: '' }); render(); el.querySelector('div.path:last-of-type input')?.focus(); })),
+      h('div', { class: 'hint' }, 'Ścieżki w kontenerze legacy (np. /config/media/kanal albo zamontowany /media/…), nie na Twoim komputerze. Usunięcie ścieżki usuwa z legacy jej pozycje (pliki zostają).'));
+  };
+  render();
+  return {
+    el,
+    read() {
+      const out = rows.map((r) => ({ Id: r.Id || 0, Path: r.Path.trim() }));
+      if (out.some((r) => !r.Path)) throw new Error('Ścieżka biblioteki nie może być pusta.');
+      if (out.some((r) => !r.Path.startsWith('/'))) throw new Error('Ścieżka musi być bezwzględna (zaczynać się od /) – to ścieżka w kontenerze legacy.');
+      if (new Set(out.map((r) => r.Path)).size !== out.length) throw new Error('Ta sama ścieżka jest w bibliotece dwa razy.');
+      return out;
+    },
+  };
+}
+
+async function movePath(p, others) {
+  const sel = h('select', { id: 'move-target' }, others.map((l) => h('option', { value: String(l.Id) }, l.Name)));
+  const ok = await dialog('Przenieś ścieżkę', h('div', { class: 'form' }, h('p', null, `Przenieść „${p.Path}” (${p.Count ?? '?'} poz.) do innej biblioteki tego samego rodzaju? Pozycje przechodzą razem ze ścieżką.`),
+    h('label', { for: 'move-target' }, 'Do biblioteki'), sel), [['Anuluj', false], ['Przenieś', true, 'acc']]);
+  if (!ok) return;
+  try {
+    const r = await cmd('MoveLocalLibraryPath', { LibraryPathId: p.Id, TargetLibraryId: Number(sel.value) });
+    toast(r?.queued ? 'Zlecono przeniesienie ścieżki (legacy robi to w tle).' : 'Przeniesiono ścieżkę.', 'ok');
+    setTimeout(() => route(true), 1000);
+  } catch (e) { toast('Legacy odrzucił przeniesienie: ' + e.message, 'bad'); }
+}
+
+async function scan(lib) {
+  try {
+    await cmd('QueueLibraryScanByLibraryId', { LibraryId: lib.Id });
+    toast(`${lib.Name}: zlecono skan. Liczba pozycji odświeża się co kilka sekund.`, 'ok');
+    let n = 0;
+    const t = setInterval(() => { if (++n > 6) clearInterval(t); route(true); }, 5000);
+    S.timers.push(t);
+  } catch (e) { toast('Legacy odrzucił skan: ' + e.message, 'bad'); }
+}
+
+VIEWS.media = crudView({
+  title: 'Biblioteki',
+  desc: 'Skąd biorą się pliki: biblioteki lokalne z katalogami w kontenerze legacy. Odpowiednik Media Sources → Local i Libraries.',
+  listCmd: 'GetAllLocalLibraries',
+  needs: ['GetLocalLibraryPaths', 'CountMediaItemsByLibrary', 'CountMediaItemsByLibraryPath', 'QueueLibraryScanByLibraryId', 'MoveLocalLibraryPath'],
+  commands: { create: 'CreateLocalLibrary', update: 'UpdateLocalLibrary', delete: 'DeleteLocalLibrary' },
+  noun: { list: 'Biblioteki lokalne', new: 'Nowa biblioteka', add: '+ Nowa biblioteka', create: 'Załóż bibliotekę', one: (l) => l.Name || 'Biblioteka', title: (l) => l.Name },
+  load: async () => {
+    const libs = await cmd('GetAllLocalLibraries');
+    const counts = await Promise.all(libs.map((l) => cmd('CountMediaItemsByLibrary', { LibraryId: l.Id }).catch(() => null)));
+    libs.forEach((l, i) => (l.Count = counts[i]));
+    libs.sort((a, b) => a.MediaKind.localeCompare(b.MediaKind) || a.Name.localeCompare(b.Name, 'pl'));
+    return { rows: libs };
+  },
+  loadOne: async (l) => {
+    if (!l) return { paths: [] };
+    const paths = await cmd('GetLocalLibraryPaths', { LocalLibraryId: l.Id });
+    const counts = await Promise.all(paths.map((p) => cmd('CountMediaItemsByLibraryPath', { LibraryPathId: p.Id }).catch(() => null)));
+    paths.forEach((p, i) => (p.Count = counts[i]));
+    return { paths };
+  },
+  id: (l) => l.Id,
+  cols: [['Name', 'Nazwa', { class: 'w' }], [(l) => pl(l.MediaKind), 'Rodzaj'], [(l) => l.Count ?? '?', 'Pozycje', { class: 'num' }]],
+  editor: (l, ctx) => {
+    ctx.current = l;
+    const f = form('CreateLocalLibrary', [
+      { key: 'Name', label: 'Nazwa', required: true },
+      l ? null : { key: 'MediaKind', label: 'Rodzaj', hint: (v) => KIND_HINT[v.MediaKind] },
+    ].filter(Boolean), l ? { Name: l.Name } : { Name: '', MediaKind: 'OtherVideos' }, { idPrefix: 'lib-' });
+    ctx.pathsEd = pathsEditor(ctx.paths, l, ctx.rows);
+    const info = l ? h('dl', { class: 'kv' }, h('dt', null, 'Rodzaj'), h('dd', null, pl(l.MediaKind)), h('dt', null, 'Pozycje'), h('dd', null, String(l.Count ?? '?'))) : null;
+    return {
+      el: h('div', null, info, f.el, h('div', { class: 'form' }, h('div', { class: 'sec' }, 'Ścieżki (w kontenerze legacy)')), ctx.pathsEd.el),
+      read: () => ({ ...f.read(), Paths: ctx.pathsEd.read() }),
+    };
+  },
+  beforeSave: (ctx, data) => { if (!data.Paths.length && !ctx.current) throw new Error('Dodaj co najmniej jedną ścieżkę.'); },
+  create: (d) => ({ Name: d.Name.trim(), MediaKind: d.MediaKind, Paths: d.Paths.map((p) => p.Path) }),
+  createdId: (r) => r?.Id,
+  update: (d, l) => ({ Id: l.Id, Name: d.Name.trim(), Paths: d.Paths }),
+  afterSave: async (id, ctx) => { if (!ctx.current) await scan({ Id: id, Name: 'Nowa biblioteka' }); },
+  footer: (l) => (l ? h('div', { class: 'maint' }, h('h3', null, 'Skan'), h('div', { class: 'bar' }, btn('Skanuj teraz', () => scan(l), 'acc'),
+    h('span', { class: 'dim' }, 'Legacy skanuje też sam co kilka godzin (Ustawienia → skaner).'))) : null),
+  del: (l) => ({ LocalLibraryId: l.Id }),
+  confirmDelete: (l) => `Usunąć bibliotekę „${l.Name}”? Legacy usunie ${l.Count ?? 'jej'} pozycji z bazy (pliki na dysku zostają), znikną też z kolekcji i ramówek. Tego nie da się cofnąć.`,
+});
+
+// ---------- przeglądarka i wyszukiwarka ----------
+/** Rodzaje pozycji: zakładka, zapytanie legacy, przedrostek typu w wyszukiwarce, klucz w QuerySearchIndexAllItems. */
+const KINDS = [
+  ['OtherVideos', 'QuerySearchIndexOtherVideos', 'other_video', 'OtherVideoIds'],
+  ['Movies', 'QuerySearchIndexMovies', 'movie', 'MovieIds'],
+  ['Shows', 'QuerySearchIndexShows', 'show', 'ShowIds'],
+  ['Seasons', 'QuerySearchIndexSeasons', 'season', 'SeasonIds'],
+  ['Episodes', 'QuerySearchIndexEpisodes', 'episode', 'EpisodeIds'],
+  ['MusicVideos', 'QuerySearchIndexMusicVideos', 'music_video', 'MusicVideoIds'],
+  ['Artists', 'QuerySearchIndexArtists', 'artist', 'ArtistIds'],
+  ['Songs', 'QuerySearchIndexSongs', 'song', 'SongIds'],
+  ['Images', 'QuerySearchIndexImages', 'image', 'ImageIds'],
+  ['RemoteStreams', 'QuerySearchIndexRemoteStreams', 'remote_stream', 'RemoteStreamIds'],
+];
+const KIND_PL = { Seasons: 'sezony', Episodes: 'odcinki', Artists: 'artyści' };
+const kindLabel = (k) => KIND_PL[k] || pl(k);
+const STATE = { Normal: null, FileNotFound: ['brak pliku', 'bad'], Unavailable: ['niedostępny', 'warn'], RemoteOnly: ['tylko zdalnie', 'info'] };
+const statePill = (s) => (STATE[s] ? pill(...STATE[s]) : s && s !== 'Normal' ? pill(s) : null);
+const PAGE = 50;
+const B = { q: '', tab: 'OtherVideos', page: 1 };
+
+const FIELDS = 'title:, type:, tag:, genre:, library_name:, state:, minutes:, height:, video_codec:, release_date:, plot:';
+
+/** Karta pozycji: GetMediaItemInfo (strumienie, rozdziały, czas). */
+export async function itemCard(id, title) {
+  let info;
+  try { info = await cmd('GetMediaItemInfo', { Id: id }); } catch (e) { return toast('Legacy nie zwrócił informacji o pozycji: ' + e.message, 'bad'); }
+  const kv = (rows) => h('dl', { class: 'kv' }, rows.filter((r) => r[1] != null && r[1] !== '').flatMap(([k, v]) => [h('dt', null, k), h('dd', null, v instanceof Node ? v : String(v))]));
+  const streams = table(info.Streams || [], [['Index', '#', { class: 'num' }], [(s) => ({ Video: 'obraz', Audio: 'dźwięk', Subtitle: 'napisy', Attachment: 'załącznik' }[s.Kind] || s.Kind), 'Rodzaj'],
+    [(s) => (s.Codec || '').toUpperCase() === 'H264' ? 'H.264' : s.Codec, 'Kodek'], ['Profile', 'Profil'], ['Language', 'Język'], ['Channels', 'Kanały', { class: 'num' }],
+    [(s) => [s.Default ? 'domyślny' : '', s.Forced ? 'wymuszony' : ''].filter(Boolean).join(', '), 'Flagi']], { empty: 'Brak strumieni – legacy jeszcze nie przeanalizował pliku.' });
+  const chapters = info.Chapters?.length ? table(info.Chapters, [['ChapterId', '#', { class: 'num' }], ['StartTime', 'Od'], ['EndTime', 'Do'], ['Title', 'Tytuł']]) : null;
+  await dialog(info.Title || title, h('div', { class: 'card', id: 'item-card' },
+    kv([['Rodzaj', info.Kind], ['Biblioteka', info.LibraryName], ['Stan', statePill(info.State) || 'OK'], ['Czas', info.Duration],
+      ['Obraz', info.Width ? `${info.Width}×${info.Height}, ${info.DisplayAspectRatio || ''} ${info.VideoScanKind === 'Interlaced' ? 'z przeplotem' : ''}`.trim() : null],
+      ['Klatki', info.RFrameRate], ['Id', info.Id]]),
+    h('h3', null, 'Strumienie'), streams, chapters ? [h('h3', null, 'Rozdziały'), chapters] : null, cmdNote('GetMediaItemInfo')), [['Zamknij', true, 'acc']]);
+}
+
+async function search(kind, q, page) {
+  const k = KINDS.find((x) => x[0] === kind);
+  const query = q.trim() ? `type:${k[2]} AND (${q.trim()})` : `type:${k[2]}`;
+  return cmd(k[1], { Query: query, PageNumber: page, PageSize: PAGE });
+}
+
+/** Liczby pozycji na zakładkach: QuerySearchIndexAllItems zwraca listy id po rodzajach. */
+async function counts(q) {
+  const r = await cmd('QuerySearchIndexAllItems', { Query: q.trim() || '*' });
+  return Object.fromEntries(KINDS.map(([k, , , key]) => [k, r?.[key]?.length ?? 0]));
+}
+
+VIEWS.przegladarka = async () => {
+  const names = ['QuerySearchIndexAllItems', 'GetMediaItemInfo', ...KINDS.map((k) => k[1])];
+  const title = 'Przeglądarka mediów';
+  const desc = 'Wszystko, co legacy zeskanował, z wyszukiwarką legacy. Odpowiednik Search i ekranów mediów.';
+  const miss = missing(names);
+  if (miss.length) return [head(title, desc), missingNote(miss)];
+  const n = await counts(B.q);
+  if (!n[B.tab]) B.tab = KINDS.find(([k]) => n[k])?.[0] || B.tab;
+  const res = await search(B.tab, B.q, B.page);
+  const total = res?.Count ?? 0;
+  const pages = Math.max(1, Math.ceil(total / PAGE));
+
+  const input = h('input', { id: 'media-q', type: 'search', value: B.q, class: 'mono grow', placeholder: 'np. Pogoda albo tag:info AND minutes:>1', 'aria-label': 'Szukaj w mediach' });
+  const go = () => { B.q = input.value; B.page = 1; route(); };
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+  const tabs = h('div', { class: 'tabs' }, KINDS.map(([k]) => h('button', { type: 'button', class: k === B.tab ? 'on' : null, onclick: () => { B.tab = k; B.page = 1; route(true); } }, `${kindLabel(k)} (${n[k]})`)));
+  const rows = (res?.Cards || []).map((c) => ({ ...c }));
+  const list = table(rows, [['Title', 'Tytuł', { class: 'w' }], ['Subtitle', 'Opis / plik'], [(c) => statePill(c.State), 'Stan'], ['MediaItemId', 'Id', { class: 'num' }]],
+    { onRow: (c) => itemCard(c.MediaItemId, c.Title), empty: B.q ? 'Nic nie pasuje do zapytania.' : 'Brak pozycji tego rodzaju – dodaj bibliotekę i ją zeskanuj.' });
+  const pager = pages > 1 ? h('div', { class: 'bar pad pager' },
+    btn('‹ Poprzednia', () => { B.page--; route(true); }, B.page <= 1 ? 'off' : null), h('span', { class: 'dim' }, `strona ${B.page} z ${pages} · ${total} poz.`),
+    btn('Następna ›', () => { B.page++; route(true); }, B.page >= pages ? 'off' : null)) : h('div', { class: 'bar pad dim' }, `${total} poz.`);
+  pager.querySelectorAll('button.off').forEach((b) => (b.disabled = true));
+  return [
+    head(title, desc),
+    h('div', { class: 'bar searchbar' }, input, btn('Szukaj', go, 'acc'), B.q ? btn('Wyczyść', () => { B.q = ''; B.page = 1; route(); }) : null),
+    h('div', { class: 'hint' }, `Bez pola szuka w tytule. Pola: ${FIELDS} Łącz AND / OR / NOT, frazy w cudzysłowie, np. library_name:"Archiwum INFO24".`),
+    panel('Pozycje', h('span', { class: 'dim' }, 'kliknij pozycję, by zobaczyć kartę'), tabs, list, pager, cmdNote(KINDS.find((k) => k[0] === B.tab)[1], 'QuerySearchIndexAllItems', 'GetMediaItemInfo')),
+  ];
+};
+
+// ---------- kosz ----------
+VIEWS.kosz = async () => {
+  const title = 'Kosz';
+  const desc = 'Pozycje, których plików skaner już nie znalazł (stan „brak pliku”). Odpowiednik Trash w legacy.';
+  const miss = missing(['DeleteItemsFromDatabase', 'EmptyTrash', ...KINDS.map((k) => k[1])]);
+  if (miss.length) return [head(title, desc), missingNote(miss)];
+  const all = (await Promise.all(KINDS.map(async ([k, c]) => {
+    const r = await cmd(c, { Query: 'state:FileNotFound', PageNumber: 1, PageSize: 500 });
+    return (r?.Cards || []).map((x) => ({ ...x, Kind: k }));
+  }))).flat();
+  const picked = new Set();
+  const del = async () => {
+    if (!picked.size) return toast('Zaznacz pozycje do usunięcia.', 'bad');
+    if (!(await confirmDlg('Usuń z bazy', `Usunąć z bazy legacy ${picked.size} poz.? Znikną z kolekcji i ramówek. Tego nie da się cofnąć.`, 'Usuń'))) return;
+    try { await cmd('DeleteItemsFromDatabase', { MediaItemIds: [...picked] }); toast('Usunięto z bazy.', 'ok'); route(true); }
+    catch (e) { toast('Legacy odrzucił: ' + e.message, 'bad'); }
+  };
+  const empty = async () => {
+    if (!(await confirmDlg('Opróżnij kosz', `Usunąć z bazy legacy wszystkie pozycje bez pliku (${all.length})? Tego nie da się cofnąć.`, 'Opróżnij kosz'))) return;
+    try { const r = await cmd('EmptyTrash'); toast(r?.queued ? 'Zlecono opróżnienie kosza.' : 'Kosz opróżniony.', 'ok'); setTimeout(() => route(true), 1000); }
+    catch (e) { toast('Legacy odrzucił: ' + e.message, 'bad'); }
+  };
+  const cols = [
+    [(c) => { const b = h('input', { type: 'checkbox', 'aria-label': `Zaznacz ${c.Title}` }); b.addEventListener('change', () => (b.checked ? picked.add(c.MediaItemId) : picked.delete(c.MediaItemId))); return b; }, ''],
+    ['Title', 'Tytuł', { class: 'w' }], [(c) => kindLabel(c.Kind), 'Rodzaj'], ['Subtitle', 'Opis / plik'], ['MediaItemId', 'Id', { class: 'num' }]];
+  return [
+    head(title, desc, all.length ? btn('Opróżnij kosz', empty, 'danger') : null),
+    panel('Pozycje bez pliku', h('span', { class: 'dim' }, String(all.length)),
+      table(all, cols, { empty: 'Kosz jest pusty – wszystkie pliki są na miejscu.' }),
+      all.length ? h('div', { class: 'bar pad' }, btn('Usuń zaznaczone z bazy', del, 'danger')) : null,
+      cmdNote('QuerySearchIndex… (state:FileNotFound)', 'DeleteItemsFromDatabase', 'EmptyTrash')),
+    h('div', { class: 'note' }, 'Plik wrócił na miejsce? Zeskanuj bibliotekę – pozycja wyjdzie z kosza sama.'),
+  ];
+};
