@@ -2,6 +2,8 @@
 
 ## Niewydane
 
+## 0.3.0 – playouty, media, kolekcje i playlisty, profile i znaki wodne (2026-11-06)
+
 - **Kolekcje – pełna edycja** (R4), zakładki: **zwykłe** (nazwa, lista pozycji wszystkich rodzajów, usuwanie zaznaczonych z kolekcji), **inteligentne** (zapytanie wyszukiwarki legacy, liczba wyników na liście i „Sprawdź zapytanie” przed zapisem), **wielokolekcje** (składniki: kolekcje zwykłe i inteligentne, „planuj jako grupę”), **powtórki** (treść przez wybór treści, kolejność premier i powtórek wg rodzaju treści).
 - **Playlisty – pełna edycja** (R4): grupy (załóż, usuń z playlistami), playlisty w grupach, edytor pozycji (kolekcja / serial / sezon / artysta / wielokolekcja / inteligentna, kolejność, liczba albo „wszystkie”, EPG; przesuwanie, kopiowanie, usuwanie), **podgląd playoutu** („Zapisz i pokaż podgląd” – legacy liczy podgląd z zapisanej playlisty).
 - **Przeglądarka mediów: „Dodaj zaznaczone do…”** kolekcji zwykłej albo playlisty.
