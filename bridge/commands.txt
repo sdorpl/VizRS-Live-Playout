@@ -1,0 +1,47 @@
+# Biała lista mostu VizRS ↔ ErsatzTV legacy: jedna komenda albo zapytanie legacy (nazwa rekordu MediatR) w wierszu.
+# Komendy spoza listy most odrzuca (403). Nazwy nieznane w danej wersji legacy pokazuje /vizrs-bridge/health ("commandsMissing").
+# Nowa funkcja panelu = nowy wiersz tutaj, bez zmiany kodu C#.
+
+# --- kanały
+GetAllChannels
+GetChannelById
+CreateChannel
+UpdateChannel
+DeleteChannel
+GetAllLanguageCodes
+
+# --- profile kodowania, znaki wodne, rozdzielczości
+GetAllFFmpegProfiles
+GetAllResolutions
+GetAllWatermarks
+
+# --- media i listy
+GetAllLocalLibraries
+CreateLocalLibrary
+QueueLibraryScanByLibraryId
+GetAllCollections
+GetAllSmartCollections
+CreateSmartCollection
+GetAllMultiCollections
+GetAllPlaylistGroups
+GetAllFillerPresets
+
+# --- ramówka
+GetAllProgramSchedules
+CreateProgramSchedule
+ReplaceProgramScheduleItems
+# AddProgramScheduleItem – legacy 26.11.6 zapisuje pozycję, ale zwraca błąd (Mapper.ProjectToViewModel); UI legacy używa ReplaceProgramScheduleItems
+GetAllBlocks
+GetAllTemplates
+GetAllDecoGroups
+GetPagedPlayouts
+CreateClassicPlayout
+GetFuturePlayoutItemsById
+GetPlayoutIdByChannelNumber
+BuildPlayout
+
+# --- grafika
+GetAllGraphicsElements
+
+# --- system
+GetAllHealthCheckResults

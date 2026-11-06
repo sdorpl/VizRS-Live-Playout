@@ -1,0 +1,38 @@
+# VizRS Live: ErsatzTV legacy z mostem + panel.
+#   cp .env.example .env   # ustaw tokeny
+#   docker compose up -d --build
+# Panel: http://<serwer>:8090/  (token panelu: VIZRS_LIVE_TOKEN)
+# Strumienie dla widzów: http://<serwer>:8409/iptv/channels.m3u
+services:
+  ersatztv:
+    build:
+      context: .
+      dockerfile: docker/legacy-bridge.Dockerfile
+      args:
+        LEGACY_IMAGE: ${LEGACY_IMAGE:-ghcr.io/ersatztv/legacy:latest}
+    image: vizrs-live-legacy:${LEGACY_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      VIZRS_BRIDGE_TOKEN: ${VIZRS_BRIDGE_TOKEN:?ustaw VIZRS_BRIDGE_TOKEN w .env}
+      TZ: ${TZ:-Europe/Warsaw}
+    ports:
+      - "8409:8409"            # strumienie i M3U/XMLTV dla widzów (web GUI legacy też tu jest – zob. README)
+    volumes:
+      - ${ETV_CONFIG:-./etv-config}:/config
+      - ${MEDIA_DIR:-./media}:/media:ro
+
+  live:
+    build:
+      context: .
+      dockerfile: docker/live.Dockerfile
+    image: vizrs-live:latest
+    restart: unless-stopped
+    depends_on: [ersatztv]
+    environment:
+      VIZRS_LIVE_BRIDGE: http://ersatztv:8409
+      VIZRS_LIVE_BRIDGE_TOKEN: ${VIZRS_BRIDGE_TOKEN}
+      VIZRS_LIVE_TOKEN: ${VIZRS_LIVE_TOKEN:?ustaw VIZRS_LIVE_TOKEN w .env}
+      VIZRS_LIVE_STREAM_URL: ${VIZRS_LIVE_STREAM_URL:-}
+      VIZRS_LIVE_VIZRS_URL: ${VIZRS_LIVE_VIZRS_URL:-}
+    ports:
+      - "8090:8090"

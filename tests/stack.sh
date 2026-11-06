@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+# Stos testowy VizRS Live na osobnych portach (nie rusza produkcyjnego ErsatzTV):
+#   legacy z mostem: 127.0.0.1:18409, panel: 127.0.0.1:18090, dane: $VIZRS_LIVE_TEST_DIR (domyślnie /tmp/vizrs-live-test)
+#
+#   tests/stack.sh up      # buduje obraz mostu i panel, uruchamia, sprawdza most (smoke)
+#   tests/stack.sh seed    # wideo testowe + kanał INFO24 z ramówką – wszystko komendami przez panel
+#   tests/stack.sh down    # zatrzymuje (dane zostają)
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+DIR="${VIZRS_LIVE_TEST_DIR:-/tmp/vizrs-live-test}"
+TOKEN="test-token-0123456789"
+NAME="vizrs-live-test-legacy"
+BRIDGE="http://127.0.0.1:18409/vizrs-bridge"
+PANEL="http://127.0.0.1:18090"
+
+wait_bridge() {
+  for _ in $(seq 1 90); do
+    if curl -sf -o /dev/null -H "X-VizRS-Token: $TOKEN" "$BRIDGE/health"; then return 0; fi
+    sleep 2
+  done
+  echo "most nie wstał – docker logs $NAME" >&2
+  return 1
+}
+
+cmd() { # cmd NAZWA [JSON]
+  local body="${2:-}"
+  [ -n "$body" ] || body='{}'
+  curl -s -X POST -H 'X-VizRS-Live: 1' "$PANEL/api/cmd/$1" -d "$body"
+  echo
+}
+
+expect() { # expect OPIS KOD_HTTP polecenie...
+  local what="$1" want="$2"; shift 2
+  local got
+  got=$("$@" -o /dev/null -w '%{http_code}')
+  if [ "$got" = "$want" ]; then echo "ok   $what ($got)"; else echo "BŁĄD $what: $got zamiast $want" >&2; exit 1; fi
+}
+
+case "${1:-}" in
+  up)
+    mkdir -p "$DIR/config"
+    docker build -q -f docker/legacy-bridge.Dockerfile -t vizrs-live-legacy:dev . >/dev/null
+    (cd server && cargo build --release -q)
+    docker rm -f "$NAME" >/dev/null 2>&1 || true
+    docker run -d --name "$NAME" -p 127.0.0.1:18409:8409 -e VIZRS_BRIDGE_TOKEN="$TOKEN" -v "$DIR/config:/config" vizrs-live-legacy:dev >/dev/null
+    wait_bridge
+    pkill -f "[v]izrs-live --port 18090" 2>/dev/null || true
+    nohup server/target/release/vizrs-live --port 18090 --bridge http://127.0.0.1:18409 --bridge-token "$TOKEN" \
+      --stream-url http://127.0.0.1:18409 >"$DIR/panel.log" 2>&1 &
+    sleep 1
+    # smoke: most i jego zabezpieczenia
+    expect "most: zdrowie" 200 curl -s -H "X-VizRS-Token: $TOKEN" "$BRIDGE/health"
+    expect "most: zły token" 401 curl -s -H "X-VizRS-Token: zly" "$BRIDGE/health"
+    expect "most: komenda spoza listy" 403 curl -s -X POST -H "X-VizRS-Token: $TOKEN" "$BRIDGE/command/ResetAllPlayouts" -d '{}'
+    expect "most: zapytanie" 200 curl -s -X POST -H "X-VizRS-Token: $TOKEN" "$BRIDGE/command/GetAllChannels" -d '{}'
+    expect "panel: status" 200 curl -s "$PANEL/api/status"
+    expect "panel: POST bez X-VizRS-Live" 403 curl -s -X POST "$PANEL/api/cmd/GetAllChannels" -d '{}'
+    echo "panel: $PANEL/  ·  legacy: http://127.0.0.1:18409/  ·  dane: $DIR"
+    ;;
+  seed)
+    docker exec "$NAME" sh -c 'mkdir -p /config/media/info24 && cd /config/media/info24 && for t in Wiadomosci Pogoda Reportaz; do [ -f "$t.mp4" ] || ffmpeg -loglevel error -y -f lavfi -i "testsrc2=size=1280x720:rate=25" -f lavfi -i "sine=frequency=440:sample_rate=48000" -t 120 -c:v libx264 -preset ultrafast -c:a aac "$t.mp4"; done'
+    cmd CreateChannel '{"Name":"INFO24","Number":"24","Group":"Informacje","Categories":"wiadomości","FFmpegProfileId":1,"Logo":{"Path":"","ContentType":""},"StreamingEngine":"Next","StreamingMode":"HttpLiveStreamingSegmenter","PlayoutSource":"Generated","PlayoutMode":"Continuous","StreamSelectorMode":"Default","IdleBehavior":"StopOnDisconnect","SubtitleMode":"None","IsEnabled":true,"ShowInEpg":true}'
+    lib=$(cmd CreateLocalLibrary '{"Name":"Archiwum INFO24","MediaKind":"OtherVideos","Paths":["/config/media/info24"]}' | sed -n 's/.*"Id":\([0-9]*\).*/\1/p')
+    cmd QueueLibraryScanByLibraryId "{\"LibraryId\":$lib}"
+    echo "czekam na skan…"; sleep 25
+    sc=$(cmd CreateSmartCollection '{"Name":"Archiwum INFO24","Query":"type:other_video"}' | sed -n 's/.*"Id":\([0-9]*\).*/\1/p')
+    ps=$(cmd CreateProgramSchedule '{"Name":"INFO24 dzień","FixedStartTimeBehavior":"Strict"}' | sed -n 's/.*"ProgramScheduleId":\([0-9]*\).*/\1/p')
+    cmd ReplaceProgramScheduleItems "{\"ProgramScheduleId\":$ps,\"Items\":[{\"Index\":1,\"StartType\":\"Dynamic\",\"PlayoutMode\":\"Flood\",\"CollectionType\":\"SmartCollection\",\"SmartCollectionId\":$sc,\"PlaybackOrder\":\"Chronological\",\"MultipleCount\":\"1\",\"SearchTitle\":\"\",\"SearchQuery\":\"\",\"CustomTitle\":\"\",\"WatermarkIds\":[],\"GraphicsElementIds\":[]}]}"
+    ch=$(cmd GetAllChannels | grep -o '"Id":[0-9]*,"Number":"24"' | sed 's/"Id":\([0-9]*\).*/\1/')
+    po=$(cmd CreateClassicPlayout "{\"ChannelId\":$ch,\"ProgramScheduleId\":$ps}" | sed -n 's/.*"PlayoutId":\([0-9]*\).*/\1/p')
+    cmd BuildPlayout "{\"PlayoutId\":$po,\"Mode\":\"Reset\"}"
+    echo "gotowe: kanał 24 · INFO24 z ramówką (playout $po). Panel: $PANEL/#antena"
+    ;;
+  down)
+    pkill -f "[v]izrs-live --port 18090" 2>/dev/null || true
+    docker rm -f "$NAME" >/dev/null 2>&1 || true
+    echo "zatrzymane; dane: $DIR"
+    ;;
+  *)
+    echo "użycie: tests/stack.sh up|seed|down" >&2
+    exit 2
+    ;;
+esac
