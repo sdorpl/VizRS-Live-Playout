@@ -1,6 +1,6 @@
 # VizRS Live – dokumentacja
 
-Wersja 0.1.0 (prototyp), sprawdzona z ErsatzTV legacy **v26.11.6** (obraz `ghcr.io/ersatztv/legacy`, silnik Next).
+Wersja 0.2.0, sprawdzona z ErsatzTV legacy **v26.11.6** (obraz `ghcr.io/ersatztv/legacy`, silnik Next).
 
 ## 1. Składniki
 

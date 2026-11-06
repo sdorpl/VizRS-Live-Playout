@@ -2,7 +2,7 @@
 
 Część rodziny **VizRS**. Polski panel do prowadzenia kanałów telewizyjnych **ErsatzTV**: kanały, ramówka, playouty, EPG, diagnostyka – bez używania web GUI ErsatzTV legacy. Logika (baza, skaner, planowanie, nadawanie przez ErsatzTV Next) zostaje w legacy; VizRS Live ją pokazuje i nią steruje.
 
-> **Stan: prototyp 0.1.0.** Działa end-to-end na ErsatzTV legacy v26.11.6: pełna edycja kanałów, przebudowa playoutów, podgląd ramówki i EPG, diagnostyka, konsola komend. Pozostałe ekrany na razie tylko czytają dane z legacy. Plan: [PLAN-vizrs-live.md](../VizRS%20CG%20System/docs/plany/PLAN-vizrs-live.md) w VizRS CG System.
+> **Stan: 0.2.0.** Działa end-to-end na ErsatzTV legacy v26.11.6: pełna edycja kanałów i harmonogramów (ramówka klasyczna z pozycjami), przebudowa playoutów, podgląd ramówki i EPG, diagnostyka, konsola komend. Pozostałe ekrany na razie tylko czytają dane z legacy; kolejne etapy: [docs/PLAN-rozbudowy.md](docs/PLAN-rozbudowy.md). Plan: [PLAN-vizrs-live.md](../VizRS%20CG%20System/docs/plany/PLAN-vizrs-live.md) w VizRS CG System.
 
 ## Jak to działa
 

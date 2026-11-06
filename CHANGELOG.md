@@ -2,6 +2,8 @@
 
 ## Niewydane
 
+## 0.2.0 – harmonogramy (2026-11-06)
+
 - **Harmonogramy – pełna edycja** (R1): lista z kanałami, które używają harmonogramu; ustawienia (godziny stałe, tasowanie, losowy start, części odcinków, kolekcje jak seriale); nowy, kopiuj, usuń z potwierdzeniem (wymienia kanały, których playouty legacy usunie kaskadowo); **edytor pozycji**: start dynamiczny/o stałej godzinie, treść (wybór treści), kolejność odtwarzania zależna od rodzaju treści, maraton, tryb (wypełnij / jedna / kilka + liczba albo tryb / przez czas + reszta czasu + próby dopasowania), wypełnianie grupami, tytuł własny, tryb przewodnika, wypełniacze pre/mid/post/ogon/zapasowy, znaki wodne i elementy graficzne, preferencje audio i napisów; kopiowanie pozycji. Ustawienia i pozycje zapisuje jeden „Zapisz” (pozycje jednym `ReplaceProgramScheduleItems`); błąd legacy pokazany z polskim wstępem.
 - **Most: abstrakcyjne typy legacy serializowane po typie rzeczywistym** – wcześniej pozycje harmonogramu (`GetProgramScheduleItems`) traciły pola podtypów (liczba trybu „kilka”, czas, reszta czasu, próby dopasowania), więc zapis z panelu skasowałby je w legacy.
 - `crudView`: `loadOne` (dane zaznaczonej pozycji), `below` (panel pod edytorem), `beforeSave`/`afterSave`; `itemsEditor`: `commit()` (zatwierdza otwarty panel boczny przed zapisem) i kopiowanie wiersza (`copy`).
