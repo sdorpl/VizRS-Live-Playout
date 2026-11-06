@@ -8,6 +8,7 @@
 //   GET  /vizrs-bridge/health            stan mostu i legacy
 //   GET  /vizrs-bridge/commands          dozwolone komendy z parametrami
 //   POST /vizrs-bridge/command/{Nazwa}   argumenty komendy w JSON -> {"ok":true,"result":…} | {"ok":false,"error":…}
+//   POST /vizrs-bridge/upload/{Rodzaj}    obraz (Logo|Watermark, treść = bajty pliku) -> SaveArtworkToDisk -> {"ok":true,"result":"<nazwa w pamięci legacy>"}
 //
 // Biała lista: plik VIZRS_BRIDGE_COMMANDS (domyślnie commands.txt obok DLL). Komendy spoza listy -> 403.
 
@@ -71,6 +72,8 @@ namespace VizRS.Bridge
     {
         private const string Prefix = "/vizrs-bridge";
         private const int MaxBody = 1 << 20;
+        private const int MaxUpload = 10 << 20;
+        private static readonly string[] UploadKinds = ["Logo", "Watermark"];
         public const string Version = "0.2.0";
 
         private readonly RequestDelegate _next;
@@ -126,6 +129,10 @@ namespace VizRS.Bridge
                 else if (r.StartsWith("/command/", StringComparison.Ordinal) && HttpMethods.IsPost(ctx.Request.Method))
                 {
                     await Command(ctx, r["/command/".Length..]);
+                }
+                else if (r.StartsWith("/upload/", StringComparison.Ordinal) && HttpMethods.IsPost(ctx.Request.Method))
+                {
+                    await Upload(ctx, r["/upload/".Length..]);
                 }
                 else
                 {
@@ -248,6 +255,77 @@ namespace VizRS.Bridge
 
             await Raw(ctx, 200, body);
         }
+
+        /// <summary>
+        /// Wgranie obrazu: SaveArtworkToDisk przyjmuje Stream, więc nie przejdzie przez ogólny dyspozytor JSON.
+        /// Tylko obrazy PNG/JPEG/GIF/WebP (typ i sygnatura pliku), do 10 MB, rodzaje Logo i Watermark.
+        /// </summary>
+        private async Task Upload(HttpContext ctx, string kind)
+        {
+            if (!_registry.Allowed.TryGetValue("SaveArtworkToDisk", out Type? type))
+            {
+                await Json(ctx, 403, new { ok = false, error = "komenda 'SaveArtworkToDisk' nie jest dozwolona (biała lista mostu)" });
+                return;
+            }
+
+            if (!UploadKinds.Contains(kind, StringComparer.Ordinal))
+            {
+                await Json(ctx, 400, new { ok = false, error = "rodzaj obrazu: Logo albo Watermark" });
+                return;
+            }
+
+            string ct = (ctx.Request.ContentType ?? string.Empty).Split(';')[0].Trim().ToLowerInvariant();
+            if (ctx.Request.ContentLength is > MaxUpload)
+            {
+                await Json(ctx, 413, new { ok = false, error = "obraz większy niż 10 MB" });
+                return;
+            }
+
+            using var ms = new MemoryStream();
+            byte[] buf = new byte[81920];
+            int n;
+            while ((n = await ctx.Request.Body.ReadAsync(buf, ctx.RequestAborted)) > 0)
+            {
+                if (ms.Length + n > MaxUpload)
+                {
+                    await Json(ctx, 413, new { ok = false, error = "obraz większy niż 10 MB" });
+                    return;
+                }
+
+                ms.Write(buf, 0, n);
+            }
+
+            if (!ImageMatches(ct, ms.GetBuffer().AsSpan(0, (int)ms.Length)))
+            {
+                await Json(ctx, 415, new { ok = false, error = "dozwolone tylko obrazy PNG, JPEG, GIF i WebP (typ i treść pliku muszą się zgadzać)" });
+                return;
+            }
+
+            ConstructorInfo ctor = Binder.Constructor(type) ?? throw new InvalidOperationException("SaveArtworkToDisk bez konstruktora");
+            ParameterInfo[] ps = ctor.GetParameters();
+            if (ps.Length != 3 || ps[0].ParameterType != typeof(Stream) || !ps[1].ParameterType.IsEnum)
+            {
+                await Json(ctx, 500, new { ok = false, error = "SaveArtworkToDisk ma w tej wersji legacy inne pola" });
+                return;
+            }
+
+            ms.Position = 0;
+            object request = ctor.Invoke([ms, Enum.Parse(ps[1].ParameterType, kind), ct]);
+            var sender = ctx.RequestServices.GetRequiredService<ISender>();
+            object? result = await sender.Send(request, ctx.RequestAborted);
+            Console.WriteLine($"[vizrs-bridge] upload {kind} {ct} {ms.Length} B");
+            await Json(ctx, 200, Results.Unwrap(result));
+        }
+
+        /// <summary>Typ zawartości obrazu zgodny z sygnaturą pliku.</summary>
+        internal static bool ImageMatches(string ct, ReadOnlySpan<byte> b) => ct switch
+        {
+            "image/png" => b.StartsWith((ReadOnlySpan<byte>)[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]),
+            "image/jpeg" => b.StartsWith((ReadOnlySpan<byte>)[0xFF, 0xD8, 0xFF]),
+            "image/gif" => b.StartsWith("GIF87a"u8) || b.StartsWith("GIF89a"u8),
+            "image/webp" => b.Length >= 12 && b.StartsWith("RIFF"u8) && b[8..12].SequenceEqual("WEBP"u8),
+            _ => false,
+        };
 
         private static bool TryQueue(IServiceProvider services, object request, out string? queue)
         {

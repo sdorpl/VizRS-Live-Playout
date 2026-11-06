@@ -1,8 +1,9 @@
-// Widoki grupy „Kanały”: Kanały (lista + edytor), Profile kodowania, Znaki wodne.
+// Widok „Kanały” (lista + edytor). Profile kodowania i znaki wodne: views/profile.js, views/znaki.js.
 
-import { S, VIEWS, h, pill, cmd, pl } from '../core.js';
+import { S, VIEWS, h, pill, cmd, pl, legacyUrl } from '../core.js';
 import { form } from '../form.js';
-import { crudView, listView, READONLY } from '../parts.js';
+import { crudView } from '../parts.js';
+import { imageField } from './znaki.js';
 
 // --- kanały: pełna edycja ---
 const CHANNEL_DEFAULTS = {
@@ -15,15 +16,28 @@ const CHANNEL_DEFAULTS = {
 };
 const chanName = (c) => `Kanał ${c.Number} · ${c.Name}`;
 
-/** Logo kanału: adres URL; niezmieniony adres zachowuje typ zawartości z legacy. */
+/**
+ * Logo kanału: wgrany obraz (SaveArtworkToDisk, Logo → „iptv/logos/{plik}”, jak Channel Editor legacy)
+ * albo zewnętrzny adres URL. Niezmienione logo zachowuje typ zawartości z legacy.
+ */
 function logoField(logo) {
   const before = { Path: logo?.Path || '', ContentType: logo?.ContentType || '' };
-  const el = h('input', { id: 'f-LogoPath', value: before.Path, placeholder: 'https://…/logo.png', 'aria-label': 'Logo (adres URL)' });
+  const external = /^https?:\/\//.test(before.Path);
+  const url = h('input', { id: 'f-LogoPath', value: external ? before.Path : '', placeholder: 'albo adres https://…/logo.png', 'aria-label': 'Logo (adres URL)' });
+  const img = imageField('Logo', external ? null : before, {
+    id: 'f-LogoFile', label: 'Wgraj logo',
+    pathOf: (name) => `iptv/logos/${name}`,
+    src: (cur) => legacyUrl(cur.Path),
+    describe: (cur) => `plik w legacy: ${cur.Path.replace('iptv/logos/', '').slice(0, 12)}…`,
+    onPreview: (src) => { if (src?.startsWith('data:')) url.value = ''; },
+  });
   const read = () => {
-    const p = el.value.trim();
-    return p === before.Path ? before : { Path: p, ContentType: '' };
+    const u = url.value.trim();
+    if (u) return u === before.Path ? before : { Path: u, ContentType: '' };
+    const cur = img.read();
+    return cur.Path === before.Path ? before : cur;
   };
-  return { el, read, peek: read };
+  return { el: h('div', { class: 'picker' }, img.el, url), read, peek: read };
 }
 
 VIEWS.kanaly = crudView({
@@ -53,7 +67,7 @@ VIEWS.kanaly = crudView({
       { key: 'Name', label: 'Nazwa', required: true },
       { key: 'Group', label: 'Grupa' },
       { key: 'Categories', label: 'Kategorie', placeholder: 'np. wiadomości, publicystyka' },
-      { key: 'Logo', label: 'Logo (adres URL)', render: logoField },
+      { key: 'Logo', label: 'Logo', render: logoField },
       { label: 'Widoczność', group: [{ key: 'IsEnabled', kind: 'check', text: 'włączony' }, { key: 'ShowInEpg', kind: 'check', text: 'w przewodniku EPG' }] },
       { sec: 'Nadawanie' },
       { key: 'FFmpegProfileId', label: 'Profil kodowania', options: profiles.map((p) => [p.Id, p.Name]) },
@@ -77,14 +91,3 @@ VIEWS.kanaly = crudView({
   confirmDelete: (ch) => `Usunąć kanał ${ch.Number} · ${ch.Name} razem z jego playoutem? Tego nie da się cofnąć.`,
   headExtra: () => (S.status.streamUrl ? h('a', { href: S.status.streamUrl + '/iptv/channels.m3u', target: '_blank', rel: 'noopener' }, 'channels.m3u ↗') : null),
 });
-
-VIEWS.profile = listView('Profile kodowania', 'Jak Next koduje kanał. Odpowiednik FFmpeg Profiles.', [{
-  title: 'Profile', cmd: 'GetAllFFmpegProfiles', cols: [
-    ['Name', 'Nazwa'], ['Resolution.Name', 'Rozdzielczość'], [(p) => `${p.VideoFormat ?? ''} · ${p.BitDepth ?? ''}`, 'Obraz'],
-    [(p) => (p.VideoBitrate ? p.VideoBitrate + ' kb/s' : '—'), 'Bitrate'], [(p) => `${p.AudioFormat ?? ''} ${p.AudioBitrate ? p.AudioBitrate + 'k' : ''}`, 'Dźwięk'],
-    [(p) => pl(p.HardwareAcceleration), 'Akceleracja'], ['NormalizeAudio', 'Normalizacja dźwięku']],
-}], READONLY);
-
-VIEWS.znaki = listView('Znaki wodne', 'Proste logo rysowane przez Next. Gdy kanał ma grafikę VizRS, logo zwykle daje VizRS. Odpowiednik Watermarks.', [{
-  title: 'Znaki', cmd: 'GetAllWatermarks', cols: [['Name', 'Nazwa'], [(w) => pl(w.Mode), 'Tryb'], ['Location', 'Położenie'], ['Size', 'Rozmiar'], [(w) => (w.Opacity != null ? w.Opacity + ' %' : '—'), 'Krycie']],
-}], READONLY);

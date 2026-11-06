@@ -333,6 +333,104 @@ function check(cond, msg) {
   await page.waitForSelector('main[data-view="kosz"]');
   check(/Kosz jest pusty/.test(await page.textContent('main')), 'kosz pusty');
 
+  // R5: profile kodowania – nowy 720p z loudnorm, kopia, usunięcie
+  const profName = 'E2E 720p ' + tag;
+  await page.goto(`${BASE}/#profile`);
+  await page.waitForSelector('main[data-view="profile"]');
+  await rerender(() => page.click('text=+ Nowy profil'));
+  await page.fill('#f-Name', profName);
+  await page.selectOption('#f-ResolutionId', { label: '1280x720' });
+  await page.selectOption('#f-NormalizeLoudnessMode', 'LoudNorm');
+  check(/−23 LUFS/.test(await page.textContent('main .form')), 'profil: podpowiedź −23 LUFS');
+  await page.fill('#f-TargetLoudness', '-23');
+  await page.click('button:has-text("Załóż profil")');
+  await page.waitForSelector(`td:text-is("${profName}")`);
+  const prof = (await api('GetAllFFmpegProfiles')).result.find((x) => x.Name === profName);
+  check(prof && prof.Resolution.Name === '1280x720' && prof.NormalizeLoudnessMode === 'LoudNorm' && prof.TargetLoudness === -23, 'profil 720p zapisany (rozdzielczość, −23 LUFS)');
+  await rerender(() => page.click(`td:text-is("${profName}")`));
+  await page.click('main .panel header button:has-text("Kopiuj")');
+  await page.click('#dlg-buttons button:has-text("Kopiuj")');
+  await page.waitForSelector(`td:text-is("${profName} (kopia)")`);
+  check(true, 'profil skopiowany');
+  for (const n of [profName + ' (kopia)', profName]) {
+    await rerender(() => page.click(`td:text-is("${n}")`));
+    await page.click('main .panel header button:has-text("Usuń")');
+    await page.click('#dlg-buttons button:has-text("Usuń")');
+    await page.waitForSelector(`td:text-is("${n}")`, { state: 'detached' });
+  }
+  check(true, 'profil i kopia usunięte');
+
+  // R5: znak wodny z wgranym PNG, przypisany do kanału; logo kanału wgrane
+  const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAAAgCAYAAACinX6EAAAAXElEQVR4nO3QMREAIBDAsJeCdCTiAGRkoEP2XufsdX82OkBrgA7QGqADtAboAK0BOkBrgA7QGqADtAboAK0BOkBrgA7QGqADtAboAK0BOkBrgA7QGqADtAboAO0BIgN5PBkUl+sAAAAASUVORK5CYII=', 'base64');
+  const wmName = 'E2E znak ' + tag;
+  await page.goto(`${BASE}/#znaki`);
+  await page.waitForSelector('main[data-view="znaki"]');
+  await rerender(() => page.click('text=+ Nowy znak'));
+  await page.fill('#f-Name', wmName);
+  await page.setInputFiles('#f-image', { name: 'logo.png', mimeType: 'image/png', buffer: PNG });
+  await page.waitForSelector('#toast.ok:has-text("Obraz wgrany")');
+  await page.click('button[aria-label="Położenie: lewy górny"]');
+  await page.fill('#f-Width', '20');
+  const mark = await page.evaluate(() => { const m = document.querySelector('.wm-mark'); return { left: m.style.left, top: m.style.top, w: m.style.width, img: m.querySelector('img').src.slice(0, 15) }; });
+  check(mark.left === '5%' && mark.top === '5%' && mark.w === '20%' && mark.img === 'data:image/png;', `podgląd znaku na makiecie (${JSON.stringify(mark)})`);
+  await page.click('button:has-text("Załóż znak")');
+  await page.waitForSelector(`td:text-is("${wmName}")`);
+  const wm = (await api('GetAllWatermarks')).result.find((x) => x.Name === wmName);
+  check(wm && /^[0-9A-F]{32}$/.test(wm.Image.Path) && wm.Image.ContentType === 'image/png' && wm.Location === 'TopLeft' && wm.Width === 20, 'znak wodny zapisany z wgranym PNG');
+
+  const wmCh = String(Math.max(...(await api('GetAllChannels', { ShowDisabled: true })).result.map((c) => parseFloat(c.Number) || 0)) + 1);
+  const wmChName = 'E2E znak kanał ' + tag;
+  const profiles = (await api('GetAllFFmpegProfiles')).result;
+  await api('CreateChannel', { Name: wmChName, Number: wmCh, Group: 'Test', FFmpegProfileId: profiles[0].Id, Logo: { Path: '', ContentType: '' }, StreamingEngine: 'Next', StreamingMode: 'HttpLiveStreamingSegmenter', PlayoutSource: 'Generated', PlayoutMode: 'Continuous', IsEnabled: true, ShowInEpg: true });
+  await page.goto(`${BASE}/#kanaly`);
+  await page.waitForSelector('main[data-view="kanaly"]');
+  await rerender(() => page.click(`td:text-is("${wmChName}")`));
+  await page.selectOption('#f-WatermarkId', { label: wmName });
+  await page.setInputFiles('#f-LogoFile', { name: 'logo.png', mimeType: 'image/png', buffer: PNG });
+  await page.waitForSelector('#toast.ok:has-text("Obraz wgrany")');
+  await page.click('main .panel header button:has-text("Zapisz")');
+  await page.waitForSelector('#toast.ok:has-text("zapisano")');
+  const wmChan = (await api('GetAllChannels', { ShowDisabled: true })).result.find((c) => c.Name === wmChName);
+  check(wmChan?.WatermarkId === wm.Id, 'znak wodny przypisany do kanału');
+  check(/^iptv\/logos\/[0-9A-F]{32}$/.test(wmChan?.Logo?.Path || '') && wmChan.Logo.ContentType === 'image/png', `logo kanału wgrane (${wmChan?.Logo?.Path})`);
+  await api('DeleteChannel', { ChannelId: wmChan.Id });
+  await page.goto(`${BASE}/#znaki`);
+  await page.waitForSelector('main[data-view="znaki"]');
+  await rerender(() => page.click(`td:text-is("${wmName}")`));
+  check(await page.isVisible('img.thumb.sm'), 'lista znaków: miniatura z legacy');
+  await page.click('main .panel header button:has-text("Usuń")');
+  await page.click('#dlg-buttons button:has-text("Usuń")');
+  await page.waitForSelector(`td:text-is("${wmName}")`, { state: 'detached' });
+  check(true, 'znak wodny usunięty');
+
+  // R5: wgrywanie – zły typ i za duży plik odrzucone (poza przeglądarką, żeby 4xx nie liczyły się jako błąd strony)
+  const up = (kind, type, body) => fetch(`${BASE}/api/upload/${kind}`, { method: 'POST', headers: { 'X-VizRS-Live': '1', 'Content-Type': type }, body }).then((r) => r.status);
+  check(await up('Watermark', 'image/svg+xml', '<svg xmlns="http://www.w3.org/2000/svg"/>') === 415, 'wgrywanie: SVG odrzucony (415)');
+  check(await up('Watermark', 'image/png', 'GIF89a nie png') === 415, 'wgrywanie: treść niezgodna z typem (415)');
+  check(await up('Watermark', 'image/png', Buffer.concat([PNG, Buffer.alloc(10 * 1024 * 1024)])).catch(() => 413) === 413, 'wgrywanie: plik > 10 MB odrzucony (413)');
+  check(await up('Poster', 'image/png', PNG) === 400, 'wgrywanie: zły rodzaj obrazu (400)');
+
+  // R5: wypełniacz „dopełnij do 30 min”
+  const fpName = 'E2E dopełnienie ' + tag;
+  await page.goto(`${BASE}/#wypelniacze`);
+  await page.waitForSelector('main[data-view="wypelniacze"]');
+  await rerender(() => page.click('text=+ Nowy wypełniacz'));
+  await page.fill('#f-Name', fpName);
+  await page.selectOption('#f-FillerKind', 'PostRoll');
+  await page.selectOption('#f-FillerMode', 'Pad');
+  await page.selectOption('#f-PadToNearestMinute', '30');
+  await page.click('#fp-cp .picks button:has-text("Archiwum INFO24")');
+  await page.click('button:has-text("Załóż wypełniacz")');
+  await page.waitForSelector(`td:text-is("${fpName}")`);
+  const fp = (await api('GetAllFillerPresets')).result.find((x) => x.Name === fpName);
+  check(fp && fp.FillerKind === 'PostRoll' && fp.FillerMode === 'Pad' && fp.PadToNearestMinute === 30 && fp.CollectionType === 'SmartCollection' && fp.SmartCollectionId > 0 && fp.Count == null, 'wypełniacz „dopełnij do 30 min” zapisany');
+  await rerender(() => page.click(`td:text-is("${fpName}")`));
+  check(await page.isDisabled('#f-FillerKind') && /Archiwum INFO24/.test(await page.textContent('#fp-cp .picked')), 'wypełniacz: miejsce zablokowane, treść z nazwą');
+  await page.click('main .panel header button:has-text("Usuń")');
+  await page.click('#dlg-buttons button:has-text("Usuń")');
+  await page.waitForSelector(`td:text-is("${fpName}")`, { state: 'detached' });
+  check(true, 'wypełniacz usunięty');
+
   check(errors.length === 0, 'brak błędów JS' + (errors.length ? ': ' + errors.join(' | ') : ''));
   await browser.close();
   console.log(failed ? `\n${failed} błędów` : '\nwszystko zielone');

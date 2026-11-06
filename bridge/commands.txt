@@ -10,10 +10,25 @@ UpdateChannel
 DeleteChannel
 GetAllLanguageCodes
 
-# --- profile kodowania, znaki wodne, rozdzielczości
+# --- profile kodowania, znaki wodne, rozdzielczości (R5)
 GetAllFFmpegProfiles
+GetFFmpegProfileById
+NewFFmpegProfile
+CreateFFmpegProfile
+UpdateFFmpegProfile
+CopyFFmpegProfile
+DeleteFFmpegProfile
 GetAllResolutions
+GetSupportedHardwareAccelerationKinds
+# GetNextProbe/RefreshNextProbe (stan sprzętu wg Next) – dopiero w legacy nowszym niż 26.11.6; dopisać po aktualizacji
 GetAllWatermarks
+GetWatermarkById
+CreateWatermark
+UpdateWatermark
+CopyWatermark
+DeleteWatermark
+# obrazy (logo kanału, znak wodny): tylko przez POST /vizrs-bridge/upload/{Logo|Watermark} – Stream, nie JSON
+SaveArtworkToDisk
 
 # --- media i listy
 GetAllLocalLibraries
@@ -59,6 +74,11 @@ GetAllMultiCollections
 GetAllPlaylistGroups
 GetPlaylistsByPlaylistGroupId
 GetAllFillerPresets
+# wypełniacze (R5)
+GetFillerPresetById
+CreateFillerPreset
+UpdateFillerPreset
+DeleteFillerPreset
 
 # --- wybór treści (komponent w parts.js; pusty tekst = pierwsze 10 wyników)
 SearchCollections

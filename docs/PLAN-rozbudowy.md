@@ -30,7 +30,7 @@ Cel końcowy: **operator nie korzysta z web GUI ErsatzTV legacy** – wszystko, 
 | R2 | Playouty: zakładanie wszystkich rodzajów, edycja, usuwanie, harmonogramy zastępcze | R1 | zrobione (2026-11-06) |
 | R3 | Media: biblioteki lokalne, skan, przeglądarka i wyszukiwarka, kosz | R0 | zrobione (2026-11-06) |
 | R4 | Kolekcje (zwykłe, inteligentne, wielo-, powtórki) i playlisty | R3 | do zrobienia |
-| R5 | Profile kodowania, znaki wodne (z wgrywaniem obrazu), wypełniacze, logo kanału | R0 | do zrobienia |
+| R5 | Profile kodowania, znaki wodne (z wgrywaniem obrazu), wypełniacze, logo kanału | R0 | zrobione (2026-11-06) |
 | R6 | Bloki, szablony, deco: edycja i kalendarz tygodnia | R4, R5 | do zrobienia |
 | R7 | Ustawienia legacy, logi, konserwacja, test odtwarzania | R0 | do zrobienia |
 | R8 | Źródła zewnętrzne: Jellyfin, Emby, Plex (PIN), strumienie zdalne | R3 | do zrobienia |

@@ -6,8 +6,11 @@
 import { S, main, h, btn, head, api, cmd, ApiError, route, hms } from './core.js';
 import './views/antena.js';
 import './views/kanaly.js';
+import './views/profile.js';
+import './views/znaki.js';
 import './views/media.js';
 import './views/listy.js';
+import './views/wypelniacze.js';
 import './views/ramowka.js';
 import './views/playouty.js';
 import './views/harmonogramy.js';

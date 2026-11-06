@@ -132,6 +132,25 @@ export async function cmd(name, args = {}) {
   if (d.warning) return { warning: d.warning, result: d.result };
   return d.result;
 }
+/** Limit wgrywanego obrazu – taki sam w serwerze panelu i w moście. */
+export const MAX_UPLOAD = 10 * 1024 * 1024;
+export const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
+/**
+ * Obraz do pamięci obrazów legacy (SaveArtworkToDisk przez POST /api/upload/{Logo|Watermark}).
+ * Zwraca nazwę pliku w legacy (skrót SHA, np. „39B2…”).
+ */
+export async function upload(kind, file) {
+  if (!IMAGE_TYPES.includes(file.type)) throw new ApiError('dozwolone tylko obrazy PNG, JPEG, GIF i WebP');
+  if (file.size > MAX_UPLOAD) throw new ApiError('obraz większy niż 10 MB');
+  return (await api('/api/upload/' + kind, { method: 'POST', body: file, type: file.type })).result;
+}
+/** Adres pliku legacy dla przeglądarki (np. logo, znak wodny) – tylko gdy panel zna --stream-url. */
+export function legacyUrl(path) {
+  if (!path) return null;
+  if (/^https?:\/\//.test(path)) return path;
+  return S.status?.streamUrl ? S.status.streamUrl + '/' + path.replace(/^\//, '') : null;
+}
+
 /** Tylko pola, które komenda przyjmuje (wg /vizrs-bridge/commands). */
 export function argsFor(name, obj) {
   const m = S.meta.get(name);
@@ -188,6 +207,13 @@ export const PL = {
   Pass: 'OK', Warning: 'uwaga', Error: 'błąd', Info: 'info',
   Next: 'Next', Legacy: 'Legacy', Software: 'programowo', Qsv: 'QSV', Nvenc: 'NVENC', Vaapi: 'VAAPI', VideoToolbox: 'VideoToolbox', Amf: 'AMF', V4l2m2m: 'V4L2', Rkmpp: 'RKMPP',
   Permanent: 'stały', Intermittent: 'przerywany', OpacityExpression: 'wyrażenie krycia',
+  Custom: 'wgrany obraz', ChannelLogo: 'logo kanału', Scaled: 'skalowany (% szerokości kadru)', ActualSize: 'rozmiar oryginalny',
+  TopLeft: 'lewy górny', TopMiddle: 'górny środek', TopRight: 'prawy górny', LeftMiddle: 'lewy środek', MiddleCenter: 'środek',
+  RightMiddle: 'prawy środek', BottomLeft: 'lewy dolny', BottomMiddle: 'dolny środek', BottomRight: 'prawy dolny',
+  // profile kodowania
+  H264: 'H.264', Hevc: 'HEVC (H.265)', Mpeg2Video: 'MPEG-2', Av1: 'AV1', Copy: 'kopiuj bez zmian', Aac: 'AAC', Ac3: 'AC-3', AacLatm: 'AAC LATM (tylko DVB-C)',
+  EightBit: '8 bit', TenBit: '10 bit', ScaleAndPad: 'skaluj i dodaj pasy', Stretch: 'rozciągnij', Crop: 'przytnij',
+  Off: 'wyłączona', LoudNorm: 'loudnorm (EBU R128)', Linear: 'liniowy', Clip: 'obcięcie', Gamma: 'gamma', Reinhard: 'Reinhard', Mobius: 'Möbius', Hable: 'Hable',
   PreRoll: 'przed (pre-roll)', MidRoll: 'w trakcie (mid-roll)', PostRoll: 'po (post-roll)', Tail: 'ogon', Fallback: 'zapasowy', DeadAir: 'martwe powietrze',
   Count: 'liczba', Duration: 'czas', Pad: 'dopełnienie', RandomCount: 'losowa liczba',
   Movies: 'filmy', Shows: 'seriale', MusicVideos: 'teledyski', OtherVideos: 'inne wideo', Songs: 'muzyka', Images: 'obrazy', RemoteStreams: 'strumienie zdalne',

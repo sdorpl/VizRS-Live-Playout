@@ -55,6 +55,21 @@ const STATIC: &[(&str, &str, &str)] = &[
         include_str!("../web/views/kanaly.js"),
     ),
     (
+        "/views/profile.js",
+        "text/javascript; charset=utf-8",
+        include_str!("../web/views/profile.js"),
+    ),
+    (
+        "/views/znaki.js",
+        "text/javascript; charset=utf-8",
+        include_str!("../web/views/znaki.js"),
+    ),
+    (
+        "/views/wypelniacze.js",
+        "text/javascript; charset=utf-8",
+        include_str!("../web/views/wypelniacze.js"),
+    ),
+    (
         "/views/media.js",
         "text/javascript; charset=utf-8",
         include_str!("../web/views/media.js"),
@@ -372,6 +387,9 @@ fn route(app: &App, req: &Request) -> Response {
         _ if !authorized(app, req) => Response::error(401, "zaloguj się tokenem panelu"),
         ("GET", "/api/status") => status(app),
         ("GET", "/api/commands") => forward(app.bridge.get("/commands"), "commands"),
+        ("POST", p) if p.starts_with(http::UPLOAD_PREFIX) => {
+            upload(app, req, &p[http::UPLOAD_PREFIX.len()..])
+        }
         ("POST", p) if p.starts_with("/api/cmd/") => {
             let name = &p["/api/cmd/".len()..];
             if !valid_command(name) {
@@ -386,6 +404,51 @@ fn route(app: &App, req: &Request) -> Response {
         }
         _ => Response::error(404, "nieznany adres API"),
     }
+}
+
+/// Rodzaje obrazów, które panel wgrywa do legacy (`ArtworkKind`).
+const UPLOAD_KINDS: &[&str] = &["Logo", "Watermark"];
+
+/// Typ obrazu z nagłówka zgodny z sygnaturą pliku; tylko PNG, JPEG, GIF, WebP (bez SVG – skrypty).
+pub fn image_type_ok(content_type: &str, b: &[u8]) -> bool {
+    match content_type {
+        "image/png" => b.starts_with(b"\x89PNG\r\n\x1a\n"),
+        "image/jpeg" => b.starts_with(&[0xFF, 0xD8, 0xFF]),
+        "image/gif" => b.starts_with(b"GIF87a") || b.starts_with(b"GIF89a"),
+        "image/webp" => b.len() >= 12 && b.starts_with(b"RIFF") && &b[8..12] == b"WEBP",
+        _ => false,
+    }
+}
+
+/// `POST /api/upload/{Logo|Watermark}`: obraz do pamięci obrazów legacy przez most; wynik = nazwa pliku.
+fn upload(app: &App, req: &Request, kind: &str) -> Response {
+    if !UPLOAD_KINDS.contains(&kind) {
+        return Response::error(400, "rodzaj obrazu: Logo albo Watermark");
+    }
+    let ct = req
+        .header("content-type")
+        .unwrap_or("")
+        .split(';')
+        .next()
+        .unwrap_or("")
+        .trim()
+        .to_ascii_lowercase();
+    if req.body.is_empty() {
+        return Response::error(400, "pusty plik");
+    }
+    if !image_type_ok(&ct, &req.body) {
+        return Response::error(
+            415,
+            "dozwolone tylko obrazy PNG, JPEG, GIF i WebP (typ i treść pliku muszą się zgadzać)",
+        );
+    }
+    let r = forward(
+        app.bridge
+            .post_as(&format!("/upload/{kind}"), &req.body, &ct),
+        "upload",
+    );
+    eprintln!("upload {kind} {} B -> {}", req.body.len(), r.status);
+    r
 }
 
 fn forward(r: Result<bridge::Reply, String>, what: &str) -> Response {
@@ -518,6 +581,35 @@ mod tests {
         assert!(!valid_command("../health"));
         assert!(!valid_command("1Abc"));
         assert!(!valid_command("Get%20All"));
+    }
+
+    #[test]
+    fn image_types() {
+        assert!(image_type_ok("image/png", b"\x89PNG\r\n\x1a\n...."));
+        assert!(!image_type_ok("image/png", b"GIF89a"));
+        assert!(image_type_ok("image/jpeg", &[0xFF, 0xD8, 0xFF, 0xE0]));
+        assert!(image_type_ok("image/webp", b"RIFF\0\0\0\0WEBPVP8 "));
+        assert!(!image_type_ok("image/svg+xml", b"<svg"));
+        assert!(!image_type_ok("text/html", b"<html"));
+    }
+
+    #[test]
+    fn upload_guards() {
+        let a = app(None);
+        let mut r = req(
+            "POST",
+            "/api/upload/Logo",
+            &[("X-VizRS-Live", "1"), ("Content-Type", "image/svg+xml")],
+        );
+        r.body = b"<svg/>".to_vec();
+        assert_eq!(route(&a, &r).status, 415, "SVG odrzucony");
+        r.headers[1].1 = "image/png".into();
+        assert_eq!(route(&a, &r).status, 415, "treść nie PNG");
+        r.path = "/api/upload/Poster".into();
+        assert_eq!(route(&a, &r).status, 400, "zły rodzaj");
+        r.path = "/api/upload/Logo".into();
+        r.body = b"\x89PNG\r\n\x1a\nxxxx".to_vec();
+        assert_eq!(route(&a, &r).status, 502, "dobry PNG idzie do mostu");
     }
 
     #[test]

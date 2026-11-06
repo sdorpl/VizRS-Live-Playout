@@ -6,6 +6,9 @@ use std::time::Duration;
 
 pub const MAX_HEAD: usize = 16 * 1024;
 pub const MAX_BODY: usize = 1024 * 1024;
+/// Limit treści dla wgrywania obrazów (`/api/upload/…`).
+pub const MAX_UPLOAD: usize = 10 * 1024 * 1024;
+pub const UPLOAD_PREFIX: &str = "/api/upload/";
 
 #[derive(Debug, Default)]
 pub struct Request {
@@ -44,9 +47,10 @@ impl From<io::Error> for ParseError {
     }
 }
 
-/// Czyta jedno żądanie. Nagłówki ≤ [`MAX_HEAD`], treść ≤ [`MAX_BODY`] (tylko `Content-Length`, bez chunked).
+/// Czyta jedno żądanie. Nagłówki ≤ [`MAX_HEAD`], treść ≤ [`MAX_BODY`] (wgrywanie obrazów ≤ [`MAX_UPLOAD`];
+/// tylko `Content-Length`, bez chunked).
 pub fn read_request<R: Read>(stream: R) -> Result<Request, ParseError> {
-    let mut reader = BufReader::new(stream.take((MAX_HEAD + MAX_BODY) as u64));
+    let mut reader = BufReader::new(stream.take((MAX_HEAD + MAX_UPLOAD) as u64));
     let mut head_len = 0usize;
     let mut line = String::new();
 
@@ -100,7 +104,12 @@ pub fn read_request<R: Read>(stream: R) -> Result<Request, ParseError> {
         let len: usize = len
             .parse()
             .map_err(|_| ParseError::Bad("zły Content-Length"))?;
-        if len > MAX_BODY {
+        let limit = if req.path.starts_with(UPLOAD_PREFIX) {
+            MAX_UPLOAD
+        } else {
+            MAX_BODY
+        };
+        if len > limit {
             return Err(ParseError::TooLarge);
         }
         let mut body = vec![0u8; len];
@@ -175,6 +184,7 @@ pub fn reason(status: u16) -> &'static str {
         404 => "Not Found",
         405 => "Method Not Allowed",
         413 => "Payload Too Large",
+        415 => "Unsupported Media Type",
         500 => "Internal Server Error",
         502 => "Bad Gateway",
         503 => "Service Unavailable",
@@ -233,6 +243,21 @@ mod tests {
             read_request(raw.as_bytes()),
             Err(ParseError::TooLarge)
         ));
+        let raw = format!(
+            "POST /api/upload/Logo HTTP/1.1\r\nContent-Length: {}\r\n\r\n",
+            MAX_UPLOAD + 1
+        );
+        assert!(matches!(
+            read_request(raw.as_bytes()),
+            Err(ParseError::TooLarge)
+        ));
+        let mut raw = format!(
+            "POST /api/upload/Logo HTTP/1.1\r\nContent-Length: {}\r\n\r\n",
+            MAX_BODY + 1
+        )
+        .into_bytes();
+        raw.extend(vec![0u8; MAX_BODY + 1]);
+        assert_eq!(read_request(&raw[..]).unwrap().body.len(), MAX_BODY + 1);
         let raw = b"POST / HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n";
         assert!(matches!(read_request(&raw[..]), Err(ParseError::Bad(_))));
         assert!(matches!(

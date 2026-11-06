@@ -49,14 +49,19 @@ pub struct Reply {
 
 impl Bridge {
     pub fn get(&self, path: &str) -> Result<Reply, String> {
-        self.call("GET", path, b"")
+        self.call("GET", path, b"", "application/json")
     }
 
     pub fn post(&self, path: &str, body: &[u8]) -> Result<Reply, String> {
-        self.call("POST", path, body)
+        self.call("POST", path, body, "application/json")
     }
 
-    fn call(&self, method: &str, path: &str, body: &[u8]) -> Result<Reply, String> {
+    /// POST z własnym typem treści (wgrywanie obrazu).
+    pub fn post_as(&self, path: &str, body: &[u8], content_type: &str) -> Result<Reply, String> {
+        self.call("POST", path, body, content_type)
+    }
+
+    fn call(&self, method: &str, path: &str, body: &[u8], ct: &str) -> Result<Reply, String> {
         let t = &self.target;
         let addr = (t.host.as_str(), t.port)
             .to_socket_addrs()
@@ -68,7 +73,7 @@ impl Bridge {
         let _ = s.set_read_timeout(Some(Duration::from_secs(60)));
         let _ = s.set_write_timeout(Some(Duration::from_secs(10)));
         let head = format!(
-            "{method} {}/vizrs-bridge{path} HTTP/1.1\r\nHost: {}:{}\r\nX-VizRS-Token: {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\nUser-Agent: vizrs-live/{}\r\n\r\n",
+            "{method} {}/vizrs-bridge{path} HTTP/1.1\r\nHost: {}:{}\r\nX-VizRS-Token: {}\r\nContent-Type: {ct}\r\nContent-Length: {}\r\nConnection: close\r\nUser-Agent: vizrs-live/{}\r\n\r\n",
             t.base,
             t.host,
             t.port,
