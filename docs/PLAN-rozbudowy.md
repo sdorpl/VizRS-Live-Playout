@@ -139,7 +139,7 @@ Cel końcowy: **operator nie korzysta z web GUI ErsatzTV legacy** – wszystko, 
 
 **Zakres:** przeczytać API CG Playout (konfiguracja kanałów, element VizRS, `/ingest`, `/ingest/state`); w panelu: **Grafika kanału** – reguły (start pozycji ± s, przed końcem audycji, przerwa reklamowa, slot na żywo → strona VizRS z polami `{title}`, `{next_title}`…) zapisane tam, gdzie CG Playout je trzyma; podgląd `/output` VizRS; **Sloty na żywo** – wejścia, stan sygnału, audycje na żywo jako pozycje ramówki (Remote Stream w legacy). Elementy graficzne legacy: `GetAllGraphicsElements`, `RefreshGraphicsElements` (pliki YAML – edycja tylko, jeśli zapis pliku w kontenerze zostanie rozwiązany w R2).
 
-**Wymaga decyzji użytkownika na starcie sesji:** czy panel konfiguruje CG Playout przez jego API, czy przez wspólne pliki konfiguracyjne.
+**Decyzja (2026-11-06): panel łączy się z VizRS CG Playout przez jego API** – bez wspólnych plików konfiguracyjnych. Wzorem mostu: serwer panelu (Rust) jest pośrednikiem, adres i token CG Playout tylko po stronie serwera (nowe opcje `--cg-url`/`VIZRS_LIVE_CG_URL`, `--cg-token`/`VIZRS_LIVE_CG_TOKEN`), przeglądarka woła `/api/cg/...`. Na starcie sesji: spisać z dokumentacji CG Playout endpointy potrzebne panelowi (konfiguracja kanałów i reguł, `/ingest`, `/ingest/state`, stan połączenia z VizRS) i sprawdzić, czego API jeszcze nie ma – braki dopisać w CG Playout (osobne repo, osobny commit tam) albo jako punkt jego planu, nie obchodzić przez pliki.
 
 ## R10 – Zamknięcie web GUI legacy, aktualizacje, CI
 
