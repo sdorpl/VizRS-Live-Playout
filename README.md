@@ -25,7 +25,7 @@ docker compose up -d --build
 
 Panel: `http://<serwer>:8090/` (logowanie tokenem `VIZRS_LIVE_TOKEN`). Widzowie: `http://<serwer>:8409/iptv/channels.m3u`.
 
-Szczegóły, opcje, bezpieczeństwo i ograniczenia: [docs/DOKUMENTACJA.md](docs/DOKUMENTACJA.md).
+Szczegóły, opcje, bezpieczeństwo i ograniczenia: [docs/DOKUMENTACJA.md](docs/DOKUMENTACJA.md). Dalsze prace: [docs/PLAN-rozbudowy.md](docs/PLAN-rozbudowy.md) (R0–R11, jeden punkt na sesję).
 
 ## Praca nad kodem
 

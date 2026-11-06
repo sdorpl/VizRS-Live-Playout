@@ -5,6 +5,12 @@ Plan i decyzje: `../VizRS CG System/docs/plany/PLAN-vizrs-live.md`. Opis działa
 
 Język pracy, dokumentacji, komentarzy i UI: **polski**.
 
+## Zacznij każdą sesję tutaj
+
+1. Przeczytaj [docs/PLAN-rozbudowy.md](docs/PLAN-rozbudowy.md): sekcję „Jak pracować” i tabelę. Weź **pierwszy punkt „do zrobienia”**, którego „Wymaga” jest zrobione (albo ten, który wskaże użytkownik).
+2. **Jeden punkt planu = jedna sesja.** Nie zaczynaj następnego punktu w tej samej sesji – po skończeniu (warunki „gotowe” w planie, commit, kolumna Stan) zakończ i zaproponuj nową sesję.
+3. `git log -5`, `git status`, potem `tests/stack.sh up && tests/stack.sh seed`.
+
 ## Zasady
 
 - **Legacy bez zmian.** Nie forkujemy ErsatzTV i nic do niego nie zgłaszamy. Most ładuje się przez `DOTNET_STARTUP_HOOKS` + `ASPNETCORE_HOSTINGSTARTUPASSEMBLIES`. Żadnych zapisów wprost do bazy legacy.
