@@ -141,7 +141,7 @@ const kindLabel = (k) => KIND_PL[k] || pl(k);
 const STATE = { Normal: null, FileNotFound: ['brak pliku', 'bad'], Unavailable: ['niedostępny', 'warn'], RemoteOnly: ['tylko zdalnie', 'info'] };
 const statePill = (s) => (STATE[s] ? pill(...STATE[s]) : s && s !== 'Normal' ? pill(s) : null);
 const PAGE = 50;
-const B = { q: '', tab: 'OtherVideos', page: 1 };
+const B = { q: '', tab: 'OtherVideos', page: 1, sel: new Set() }; // sel – zaznaczone MediaItemId bieżącej zakładki
 
 const FIELDS = 'title:, type:, tag:, genre:, library_name:, state:, minutes:, height:, video_codec:, release_date:, plot:';
 
@@ -186,11 +186,20 @@ VIEWS.przegladarka = async () => {
   const pages = Math.max(1, Math.ceil(total / PAGE));
 
   const input = h('input', { id: 'media-q', type: 'search', value: B.q, class: 'mono grow', placeholder: 'np. Pogoda albo tag:info AND minutes:>1', 'aria-label': 'Szukaj w mediach' });
-  const go = () => { B.q = input.value; B.page = 1; route(); };
+  const go = () => { B.q = input.value; B.page = 1; B.sel.clear(); route(); };
   input.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
-  const tabs = h('div', { class: 'tabs' }, KINDS.map(([k]) => h('button', { type: 'button', class: k === B.tab ? 'on' : null, onclick: () => { B.tab = k; B.page = 1; route(true); } }, `${kindLabel(k)} (${n[k]})`)));
+  const tabs = h('div', { class: 'tabs' }, KINDS.map(([k]) => h('button', { type: 'button', class: k === B.tab ? 'on' : null, onclick: () => { B.tab = k; B.page = 1; B.sel.clear(); route(true); } }, `${kindLabel(k)} (${n[k]})`)));
   const rows = (res?.Cards || []).map((c) => ({ ...c }));
-  const list = table(rows, [['Title', 'Tytuł', { class: 'w' }], ['Subtitle', 'Opis / plik'], [(c) => statePill(c.State), 'Stan'], ['MediaItemId', 'Id', { class: 'num' }]],
+  const canAdd = !missing(['AddItemsToCollection', 'AddItemsToPlaylist', 'GetAllCollections', 'GetAllPlaylistGroups', 'GetPlaylistsByPlaylistGroupId']).length;
+  const selCount = h('span', { class: 'dim', id: 'media-sel' });
+  const showSel = () => (selCount.textContent = B.sel.size ? `zaznaczono ${B.sel.size} poz.` : '');
+  showSel();
+  const pickCol = [(c) => {
+    const b = h('input', { type: 'checkbox', 'aria-label': `Zaznacz ${c.Title}`, checked: B.sel.has(c.MediaItemId) });
+    b.addEventListener('change', () => { if (b.checked) B.sel.add(c.MediaItemId); else B.sel.delete(c.MediaItemId); showSel(); });
+    return b;
+  }, ''];
+  const list = table(rows, [...(canAdd ? [pickCol] : []), ['Title', 'Tytuł', { class: 'w' }], ['Subtitle', 'Opis / plik'], [(c) => statePill(c.State), 'Stan'], ['MediaItemId', 'Id', { class: 'num' }]],
     { onRow: (c) => itemCard(c.MediaItemId, c.Title), empty: B.q ? 'Nic nie pasuje do zapytania.' : 'Brak pozycji tego rodzaju – dodaj bibliotekę i ją zeskanuj.' });
   const pager = pages > 1 ? h('div', { class: 'bar pad pager' },
     btn('‹ Poprzednia', () => { B.page--; route(true); }, B.page <= 1 ? 'off' : null), h('span', { class: 'dim' }, `strona ${B.page} z ${pages} · ${total} poz.`),
@@ -200,9 +209,34 @@ VIEWS.przegladarka = async () => {
     head(title, desc),
     h('div', { class: 'bar searchbar' }, input, btn('Szukaj', go, 'acc'), B.q ? btn('Wyczyść', () => { B.q = ''; B.page = 1; route(); }) : null),
     h('div', { class: 'hint' }, `Bez pola szuka w tytule. Pola: ${FIELDS} Łącz AND / OR / NOT, frazy w cudzysłowie, np. library_name:"Archiwum INFO24".`),
-    panel('Pozycje', h('span', { class: 'dim' }, 'kliknij pozycję, by zobaczyć kartę'), tabs, list, pager, cmdNote(KINDS.find((k) => k[0] === B.tab)[1], 'QuerySearchIndexAllItems', 'GetMediaItemInfo')),
+    panel('Pozycje', h('span', { class: 'dim' }, 'kliknij pozycję, by zobaczyć kartę'), tabs, list, pager,
+      canAdd && rows.length ? h('div', { class: 'bar pad' }, btn('Dodaj zaznaczone do…', () => addTo(B.tab), 'acc'), selCount) : null, cmdNote(KINDS.find((k) => k[0] === B.tab)[1], 'QuerySearchIndexAllItems', 'GetMediaItemInfo')),
   ];
 };
+
+/** Zaznaczone pozycje do kolekcji zwykłej albo playlisty (AddItemsToCollection / AddItemsToPlaylist). */
+async function addTo(kind) {
+  if (!B.sel.size) return toast('Zaznacz pozycje do dodania.', 'bad');
+  const [cols, groups] = await Promise.all([cmd('GetAllCollections'), cmd('GetAllPlaylistGroups')]);
+  const lists = (await Promise.all(groups.map((g) => cmd('GetPlaylistsByPlaylistGroupId', { PlaylistGroupId: g.Id })
+    .then((ps) => ps.filter((p) => !p.IsSystem).map((p) => [p.Id, `${g.Name} / ${p.Name}`]))))).flat();
+  const opts = [...cols.map((c) => ['c' + c.Id, 'Kolekcja: ' + c.Name]), ...lists.map(([id, n]) => ['p' + id, 'Playlista: ' + n])];
+  if (!opts.length) return toast('Nie ma kolekcji ani playlist – załóż je w Kolekcjach albo Playlistach.', 'bad');
+  const sel = h('select', { id: 'add-target' }, opts.map(([v, t]) => h('option', { value: v }, t)));
+  const ok = await dialog('Dodaj do…', h('div', { class: 'form' }, h('p', null, `Dodać ${B.sel.size} poz. (${kindLabel(kind)})?`),
+    h('label', { for: 'add-target' }, 'Dokąd'), sel), [['Anuluj', false], ['Dodaj', true, 'acc']]);
+  if (!ok) return;
+  const key = KINDS.find((k) => k[0] === kind)[3];
+  const ids = Object.fromEntries(KINDS.map((k) => [k[3], k[3] === key ? [...B.sel] : []]));
+  const id = Number(sel.value.slice(1));
+  try {
+    if (sel.value[0] === 'c') await cmd('AddItemsToCollection', { CollectionId: id, ...ids });
+    else await cmd('AddItemsToPlaylist', { PlaylistId: id, ...ids });
+    toast(`Dodano ${B.sel.size} poz.: ${opts.find((o) => o[0] === sel.value)[1]}.`, 'ok');
+    B.sel.clear();
+    route(true);
+  } catch (e) { toast('Legacy odrzucił dodanie: ' + e.message, 'bad'); }
+}
 
 // ---------- kosz ----------
 VIEWS.kosz = async () => {

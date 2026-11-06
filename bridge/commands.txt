@@ -67,12 +67,46 @@ UpdateImageFolderDuration
 # RemoveMediaItems – wewnętrzna komenda indeksu wyszukiwania (SearchIndexService), nie dla operatora
 EmptyTrash
 DeleteItemsFromDatabase
+# kolekcje (R4)
 GetAllCollections
+GetCollectionById
+GetCollectionCards
+CreateCollection
+UpdateCollection
+DeleteCollection
+AddItemsToCollection
+RemoveItemsFromCollection
 GetAllSmartCollections
+GetSmartCollectionById
 CreateSmartCollection
+UpdateSmartCollection
+DeleteSmartCollection
 GetAllMultiCollections
+GetMultiCollectionById
+CreateMultiCollection
+UpdateMultiCollection
+DeleteMultiCollection
+GetPagedRerunCollections
+GetRerunCollectionById
+SearchRerunCollections
+CreateRerunCollection
+UpdateRerunCollection
+DeleteRerunCollection
+# Add{Movie,Show,…}ToCollection – zbędne: AddItemsToCollection przyjmuje listy id wszystkich rodzajów
+# UpdateCollectionCustomOrder (własna kolejność – legacy pozwala tylko w kolekcjach z samych filmów) – nie wdrożone
+# Trakt (AddTraktList…) – opcjonalne, nie wdrożone (wymaga klucza API Trakt)
+# playlisty (R4)
 GetAllPlaylistGroups
 GetPlaylistsByPlaylistGroupId
+GetPlaylistById
+GetPlaylistItems
+CreatePlaylistGroup
+DeletePlaylistGroup
+CreatePlaylist
+DeletePlaylist
+ReplacePlaylistItems
+AddItemsToPlaylist
+PreviewPlaylistPlayout
 GetAllFillerPresets
 # wypełniacze (R5)
 GetFillerPresetById

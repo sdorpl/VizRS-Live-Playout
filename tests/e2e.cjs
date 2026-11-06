@@ -97,8 +97,8 @@ function check(cond, msg) {
   await page.waitForSelector('.picks:has-text("Nic nie znaleziono")');
   check(true, 'wybór treści: brak wyników opisany');
   await page.selectOption('#cp-kind', 'RerunFirstRun');
-  const miss = await page.textContent('.picker .missing');
-  check(/SearchRerunCollections/.test(miss) && /białej liście/.test(miss), 'wybór treści: brakująca komenda opisana (SearchRerunCollections)');
+  await page.waitForSelector('#cp .picks:not(:has-text("Szukam"))');
+  check(!(await page.$('.picker .missing')), 'wybór treści: powtórki wyszukiwane w legacy (SearchRerunCollections na białej liście od R4)');
   await page.selectOption('#cp-kind', 'SearchQuery');
   await page.fill('#cp-query', 'type:other_video');
   out = JSON.parse(await page.textContent('#cp-out'));
@@ -430,6 +430,151 @@ function check(cond, msg) {
   await page.click('#dlg-buttons button:has-text("Usuń")');
   await page.waitForSelector(`td:text-is("${fpName}")`, { state: 'detached' });
   check(true, 'wypełniacz usunięty');
+
+  // R4: kolekcja zwykła z 2 pozycjami dodanymi w przeglądarce
+  const colName = 'E2E kolekcja ' + tag;
+  await page.goto(`${BASE}/#kolekcje`);
+  await page.waitForSelector('main[data-view="kolekcje"]');
+  await rerender(() => page.click('text=+ Nowa kolekcja'));
+  await page.fill('#col-Name', colName);
+  await page.click('button:has-text("Załóż kolekcję")');
+  await page.waitForSelector(`td:text-is("${colName}")`);
+  await page.goto(`${BASE}/#przegladarka`);
+  await page.waitForSelector('main[data-view="przegladarka"]');
+  await page.fill('#media-q', '');
+  await rerender(() => page.press('#media-q', 'Enter'));
+  await page.check('input[aria-label="Zaznacz Pogoda"]');
+  await page.check('input[aria-label="Zaznacz Reportaz"]');
+  check((await page.textContent('#media-sel')) === 'zaznaczono 2 poz.', 'przeglądarka: zaznaczono 2 pozycje (bez otwierania karty)');
+  await page.click('button:has-text("Dodaj zaznaczone do…")');
+  await page.selectOption('#add-target', { label: 'Kolekcja: ' + colName });
+  await rerender(() => page.click('#dlg-buttons button:has-text("Dodaj")'));
+  await page.goto(`${BASE}/#kolekcje`);
+  await page.waitForSelector('main[data-view="kolekcje"]');
+  await rerender(() => page.click(`td:text-is("${colName}")`));
+  const colRows = await page.$$eval('#col-items tbody tr', (trs) => trs.map((t) => t.textContent));
+  check(colRows.length === 2 && colRows.some((t) => /Pogoda/.test(t)) && colRows.some((t) => /Reportaz/.test(t)), `kolekcja zwykła: 2 pozycje z przeglądarki (${colRows.length})`);
+  await page.check('#col-items input[aria-label="Zaznacz Reportaz"]');
+  await page.click('button:has-text("Usuń zaznaczone z kolekcji")');
+  await rerender(() => page.click('#dlg-buttons button:has-text("Usuń")'));
+  check((await page.$$('#col-items tbody tr')).length === 1, 'kolekcja zwykła: pozycja usunięta z kolekcji');
+  const colId = (await api('GetAllCollections')).result.find((c) => c.Name === colName)?.Id;
+
+  // R4: kolekcja inteligentna z zapytaniem i liczbą wyników
+  const scName = 'E2E inteligentna ' + tag;
+  await rerender(() => page.click('.page-tabs button:has-text("Inteligentne")'));
+  await rerender(() => page.click('text=+ Nowa inteligentna'));
+  await page.fill('#sc-Name', scName);
+  await page.fill('#sc-Query', 'title:Pogoda OR title:Wiadomosci');
+  await page.click('button:has-text("Sprawdź zapytanie")');
+  await page.waitForFunction(() => /pasuje/.test(document.querySelector('#sc-count').textContent));
+  check(/^2 poz\./.test(await page.textContent('#sc-count')), `inteligentna: podgląd liczby wyników (${await page.textContent('#sc-count')})`);
+  await page.click('button:has-text("Załóż kolekcję")');
+  await page.waitForSelector(`td:text-is("${scName}")`);
+  const scRow = await page.textContent(`tr:has(td:text-is("${scName}"))`);
+  check(/title:Pogoda OR title:Wiadomosci/.test(scRow) && /2$/.test(scRow.trim()), 'inteligentna zapisana z zapytaniem i liczbą 2');
+  const scId = (await api('GetAllSmartCollections')).result.find((c) => c.Name === scName)?.Id;
+
+  // R4: wielokolekcja z dwoma składnikami
+  const mcName = 'E2E wielokolekcja ' + tag;
+  await rerender(() => page.click('.page-tabs button:has-text("Wielokolekcje")'));
+  await rerender(() => page.click('text=+ Nowa wielokolekcja'));
+  await page.fill('#mc-Name', mcName);
+  await page.click('text=+ Dodaj składnik');
+  await page.fill('#mc-cp-q', colName);
+  await page.click(`#mc-cp .picks button:has-text("${colName}")`);
+  await page.click('.items-side button:has-text("Zastosuj")');
+  await page.click('text=+ Dodaj składnik');
+  await page.selectOption('#mc-cp-kind', 'SmartCollection');
+  await page.fill('#mc-cp-q', scName);
+  await page.click(`#mc-cp .picks button:has-text("${scName}")`);
+  await page.check('#mc-group');
+  await page.click('.items-side button:has-text("Zastosuj")');
+  await page.click('button:has-text("Załóż wielokolekcję")');
+  await page.waitForSelector(`td:text-is("${mcName}")`);
+  const mcId = (await api('GetAllMultiCollections')).result.find((m) => m.Name === mcName)?.Id;
+  const mc = mcId && (await api('GetMultiCollectionById', { Id: mcId })).result;
+  check(mc && mc.Items.length === 1 && mc.Items[0].Collection.Id === colId && mc.SmartItems.length === 1 && mc.SmartItems[0].SmartCollection.Id === scId && mc.SmartItems[0].ScheduleAsGroup,
+    'wielokolekcja: kolekcja zwykła + inteligentna jako grupa');
+
+  // R4: powtórki z kolekcji inteligentnej
+  const rcName = 'E2E powtórki ' + tag;
+  await rerender(() => page.click('.page-tabs button:has-text("Powtórki")'));
+  await rerender(() => page.click('text=+ Nowe powtórki'));
+  await page.fill('#rc-Name', rcName);
+  await page.selectOption('#rc-cp-kind', 'SmartCollection');
+  await page.click(`#rc-cp .picks button:has-text("${scName}")`);
+  await page.selectOption('#rc-RerunPlaybackOrder', 'Random');
+  await page.click('button:has-text("Załóż powtórki")');
+  await page.waitForSelector(`td:text-is("${rcName}")`);
+  const rc = (await api('GetPagedRerunCollections', { Query: '', PageNum: 0, PageSize: 100 })).result.Page.find((r) => r.Name === rcName);
+  const rcFull = rc && (await api('GetRerunCollectionById', { Id: rc.Id })).result;
+  check(rcFull && rcFull.CollectionType === 'SmartCollection' && rcFull.SmartCollection?.Id === scId && rcFull.RerunPlaybackOrder === 'Random', 'powtórki zapisane (inteligentna, powtórki losowo)');
+  await rerender(() => page.click(`td:text-is("${rcName}")`));
+  check(/Wybrano: E2E inteligentna/.test(await page.textContent('#rc-cp .picked')), 'powtórki: po ponownym otwarciu treść z nazwą');
+
+  // R4: playlista z 3 pozycjami i podglądem
+  const plgName = 'E2E grupa ' + tag, plName = 'E2E playlista ' + tag;
+  await page.goto(`${BASE}/#playlisty`);
+  await page.waitForSelector('main[data-view="playlisty"]');
+  await page.click('button:has-text("+ Grupa")');
+  await page.fill('#plg-name', plgName);
+  await rerender(() => page.click('#dlg-buttons button:has-text("Załóż")'));
+  await rerender(() => page.click('text=+ Nowa playlista'));
+  await page.selectOption('#pls-PlaylistGroupId', { label: plgName });
+  await page.fill('#pls-Name', plName);
+  await page.click('button:has-text("Załóż playlistę")');
+  await page.waitForSelector(`td:text-is("${plName}")`);
+  await rerender(() => page.click(`td:text-is("${plName}")`));
+  // pozycja 1: kolekcja zwykła, wszystkie; pozycje 2–3: pliki z przeglądarki
+  await page.click('text=+ Dodaj pozycję');
+  await page.fill('#pl-cp-q', colName);
+  await page.click(`#pl-cp .picks button:has-text("${colName}")`);
+  await page.check('#pl-PlayAll');
+  await page.click('.items-side button:has-text("Zastosuj")');
+  await rerender(() => page.click('main .panel header button:has-text("Zapisz")'));
+  await page.goto(`${BASE}/#przegladarka`);
+  await page.waitForSelector('main[data-view="przegladarka"]');
+  await page.fill('#media-q', '');
+  await rerender(() => page.press('#media-q', 'Enter'));
+  await page.check('input[aria-label="Zaznacz Wiadomosci"]');
+  await page.check('input[aria-label="Zaznacz Reportaz"]');
+  await page.click('button:has-text("Dodaj zaznaczone do…")');
+  await page.selectOption('#add-target', { label: `Playlista: ${plgName} / ${plName}` });
+  await rerender(() => page.click('#dlg-buttons button:has-text("Dodaj")'));
+  await page.goto(`${BASE}/#playlisty`);
+  await page.waitForSelector('main[data-view="playlisty"]');
+  await rerender(() => page.click(`td:text-is("${plName}")`));
+  const plRows = await page.$$eval('.items tbody tr', (trs) => trs.map((t) => t.textContent));
+  check(plRows.length === 3 && /kolekcja.*wszystkie/.test(plRows[0]), `playlista: 3 pozycje (${plRows.length})`);
+  await page.click('button:has-text("Zapisz i pokaż podgląd")');
+  await page.waitForSelector('#pl-preview table');
+  const prev = await page.$$eval('#pl-preview tbody tr', (trs) => trs.map((t) => t.textContent));
+  check(prev.length >= 3 && /Pogoda/.test(prev[0]) && /00:00:00/.test(prev[0]), `playlista: podgląd playoutu (${prev.length} poz.)`);
+  // kolejność: ostatnia pozycja na górę, zapis, ponowne otwarcie
+  await page.click('button[aria-label="Pozycja 3 w górę"]');
+  await page.click('button[aria-label="Pozycja 2 w górę"]');
+  await rerender(() => page.click('main .panel header button:has-text("Zapisz")'));
+  const plId = (await api('GetPlaylistsByPlaylistGroupId', { PlaylistGroupId: (await api('GetAllPlaylistGroups')).result.find((g) => g.Name === plgName).Id })).result[0].Id;
+  const items = (await api('GetPlaylistItems', { PlaylistId: plId })).result.sort((a, b) => a.Index - b.Index);
+  check(items.length === 3 && items[0].CollectionType === 'OtherVideo' && items[1].CollectionType === 'Collection' && items[1].PlayAll, 'playlista: zmiana kolejności zapisana');
+
+  // sprzątanie R4 (przez UI: playlista, grupa; reszta przez UI kolekcji)
+  await page.click('main .panel header button:has-text("Usuń")');
+  await rerender(() => page.click('#dlg-buttons button:has-text("Usuń")'));
+  await page.click('button:has-text("Usuń grupę…")');
+  await page.selectOption('#plg-del', { label: `${plgName} (0 playlist)` });
+  await rerender(() => page.click('#dlg-buttons button:has-text("Usuń")'));
+  check(!(await api('GetAllPlaylistGroups')).result.some((g) => g.Name === plgName), 'playlista i grupa usunięte');
+  await page.goto(`${BASE}/#kolekcje`);
+  await page.waitForSelector('main[data-view="kolekcje"]');
+  for (const [tab, nm] of [['Powtórki', rcName], ['Wielokolekcje', mcName], ['Inteligentne', scName], ['Zwykłe', colName]]) {
+    await rerender(() => page.click(`.page-tabs button:has-text("${tab}")`));
+    await rerender(() => page.click(`td:text-is("${nm}")`));
+    await page.click('main .panel header button:has-text("Usuń")');
+    await rerender(() => page.click('#dlg-buttons button:has-text("Usuń")'));
+    check(!(await page.$(`td:text-is("${nm}")`)), `${tab.toLowerCase()}: usunięto „${nm}”`);
+  }
 
   check(errors.length === 0, 'brak błędów JS' + (errors.length ? ': ' + errors.join(' | ') : ''));
   await browser.close();

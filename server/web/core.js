@@ -76,7 +76,7 @@ export function table(rows, cols, opts = {}) {
         const v = typeof k === 'function' ? k(r) : get(r, k);
         return h('td', { class: o && o.class }, v instanceof Node ? v : fmt(v));
       }));
-    if (opts.onRow) tr.addEventListener('click', (e) => { if (!e.target.closest('button,a')) opts.onRow(r, tr); });
+    if (opts.onRow) tr.addEventListener('click', (e) => { if (!e.target.closest('button,a,input,label')) opts.onRow(r, tr); });
     return tr;
   });
   return h('div', { class: 'tw' }, h('table', null, h('thead', null, h('tr', null, cols.map(([, t]) => h('th', null, t)))), h('tbody', null, body)));
@@ -221,6 +221,10 @@ export const PL = {
   Collection: 'kolekcja', SmartCollection: 'kolekcja inteligentna', MultiCollection: 'wielokolekcja', Playlist: 'playlista',
   TelevisionShow: 'serial', TelevisionSeason: 'sezon', Artist: 'artysta', SearchQuery: 'wyszukiwanie',
   RerunFirstRun: 'powtórki: premiery', RerunRerun: 'powtórki: powtórki',
+  // pojedyncze pozycje (pozycje playlisty)
+  Movie: 'film', Episode: 'odcinek', MusicVideo: 'teledysk', OtherVideo: 'inne wideo', Song: 'utwór', Image: 'obraz', RemoteStream: 'strumień zdalny',
+  // kolejność odtwarzania
+  Chronological: 'chronologicznie', Random: 'losowo', Shuffle: 'tasuj', ShuffleInOrder: 'tasuj z zachowaniem kolejności', SeasonEpisode: 'sezon, odcinek',
 };
 export const isFiller = (it) => it.FillerKind != null && it.FillerKind !== 'None';
 export const pl = (v) => (v == null ? '—' : PL[v] ?? String(v));

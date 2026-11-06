@@ -195,3 +195,5 @@ img.thumb.sm { max-width: 64px; max-height: 32px; }
 .wm-grid { display: grid; grid-template-columns: repeat(3, 34px); grid-template-rows: repeat(3, 22px); gap: 3px; padding: 4px; border: 1px solid var(--line); border-radius: 3px; width: max-content; background: #0e0f12; }
 .wm-grid button { padding: 0; border-radius: 2px; }
 .wm-grid button.on { background: var(--acc); border-color: var(--acc); }
+/* zakładki rodzajów na całym ekranie (Kolekcje) */
+.page-tabs { margin: 0 0 14px; border: 1px solid var(--line); border-radius: 3px; }

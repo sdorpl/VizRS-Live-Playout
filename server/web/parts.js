@@ -185,7 +185,7 @@ export function itemsEditor(cfg) {
       h('div', { class: 'items-list' }, list, h('div', { class: 'bar pad' }, btn(cfg.addText || '+ Dodaj pozycję', add))),
       editor ? h('div', { class: 'items-side' },
         h('header', null, h('h3', null, `Pozycja ${open + 1}`), h('span', { class: 'grow' }), btn('Anuluj', () => { open = -1; render(); }), btn('Zastosuj', apply, 'acc')),
-        editor.el) : null);
+        editor.el) : '');
     el.classList.toggle('open', !!editor);
   }
   render();
