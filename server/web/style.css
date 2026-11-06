@@ -54,7 +54,7 @@ label { color: var(--dim); }
 .side a:hover { background: #1a1d22; color: var(--text); }
 .side a.on { background: var(--sel); color: #fff; border-left-color: var(--acc); }
 .side a.viz::after { content: "VizRS"; margin-left: auto; font-size: 10px; color: var(--acc); border: 1px solid var(--acc-d); border-radius: 8px; padding: 0 5px; }
-main { overflow: auto; padding: 16px 18px 40px; min-width: 0; display: grid; gap: 14px; align-content: start; outline: none; }
+main { overflow: auto; padding: 16px 18px 40px; min-width: 0; display: grid; gap: 14px; align-content: start; grid-auto-rows: max-content; outline: none; }
 
 .head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .head h1 { margin: 0; font-size: 19px; font-weight: 650; }
@@ -160,3 +160,14 @@ td.act button { padding: 1px 7px; }
 .picks button.on { background: var(--sel); border-color: var(--acc-d); }
 .picks > span { padding: 4px 6px; }
 .picked b { color: var(--text); }
+
+/* playouty (R2) */
+dl.kv { display: grid; grid-template-columns: 180px 1fr; gap: 4px 12px; margin: 0; padding: 12px 12px 0; }
+dl.kv dt { color: var(--dim); }
+dl.kv dd { margin: 0; display: flex; gap: 8px; align-items: center; }
+.multi.tight { gap: 2px 10px; }
+.maint { padding: 10px 12px; border-top: 1px solid var(--line); }
+.form .bar > input[type=number] { width: 7em; }
+.form .bar > select { width: auto; }
+.maint h3 { margin: 0 0 8px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--acc); }
+a.pill { text-decoration: none; }

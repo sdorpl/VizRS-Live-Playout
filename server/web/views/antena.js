@@ -40,7 +40,7 @@ VIEWS.antena = async () => {
           ? h('div', { class: 'np' },
             h('div', { class: 'now' }, h('b', null, cur.Title), h('span', { class: 'dim num' }, `${hm(new Date(cur.Start))}–${hm(new Date(cur.Finish))}`), h('span', { class: 'grow' }), left),
             h('div', { class: 'prog' }, bar))
-          : h('div', { class: 'dim' }, p ? 'Teraz nic nie jest zaplanowane – leci wypełniacz zapasowy kanału.' : 'Kanał nie ma playoutu: załóż go w legacy albo w kolejnym etapie VizRS Live.'),
+          : h('div', { class: 'dim' }, p ? 'Teraz nic nie jest zaplanowane – leci wypełniacz zapasowy kanału.' : 'Kanał nie ma playoutu – załóż go w widoku Playouty.'),
         next.length ? h('div', { class: 'dim' }, 'Następnie: ', next.map((n, j) => [j ? ' · ' : '', h('span', { class: 'num' }, hm(new Date(n.Start))), ' ', n.Title])) : null,
         h('div', { class: 'bar' },
           p ? btn('Przebuduj', () => build(p, 'Refresh')) : null,

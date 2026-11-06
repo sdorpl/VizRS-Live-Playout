@@ -2,6 +2,14 @@
 
 ## Niewydane
 
+- **Playouty – pełna obsługa** (R2): „+ Nowy playout” z wyborem rodzaju (klasyczny, blokowy, sekwencyjny YAML, skryptowy, zewnętrzny JSON) i kanału (tylko kanały bez playoutu), harmonogram albo ścieżka pliku w kontenerze legacy z podpowiedzią; edycja: harmonogram główny, ścieżka pliku, codzienna przebudowa o godzinie; **harmonogramy zastępcze** (dni tygodnia ze skrótami robocze/weekend, dni miesiąca, miesiące, zakres dat, kolejność); stan ostatniej budowy z komunikatem legacy; przebudowa, od nowa, wyczyszczenie pozycji (i historii), sprawdzenie nakładania; „Resetuj wszystkie” z potwierdzeniem; usuwanie z potwierdzeniem; najbliższe pozycje pod edytorem.
+- Pasek górny: licznik playoutów z błędem budowy (`GetPlayoutWarningsCount`), odnośnik do Playoutów.
+- Decyzja: panel nie edytuje plików YAML/skryptów/JSON playoutów – pliki na wolumenie konfiguracji legacy (DOKUMENTACJA §4).
+- `form.js`: podpowiedź pola może zależeć od wartości; ukryta grupa pól ukrywa też swoje pola przy odczycie. `crudView`: `createCmd` (komenda zakładania zależna od danych), `below` może zwrócić kilka paneli.
+- Poprawka układu: długie widoki nie ściskają już paneli (obcięty edytor pozycji, gdy widok był wyższy niż ekran).
+- Biała lista: `CreateBlockPlayout`, `CreateSequentialPlayout`, `CreateScriptedPlayout`, `CreateExternalJsonPlayout`, `UpdatePlayout`, `UpdateSequentialPlayout`, `UpdateScriptedPlayout`, `UpdateExternalJsonPlayout`, `DeletePlayout`, `ResetAllPlayouts`, `ErasePlayoutItems`, `ErasePlayoutHistory`, `CheckForOverlappingPlayoutItems`, `GetPlayoutWarningsCount`, `GetPlayoutAlternateSchedules`, `ReplacePlayoutAlternateScheduleItems`. Smoke mostu sprawdza odrzucenie komendy spoza listy na `SaveConfigElementByKey` (wcześniej `ResetAllPlayouts`, teraz dozwolona).
+- e2e: playout klasyczny dla nowego kanału i harmonogramu, wybór tylko wolnych kanałów, błąd legacy dla brakującego pliku YAML, przebudowa i pozycje w „Na antenie”, harmonogram zastępczy na sobotę (walidacja dni), codzienna przebudowa, wyczyszczenie, „Resetuj wszystkie”, usunięcie.
+
 ## 0.2.0 – harmonogramy (2026-11-06)
 
 - **Harmonogramy – pełna edycja** (R1): lista z kanałami, które używają harmonogramu; ustawienia (godziny stałe, tasowanie, losowy start, części odcinków, kolekcje jak seriale); nowy, kopiuj, usuń z potwierdzeniem (wymienia kanały, których playouty legacy usunie kaskadowo); **edytor pozycji**: start dynamiczny/o stałej godzinie, treść (wybór treści), kolejność odtwarzania zależna od rodzaju treści, maraton, tryb (wypełnij / jedna / kilka + liczba albo tryb / przez czas + reszta czasu + próby dopasowania), wypełnianie grupami, tytuł własny, tryb przewodnika, wypełniacze pre/mid/post/ogon/zapasowy, znaki wodne i elementy graficzne, preferencje audio i napisów; kopiowanie pozycji. Ustawienia i pozycje zapisuje jeden „Zapisz” (pozycje jednym `ReplaceProgramScheduleItems`); błąd legacy pokazany z polskim wstępem.

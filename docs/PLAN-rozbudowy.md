@@ -27,7 +27,7 @@ Cel końcowy: **operator nie korzysta z web GUI ErsatzTV legacy** – wszystko, 
 |---|---|---|---|
 | R0 | Fundament UI: moduły, formularz z metadanych, wspólne edytory | – | zrobione (2026-11-06) |
 | R1 | Harmonogramy (klasyczna ramówka): pełna edycja z pozycjami | R0 | zrobione (2026-11-06) |
-| R2 | Playouty: zakładanie wszystkich rodzajów, edycja, usuwanie, harmonogramy zastępcze | R1 | do zrobienia |
+| R2 | Playouty: zakładanie wszystkich rodzajów, edycja, usuwanie, harmonogramy zastępcze | R1 | zrobione (2026-11-06) |
 | R3 | Media: biblioteki lokalne, skan, przeglądarka i wyszukiwarka, kosz | R0 | do zrobienia |
 | R4 | Kolekcje (zwykłe, inteligentne, wielo-, powtórki) i playlisty | R3 | do zrobienia |
 | R5 | Profile kodowania, znaki wodne (z wgrywaniem obrazu), wypełniacze, logo kanału | R0 | do zrobienia |
@@ -77,6 +77,8 @@ Cel końcowy: **operator nie korzysta z web GUI ErsatzTV legacy** – wszystko, 
 **Testy e2e:** założenie playoutu klasycznego dla nowego kanału z R1, przebudowa, pozycje widoczne w „Na antenie”; harmonogram zastępczy na sobotę; usunięcie playoutu.
 
 **Do sprawdzenia:** playouty sekwencyjne (YAML) – czy panel ma też edytować sam plik YAML (wymagałoby zapisu pliku w kontenerze legacy: osobny endpoint mostu albo wspólny wolumen) – decyzja w tej sesji, zapisać w DOKUMENTACJA.
+
+**Decyzja (2026-11-06):** panel nie edytuje plików YAML/skryptów/JSON; pliki na wolumenie konfiguracji legacy (`/config/schedules/`, `/config/scripts/`), w panelu ścieżka w kontenerze. Zapis plików – dopiero gdy R9 będzie go potrzebować, jednym ogólnym endpointem mostu ograniczonym do jednego katalogu (DOKUMENTACJA §4).
 
 ## R3 – Media
 
@@ -138,7 +140,7 @@ Cel końcowy: **operator nie korzysta z web GUI ErsatzTV legacy** – wszystko, 
 
 **Cel:** to, czego legacy nie ma – grafika VizRS na kanale i audycje na żywo, z VizRS CG Playout (`../VirtRS CG Playout`, DOKUMENTACJA tamtego repo).
 
-**Zakres:** przeczytać API CG Playout (konfiguracja kanałów, element VizRS, `/ingest`, `/ingest/state`); w panelu: **Grafika kanału** – reguły (start pozycji ± s, przed końcem audycji, przerwa reklamowa, slot na żywo → strona VizRS z polami `{title}`, `{next_title}`…) zapisane tam, gdzie CG Playout je trzyma; podgląd `/output` VizRS; **Sloty na żywo** – wejścia, stan sygnału, audycje na żywo jako pozycje ramówki (Remote Stream w legacy). Elementy graficzne legacy: `GetAllGraphicsElements`, `RefreshGraphicsElements` (pliki YAML – edycja tylko, jeśli zapis pliku w kontenerze zostanie rozwiązany w R2).
+**Zakres:** przeczytać API CG Playout (konfiguracja kanałów, element VizRS, `/ingest`, `/ingest/state`); w panelu: **Grafika kanału** – reguły (start pozycji ± s, przed końcem audycji, przerwa reklamowa, slot na żywo → strona VizRS z polami `{title}`, `{next_title}`…) zapisane tam, gdzie CG Playout je trzyma; podgląd `/output` VizRS; **Sloty na żywo** – wejścia, stan sygnału, audycje na żywo jako pozycje ramówki (Remote Stream w legacy). Elementy graficzne legacy: `GetAllGraphicsElements`, `RefreshGraphicsElements` (pliki YAML – R2 zdecydował: panel nie zapisuje plików; jeśli R9 tego potrzebuje, dodaje jeden ogólny endpoint mostu do zapisu w jednym katalogu, wspólny dla playoutów i grafiki – DOKUMENTACJA §4).
 
 **Decyzja (2026-11-06): panel łączy się z VizRS CG Playout przez jego API** – bez wspólnych plików konfiguracyjnych. Wzorem mostu: serwer panelu (Rust) jest pośrednikiem, adres i token CG Playout tylko po stronie serwera (nowe opcje `--cg-url`/`VIZRS_LIVE_CG_URL`, `--cg-token`/`VIZRS_LIVE_CG_TOKEN`), przeglądarka woła `/api/cg/...`. Na starcie sesji: spisać z dokumentacji CG Playout endpointy potrzebne panelowi (konfiguracja kanałów i reguł, `/ingest`, `/ingest/state`, stan połączenia z VizRS) i sprawdzić, czego API jeszcze nie ma – braki dopisać w CG Playout (osobne repo, osobny commit tam) albo jako punkt jego planu, nie obchodzić przez pliki.
 

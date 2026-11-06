@@ -48,11 +48,30 @@ ReplaceProgramScheduleItems
 GetAllBlocks
 GetAllTemplates
 GetAllDecoGroups
+
+# --- playouty
 GetPagedPlayouts
-CreateClassicPlayout
 GetFuturePlayoutItemsById
 GetPlayoutIdByChannelNumber
+CreateClassicPlayout
+CreateBlockPlayout
+CreateSequentialPlayout
+CreateScriptedPlayout
+CreateExternalJsonPlayout
+UpdatePlayout
+UpdateSequentialPlayout
+UpdateScriptedPlayout
+UpdateExternalJsonPlayout
+DeletePlayout
 BuildPlayout
+ResetAllPlayouts
+ErasePlayoutItems
+ErasePlayoutHistory
+CheckForOverlappingPlayoutItems
+GetPlayoutWarningsCount
+GetPlayoutAlternateSchedules
+ReplacePlayoutAlternateScheduleItems
+# GetBlockPlayoutHistory (podgląd historii bloku) – z ekranem Bloki (R6), potrzebuje id bloku
 
 # --- grafika
 GetAllGraphicsElements

@@ -199,17 +199,100 @@ function check(cond, msg) {
   await page.waitForSelector(`td:has-text("${sched}")`, { state: 'detached' });
   check(true, 'harmonogram usunięty');
 
-  // playout: przebudowa przez kolejkę legacy
+  // playouty (R2): kanał i harmonogram przez API, playout przez panel
+  const api = (name, args = {}) => page.evaluate(async ([n, a]) => {
+    const r = await fetch('/api/cmd/' + n, { method: 'POST', headers: { 'X-VizRS-Live': '1', 'Content-Type': 'application/json' }, body: JSON.stringify(a) });
+    return r.json();
+  }, [name, args]);
+  const tag = Date.now().toString(36);
+  const chans = (await api('GetAllChannels', { ShowDisabled: true })).result;
+  const chNum = String(Math.max(...chans.map((c) => parseFloat(c.Number) || 0)) + 1);
+  const chName = 'E2E playout ' + tag;
+  const chId = (await api('CreateChannel', { Name: chName, Number: chNum, Group: 'Test', Categories: '', FFmpegProfileId: 1, Logo: { Path: '', ContentType: '' },
+    StreamingEngine: 'Next', StreamingMode: 'HttpLiveStreamingSegmenter', PlayoutSource: 'Generated', PlayoutMode: 'Continuous', StreamSelectorMode: 'Default',
+    IdleBehavior: 'StopOnDisconnect', SubtitleMode: 'None', IsEnabled: true, ShowInEpg: true })).result.ChannelId;
+  const psName = 'E2E playout ' + tag;
+  const psId = (await api('CreateProgramSchedule', { Name: psName, FixedStartTimeBehavior: 'Strict' })).result.ProgramScheduleId;
+  const sc = (await api('SearchSmartCollections', { Query: 'INFO' })).result[0].Id;
+  await api('ReplaceProgramScheduleItems', { ProgramScheduleId: psId, Items: [{ Index: 1, StartType: 'Dynamic', PlayoutMode: 'Flood', CollectionType: 'SmartCollection',
+    SmartCollectionId: sc, PlaybackOrder: 'Chronological', MultipleCount: '1', SearchTitle: '', SearchQuery: '', CustomTitle: '', WatermarkIds: [], GraphicsElementIds: [] }] });
+  check(chId > 0 && psId > 0, `playout: kanał ${chNum} i harmonogram przygotowane przez API`);
+
   await page.goto(`${BASE}/#playouty`);
   await page.waitForSelector('main[data-view="playouty"]');
-  const hasPlayout = await page.$('button:has-text("Przebuduj")');
-  if (hasPlayout) {
-    await hasPlayout.click();
-    await page.waitForSelector('#toast.ok');
-    check(true, 'przebudowa playoutu zlecona');
-  } else {
-    console.log('pomijam przebudowę: brak playoutu');
+  await rerender(() => page.click('text=+ Nowy playout'));
+  const freeCh = await page.$$eval('#f-ChannelId option', (o) => o.map((x) => x.textContent));
+  check(freeCh.includes(`${chNum} · ${chName}`) && !freeCh.some((t) => t.startsWith('24 ·')), 'playout: wybór tylko kanałów bez playoutu');
+  await page.selectOption('#f-Kind', 'Sequential');
+  const seqHint = await page.textContent('#f-ScheduleFile ~ .hint');
+  check((await page.isVisible('#f-ScheduleFile')) && !(await page.isVisible('#f-ProgramScheduleId')) && /kontenerze legacy/.test(seqHint),
+    'playout: sekwencyjny – ścieżka pliku z podpowiedzią, bez harmonogramu');
+  await page.selectOption('#f-ChannelId', String(chId));
+  await page.fill('#f-ScheduleFile', '/config/nie-ma/e2e.yml');
+  await page.click('button:has-text("Załóż playout")');
+  await page.waitForSelector('#toast.bad');
+  check(/Sequential schedule does not exist/.test(await page.textContent('#toast')), 'playout: brak pliku YAML – błąd legacy pokazany');
+  await page.selectOption('#f-Kind', 'Classic');
+  await page.selectOption('#f-ProgramScheduleId', String(psId));
+  await rerender(() => page.click('button:has-text("Załóż playout")'));
+  await page.waitForSelector(`main .panel header h2:has-text("Playout ${chNum} · ${chName}")`);
+  check(true, `playout klasyczny założony dla kanału ${chNum}`);
+
+  await page.click('.maint button:has-text("Przebuduj")');
+  await page.waitForSelector('#toast.ok');
+  check(true, 'playout: przebudowa zlecona');
+  let onAir = false;
+  for (let i = 0; i < 15 && !onAir; i++) {
+    await page.goto(`${BASE}/#antena`);
+    await page.waitForSelector('main[data-view="antena"]');
+    onAir = !!(await page.$(`.panel:has(h2:text-is("${chNum} · ${chName}")) .now`));
+    if (!onAir) await page.waitForTimeout(2000);
   }
+  check(onAir, 'playout: pozycje kanału widoczne w „Na antenie”');
+
+  // harmonogram zastępczy na sobotę + codzienna przebudowa
+  await page.goto(`${BASE}/#playouty`);
+  await page.waitForSelector('main[data-view="playouty"]');
+  await rerender(() => page.click(`td:text-is("${chName}")`));
+  await page.click('.items button:has-text("+ Dodaj harmonogram zastępczy")');
+  await page.selectOption('#alt-ProgramScheduleId', { label: 'INFO24 dzień' });
+  await page.click('#alt-DaysOfWeek button:has-text("żaden")');
+  await page.click('.items-side button:has-text("Zastosuj")');
+  await page.waitForSelector('#toast.bad');
+  check(/Dni tygodnia/.test(await page.textContent('#toast')), 'harmonogram zastępczy: bez dni – walidacja w panelu');
+  await page.check('#alt-DaysOfWeek label:has-text("sob") input');
+  await page.click('.items-side button:has-text("Zastosuj")');
+  await page.fill('#f-DailyRebuildTime', '5:00');
+  await rerender(() => page.click('main .panel header button:has-text("Zapisz")'));
+  await page.waitForSelector(`main .panel header h2:has-text("Playout ${chNum} · ${chName}")`);
+  const altRows = await page.$$eval('.items tbody tr', (trs) => trs.map((tr) => tr.textContent));
+  const pid = (await api('GetPlayoutIdByChannelNumber', { ChannelNumber: chNum })).result;
+  const alts = (await api('GetPlayoutAlternateSchedules', { PlayoutId: pid })).result.sort((a, b) => a.Index - b.Index);
+  check(altRows.length === 1 && /INFO24 dzień/.test(altRows[0]) && /sob/.test(altRows[0])
+    && alts.length === 2 && alts[0].DaysOfWeek.join() === 'Saturday' && alts[1].ProgramScheduleId === psId,
+  `harmonogram zastępczy: sobota zapisana w legacy, harmonogram główny bez zmian (${altRows.join(' / ')})`);
+  check((await page.textContent(`tr:has(td:text-is("${chName}"))`)).includes('05:00') && (await page.inputValue('#f-DailyRebuildTime')) === '05:00:00',
+    'playout: codzienna przebudowa 05:00 zapisana');
+
+  await page.click('.maint button:has-text("Wyczyść pozycje i historię")');
+  await page.click('#dlg-buttons button:has-text("Wyczyść pozycje i historię")');
+  await page.waitForSelector('#toast.ok:has-text("wyczyszczono pozycje i historię")');
+  check(true, 'playout: wyczyszczenie pozycji i historii');
+
+  await page.click('main .head button:has-text("Resetuj wszystkie")');
+  await page.click('#dlg-buttons button:has-text("Resetuj wszystkie")');
+  await page.waitForSelector('#toast.ok:has-text("wszystkich playoutów")');
+  check(true, 'playouty: „Resetuj wszystkie” zlecone');
+  await page.waitForTimeout(2600);
+
+  await page.click('main .panel header button:has-text("Usuń")');
+  await page.click('#dlg-buttons button:has-text("Usuń")');
+  await page.waitForSelector(`td:text-is("${chName}")`, { state: 'detached' });
+  const left = (await api('GetPagedPlayouts', { Query: '', PageNum: 0, PageSize: 500 })).result.Page.filter((p) => p.ChannelNumber === chNum);
+  check(left.length === 0, 'playout usunięty');
+  await api('DeleteChannel', { ChannelId: chId });
+  await api('DeleteProgramSchedule', { ProgramScheduleId: psId });
+  check(await page.isHidden('#st-warn'), 'pasek górny: brak playoutów z błędem (licznik ukryty)');
 
   check(errors.length === 0, 'brak błędów JS' + (errors.length ? ': ' + errors.join(' | ') : ''));
   await browser.close();

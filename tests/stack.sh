@@ -57,7 +57,7 @@ case "${1:-}" in
     # smoke: most i jego zabezpieczenia
     expect "most: zdrowie" 200 curl -s -H "X-VizRS-Token: $TOKEN" "$BRIDGE/health"
     expect "most: zły token" 401 curl -s -H "X-VizRS-Token: zly" "$BRIDGE/health"
-    expect "most: komenda spoza listy" 403 curl -s -X POST -H "X-VizRS-Token: $TOKEN" "$BRIDGE/command/ResetAllPlayouts" -d '{}'
+    expect "most: komenda spoza listy" 403 curl -s -X POST -H "X-VizRS-Token: $TOKEN" "$BRIDGE/command/SaveConfigElementByKey" -d '{}'
     expect "most: zapytanie" 200 curl -s -X POST -H "X-VizRS-Token: $TOKEN" "$BRIDGE/command/GetAllChannels" -d '{}'
     expect "panel: status" 200 curl -s "$PANEL/api/status"
     expect "panel: POST bez X-VizRS-Live" 403 curl -s -X POST "$PANEL/api/cmd/GetAllChannels" -d '{}'

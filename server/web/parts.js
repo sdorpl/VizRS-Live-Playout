@@ -11,6 +11,7 @@ import { h, btn, head, panel, cmdNote, table, toast, dialog, confirmDlg, cmd, ar
  *   title, desc, listCmd,                            // listCmd – zapytanie listy (do kontroli białej listy)
  *   noun: { list, new, add, create, one(dane), title(row) },  // napisy: panel listy, nowy, „+ Nowy”, „Załóż”
  *   commands: { create, update, delete, copy? },     // nazwy komend legacy
+ *   createCmd: (data, ctx) => nazwa,                 // komenda zakładania zależna od danych (np. rodzaj playoutu); domyślnie commands.create
  *   needs: [nazwy],                                  // dodatkowe komendy wymagane przez ekran
  *   load: async () => ({ rows, ...ctx }),            // dane listy i list wyboru
  *   id: (row) => id, cols: [...kolumny tabeli] albo (ctx) => [...],
@@ -20,7 +21,7 @@ import { h, btn, head, panel, cmdNote, table, toast, dialog, confirmDlg, cmd, ar
  *   copy: (row, nazwa) => args, copiedId: (wynik) => id,
  *   headExtra: (ctx) => [przyciski/odnośniki], footer: (row, ctx) => węzeł,
  *   loadOne: async (row, ctx) => ({...}),            // dane zaznaczonej pozycji (np. jej pozycje), dołożone do ctx
- *   below: (row, ctx) => węzeł,                      // pod listą i edytorem, na całą szerokość (np. edytor pozycji)
+ *   below: (row, ctx) => węzeł | [węzły],            // pod listą i edytorem, na całą szerokość (np. edytor pozycji)
  *   beforeSave: (ctx) => void,                       // sprawdzenie przed zapisem; Error = komunikat, nic nie zapisuje
  *   afterSave: async (id, ctx) => void,              // po zapisie (np. zapis pozycji); Error = komunikat
  * }
@@ -47,7 +48,8 @@ export function crudView(cfg) {
       let id;
       try {
         if (isNew) {
-          const r = await cmd(c.create, argsFor(c.create, cfg.create ? cfg.create(data, ctx) : data));
+          const name = cfg.createCmd ? cfg.createCmd(data, ctx) : c.create;
+          const r = await cmd(name, argsFor(name, cfg.create ? cfg.create(data, ctx) : data));
           id = cfg.createdId ? cfg.createdId(r) ?? null : null;
           sel = id;
         } else {
@@ -87,7 +89,7 @@ export function crudView(cfg) {
     return [
       head(cfg.title, cfg.desc, btn(noun.add, () => { sel = 'new'; route(true); }, 'acc'), cfg.headExtra ? cfg.headExtra(ctx) : null),
       h('div', { class: 'split' }, list, editor),
-      cfg.below ? cfg.below(current, ctx) : null,
+      ...[cfg.below ? cfg.below(current, ctx) : null].flat(),
     ];
   };
 }

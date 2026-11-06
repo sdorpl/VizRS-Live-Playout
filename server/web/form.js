@@ -10,6 +10,7 @@ import { h, param, pl, pad2 } from './core.js';
  * Opis pola:
  *   { sec: 'Ogólne' }                                   – nagłówek sekcji
  *   { key, label, kind?, options?, none?, hint?, placeholder?, attrs?, show?(wartości), text? }
+ *     hint – tekst albo (wartości) => tekst (przeliczany po każdej zmianie, np. podpowiedź zależna od rodzaju)
  *   { label, group: [pola] }                            – kilka kontrolek w jednym wierszu (np. pola tak/nie)
  *   { key, label, render(wartość, wartości) -> {el, read()} } – kontrolka własna (np. wybór treści)
  * kind: text | number | check | enum | time | datetime | pick | multi (domyślnie z typu parametru komendy)
@@ -19,6 +20,7 @@ export function form(cmdName, fields, values = {}, opts = {}) {
   const prefix = opts.idPrefix ?? 'f-';
   const ctl = new Map();        // key -> {read(), el}
   const rows = [];              // {wrap, show}
+  const hints = [];             // {el, fn} – podpowiedzi zależne od wartości
   const current = () => ({ ...values, ...Object.fromEntries([...ctl].map(([k, c]) => [k, c.peek()])) });
 
   const build = (f) => {
@@ -39,7 +41,9 @@ export function form(cmdName, fields, values = {}, opts = {}) {
 
   const el = h('div', { class: 'form' });
   const add = (labelEl, ctrlEl, f) => {
-    const wrap = h('div', { class: 'row' }, labelEl, ctrlEl, f.hint ? h('div', { class: 'hint' }, f.hint) : null);
+    const hintEl = f.hint ? h('div', { class: 'hint' }, typeof f.hint === 'function' ? '' : f.hint) : null;
+    if (typeof f.hint === 'function') hints.push({ el: hintEl, fn: f.hint });
+    const wrap = h('div', { class: 'row' }, labelEl, ctrlEl, hintEl);
     if (f.show) rows.push({ wrap, show: f.show });
     el.append(wrap);
   };
@@ -51,7 +55,11 @@ export function form(cmdName, fields, values = {}, opts = {}) {
     const kind = f.kind || inferKind(f.key ? param(cmdName, f.key) : null, f);
     add(h('label', kind === 'multi' || f.render ? null : { for: prefix + f.key }, f.label + (f.unit ? ` (${f.unit})` : '')), c, f);
   }
-  const refresh = () => { const v = current(); for (const r of rows) r.wrap.hidden = !r.show(v); };
+  const refresh = () => {
+    const v = current();
+    for (const r of rows) r.wrap.hidden = !r.show(v);
+    for (const x of hints) { const t = x.fn(v) || ''; x.el.textContent = t; x.el.hidden = !t; }
+  };
   el.addEventListener('change', refresh);
   el.addEventListener('input', refresh);
   refresh();
@@ -63,7 +71,8 @@ export function form(cmdName, fields, values = {}, opts = {}) {
       const out = { ...values };
       const v = current();
       const hidden = new Set();
-      for (const f of fields.flatMap((x) => (x?.group ? x.group : [x]))) if (f?.show && !f.show(v)) hidden.add(f.key);
+      // pole grupy jest ukryte, gdy ukryta jest cała grupa
+      for (const f of fields.flatMap((x) => (x?.group ? x.group.map((g) => ({ ...g, show: g.show || x.show })) : [x]))) if (f?.show && !f.show(v)) hidden.add(f.key);
       for (const [k, c] of ctl) if (!hidden.has(k)) out[k] = c.read();
       return out;
     },

@@ -65,6 +65,11 @@ const STATIC: &[(&str, &str, &str)] = &[
         include_str!("../web/views/listy.js"),
     ),
     (
+        "/views/playouty.js",
+        "text/javascript; charset=utf-8",
+        include_str!("../web/views/playouty.js"),
+    ),
+    (
         "/views/ramowka.js",
         "text/javascript; charset=utf-8",
         include_str!("../web/views/ramowka.js"),

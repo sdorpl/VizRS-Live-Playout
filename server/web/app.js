@@ -3,12 +3,13 @@
 //   core.js (DOM, API, komunikaty, router, PL) · form.js (formularz z metadanych)
 //   parts.js („lista + edytor”, edytor pozycji, wybór treści) · views/*.js (ekrany po grupach menu)
 
-import { S, main, h, btn, head, api, ApiError, route, hms } from './core.js';
+import { S, main, h, btn, head, api, cmd, ApiError, route, hms } from './core.js';
 import './views/antena.js';
 import './views/kanaly.js';
 import './views/media.js';
 import './views/listy.js';
 import './views/ramowka.js';
+import './views/playouty.js';
 import './views/harmonogramy.js';
 import './views/grafika.js';
 import './views/system.js';
@@ -25,6 +26,18 @@ async function refreshStatus() {
   sl.textContent = b ? `legacy ${b.legacy}` : 'legacy: ?';
   sl.className = 'pill ' + (b ? 'info' : '');
   document.getElementById('logout').hidden = !S.status.auth;
+  refreshWarnings();
+}
+
+/** Licznik playoutów, których legacy nie zbudował (jak licznik ostrzeżeń w menu legacy). */
+async function refreshWarnings() {
+  const w = document.getElementById('st-warn');
+  if (!S.meta.has('GetPlayoutWarningsCount')) return;
+  try {
+    const n = await cmd('GetPlayoutWarningsCount');
+    w.textContent = `playouty z błędem: ${n}`;
+    w.hidden = !n;
+  } catch { w.hidden = true; }
 }
 
 function clock() {
@@ -42,6 +55,7 @@ async function start() {
     if (S.status.bridge) {
       const c = await api('/api/commands');
       S.meta = new Map(c.result.map((x) => [x.name, x]));
+      refreshWarnings();
     }
   } catch (e) {
     if (!(e instanceof ApiError)) throw e;
