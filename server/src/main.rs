@@ -80,6 +80,11 @@ const STATIC: &[(&str, &str, &str)] = &[
         include_str!("../web/views/media.js"),
     ),
     (
+        "/views/zrodla.js",
+        "text/javascript; charset=utf-8",
+        include_str!("../web/views/zrodla.js"),
+    ),
+    (
         "/views/listy.js",
         "text/javascript; charset=utf-8",
         include_str!("../web/views/listy.js"),
@@ -415,15 +420,78 @@ fn route(app: &App, req: &Request) -> Response {
             if !valid_command(name) {
                 return Response::error(400, "zła nazwa komendy");
             }
-            let r = forward(
+            let mut r = forward(
                 app.bridge.post(&format!("/command/{name}"), &req.body),
                 name,
             );
+            r.body = mask_secrets(&r.body);
             eprintln!("cmd {name} -> {}", r.status);
             r
         }
         _ => Response::error(404, "nieznany adres API"),
     }
+}
+
+/// Końcówki nazw pól (małymi literami), których wartości tekstowe nie wychodzą do przeglądarki (R8).
+const SECRET_SUFFIXES: &[&str] = &["apikey", "token", "password", "secret"];
+/// Wartość zamaskowanego sekretu; pusty sekret zostaje pusty (panel wie, że nic nie zapisano).
+pub const MASK: &str = "********";
+
+/// Maskuje w odpowiedzi JSON tekstowe wartości pól o nazwach z `SECRET_SUFFIXES`
+/// (np. `ApiKey` z `GetJellyfinSecrets`). Sekrety są w panelu tylko do zapisu.
+pub fn mask_secrets(body: &[u8]) -> Vec<u8> {
+    fn string_end(b: &[u8], start: usize) -> usize {
+        // start wskazuje cudzysłów otwierający; zwraca indeks za cudzysłowem zamykającym
+        let mut i = start + 1;
+        while i < b.len() {
+            match b[i] {
+                b'\\' => i += 2,
+                b'"' => return i + 1,
+                _ => i += 1,
+            }
+        }
+        b.len()
+    }
+    let skip_ws = |b: &[u8], mut i: usize| {
+        while i < b.len() && b[i].is_ascii_whitespace() {
+            i += 1;
+        }
+        i
+    };
+    let mut out = Vec::with_capacity(body.len());
+    let mut i = 0;
+    while i < body.len() {
+        if body[i] != b'"' {
+            out.push(body[i]);
+            i += 1;
+            continue;
+        }
+        let end = string_end(body, i);
+        out.extend_from_slice(&body[i..end]);
+        let key = String::from_utf8_lossy(&body[i + 1..end.saturating_sub(1).max(i + 1)])
+            .to_ascii_lowercase();
+        i = end;
+        let colon = skip_ws(body, i);
+        if colon >= body.len()
+            || body[colon] != b':'
+            || !SECRET_SUFFIXES.iter().any(|s| key.ends_with(s))
+        {
+            continue;
+        }
+        let v = skip_ws(body, colon + 1);
+        if v >= body.len() || body[v] != b'"' {
+            continue;
+        }
+        let vend = string_end(body, v);
+        out.extend_from_slice(&body[i..v]);
+        if vend - v > 2 {
+            out.extend_from_slice(format!("\"{MASK}\"").as_bytes());
+        } else {
+            out.extend_from_slice(b"\"\"");
+        }
+        i = vend;
+    }
+    out
 }
 
 /// Rodzaje obrazów, które panel wgrywa do legacy (`ArtworkKind`).
@@ -630,6 +698,26 @@ mod tests {
         r.path = "/api/upload/Logo".into();
         r.body = b"\x89PNG\r\n\x1a\nxxxx".to_vec();
         assert_eq!(route(&a, &r).status, 502, "dobry PNG idzie do mostu");
+    }
+
+    #[test]
+    fn secrets_masked() {
+        let m = |s: &str| String::from_utf8(mask_secrets(s.as_bytes())).unwrap();
+        assert_eq!(
+            m(r#"{"ok":true,"result":{"Address":"http://j:8096","ApiKey" : "abc\"d"}}"#),
+            r#"{"ok":true,"result":{"Address":"http://j:8096","ApiKey" : "********"}}"#
+        );
+        assert_eq!(m(r#"{"apiKey":"","x":1}"#), r#"{"apiKey":"","x":1}"#);
+        assert_eq!(
+            m(r#"[{"AuthToken":"t","Name":"ApiKey"}]"#),
+            r#"[{"AuthToken":"********","Name":"ApiKey"}]"#
+        );
+        // wartość nietekstowa i tekst wyglądający jak klucz zostają
+        assert_eq!(
+            m(r#"{"Token":null,"s":"apikey: x"}"#),
+            r#"{"Token":null,"s":"apikey: x"}"#
+        );
+        assert_eq!(m(r#"{"Name":"zażółć"}"#), r#"{"Name":"zażółć"}"#);
     }
 
     #[test]

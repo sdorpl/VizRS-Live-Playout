@@ -23,7 +23,7 @@ function pathsEditor(paths, lib, libs) {
   const el = h('div', { class: 'paths', id: 'lib-paths' });
   const render = () => {
     el.replaceChildren(
-      rows.length ? null : h('div', { class: 'empty' }, 'Brak ścieżek – dodaj katalog w kontenerze legacy.'),
+      ...(rows.length ? [] : [h('div', { class: 'empty' }, 'Brak ścieżek – dodaj katalog w kontenerze legacy.')]),
       ...rows.map((r, i) => {
         const input = h('input', { value: r.Path, class: 'mono grow', placeholder: '/config/media/…', 'aria-label': `Ścieżka ${i + 1}`,
           oninput: (e) => (r.Path = e.target.value) });

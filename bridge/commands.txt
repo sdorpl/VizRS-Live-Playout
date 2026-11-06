@@ -235,3 +235,50 @@ ReleaseMemory
 RefreshFFmpegCapabilities
 GetTroubleshootingInfo
 # test odtwarzania: PrepareTroubleshootingPlayback/StartTroubleshootingPlayback – patrz DOKUMENTACJA §5
+
+# --- źródła zewnętrzne (R8): Jellyfin, Emby, Plex
+# Sekrety (klucz API) panel tylko zapisuje: serwer panelu maskuje w każdej odpowiedzi pola apiKey/…token/password/secret.
+# Bez Get*ConnectionParameters (niosą nagłówek z kluczem/tokenem) i bez TryCompletePlexPinFlow (wewnętrzny PIN – StartPlexPinFlow sam ją kolejkuje).
+GetAllJellyfinMediaSources
+GetJellyfinMediaSourceById
+GetJellyfinSecrets
+SaveJellyfinSecrets
+DisconnectJellyfin
+SynchronizeJellyfinMediaSources
+SynchronizeJellyfinLibraries
+GetJellyfinLibrariesBySourceId
+UpdateJellyfinLibraryPreferences
+SynchronizeJellyfinLibraryByIdIfNeeded
+ForceSynchronizeJellyfinLibraryById
+SynchronizeJellyfinCollections
+GetJellyfinPathReplacementsBySourceId
+UpdateJellyfinPathReplacements
+GetAllEmbyMediaSources
+GetEmbyMediaSourceById
+GetEmbySecrets
+SaveEmbySecrets
+DisconnectEmby
+SynchronizeEmbyMediaSources
+SynchronizeEmbyLibraries
+GetEmbyLibrariesBySourceId
+UpdateEmbyLibraryPreferences
+SynchronizeEmbyLibraryByIdIfNeeded
+ForceSynchronizeEmbyLibraryById
+SynchronizeEmbyCollections
+GetEmbyPathReplacementsBySourceId
+UpdateEmbyPathReplacements
+GetAllPlexMediaSources
+GetPlexMediaSourceById
+StartPlexPinFlow
+SignOutOfPlex
+DeletePlexMediaSource
+SynchronizePlexMediaSources
+SynchronizePlexLibraries
+GetPlexLibrariesBySourceId
+UpdatePlexLibraryPreferences
+SynchronizePlexLibraryByIdIfNeeded
+ForceSynchronizePlexLibraryById
+SynchronizePlexNetworks
+SynchronizePlexCollections
+GetPlexPathReplacementsBySourceId
+UpdatePlexPathReplacements

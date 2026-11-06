@@ -2,6 +2,12 @@
 
 ## Niewydane
 
+- **Źródła zewnętrzne** (R8, nowy ekran Media → Źródła zewnętrzne): **Jellyfin** i **Emby** (adres, klucz API, połącz / rozłącz), **Plex** (logowanie kodem PIN na stronie Plex, inne konto, wyloguj, usuń serwer); dla każdego serwera wybór bibliotek do synchronizacji, synchronizacja biblioteki i kolekcji, odświeżenie listy bibliotek, **zamiany ścieżek**; zakładka **strumienie zdalne** (format pliku .yml, biblioteki tego rodzaju).
+- **Sekrety tylko do zapisu**: serwer panelu maskuje w odpowiedziach komend pola `…apikey`, `…token`, `…password`, `…secret` (`********`); klucz API nie wraca do przeglądarki.
+- Biała lista: komendy Jellyfin, Emby i Plex (DOKUMENTACJA §4); bez `Get…ConnectionParameters` i `TryCompletePlexPinFlow`.
+- Poprawka: edytor ścieżek biblioteki pokazywał tekst „null” nad ścieżkami.
+- e2e: połączenie z atrapą Jellyfin (błędny adres, błąd połączenia, maskowanie klucza, wybór biblioteki, zamiana ścieżki, rozłączenie), logowanie Plex PIN (adres podstawiony), strumienie zdalne; stabilniejszy przypadek „Zwolnij pamięć” (R7).
+
 ## 0.4.0 – bloki, szablony, deco, ustawienia legacy, logi i konserwacja (2026-11-07)
 
 - **Ustawienia legacy w panelu** (R7), zakładki jak Settings legacy: **FFmpeg i strumienie** (ścieżki ffmpeg/ffprobe, profil nowych kanałów, preferowany język dźwięku, globalny znak wodny i wypełniacz zapasowy, napisy, przeplot, raporty, segmenter HLS, format HLS Direct, skrypt MPEG-TS), **playouty** (dni do zbudowania, pomijanie brakujących plików, limit skryptu), **przewodnik XMLTV** (dni, strefa, bloki), **skaner i HDHomeRun** (co ile godzin skan, liczba tunerów, UUID), **poziomy logów** (sześć obszarów, działa od razu), **web GUI legacy** (motyw, język). Zakresy sprawdzane w panelu (legacy ich nie sprawdza).

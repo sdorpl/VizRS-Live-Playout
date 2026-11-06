@@ -33,7 +33,7 @@ Cel końcowy: **operator nie korzysta z web GUI ErsatzTV legacy** – wszystko, 
 | R5 | Profile kodowania, znaki wodne (z wgrywaniem obrazu), wypełniacze, logo kanału | R0 | zrobione (2026-11-06) |
 | R6 | Bloki, szablony, deco: edycja i kalendarz tygodnia | R4, R5 | zrobione (2026-11-07) |
 | R7 | Ustawienia legacy, logi, konserwacja, test odtwarzania | R0 | zrobione (2026-11-07) |
-| R8 | Źródła zewnętrzne: Jellyfin, Emby, Plex (PIN), strumienie zdalne | R3 | do zrobienia |
+| R8 | Źródła zewnętrzne: Jellyfin, Emby, Plex (PIN), strumienie zdalne | R3 | zrobione (2026-11-07) |
 | R9 | Grafika VizRS i sloty na żywo (VizRS CG Playout) | R2 | do zrobienia |
 | R10 | Zamknięcie web GUI legacy, proxy, aktualizacje legacy, CI | R1–R8 | do zrobienia |
 | R11 | Wydanie 1.0: instrukcja operatora, obrazy, przegląd bezpieczeństwa | R10 | do zrobienia |
@@ -135,6 +135,8 @@ Cel końcowy: **operator nie korzysta z web GUI ErsatzTV legacy** – wszystko, 
 **Bezpieczeństwo:** sekrety (klucze API) tylko zapis, nigdy nie wracają do przeglądarki w całości (maskowanie w panelu, a jeśli most zwraca je w wyniku – odfiltrować po stronie serwera Rust).
 
 **Testy:** bez prawdziwego serwera mediów – test formularzy i błędów połączenia; z Jellyfin w kontenerze testowym, jeśli łatwo dostępny (opcjonalnie).
+
+**Zrobione (2026-11-07) – decyzje:** klucz API tylko do zapisu (serwer panelu maskuje pola `…apikey/token/password/secret` w każdej odpowiedzi; zmiana połączenia = ponowne wpisanie klucza); `Get…ConnectionParameters` i `TryCompletePlexPinFlow` poza białą listą; Plex PIN – panel otwiera adres z `StartPlexPinFlow`, legacy sam kończy logowanie; głęboki skan pominięty; strumienie zdalne = biblioteki lokalne z plikami .yml (R3), plików panel nie zapisuje (decyzja R2). Testy: atrapa Jellyfin w `tests/e2e.cjs` zamiast kontenera Jellyfin; prawdziwe serwery – krok ręczny (DOKUMENTACJA §4).
 
 ## R9 – Grafika VizRS i sloty na żywo
 

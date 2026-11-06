@@ -10,6 +10,7 @@ import './views/kanaly.js';
 import './views/profile.js';
 import './views/znaki.js';
 import './views/media.js';
+import './views/zrodla.js';
 import './views/listy.js';
 import './views/playlisty.js';
 import './views/wypelniacze.js';

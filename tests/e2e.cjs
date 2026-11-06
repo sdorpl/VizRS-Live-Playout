@@ -25,7 +25,7 @@ function check(cond, msg) {
   page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
   page.on('response', (r) => r.status() >= 400 && errors.push(`${r.status()} ${r.request().method()} ${r.url()}`));
 
-  const views = ['antena', 'epg', 'kanaly', 'profile', 'znaki', 'media', 'przegladarka', 'kosz', 'kolekcje', 'playlisty', 'wypelniacze',
+  const views = ['antena', 'epg', 'kanaly', 'profile', 'znaki', 'media', 'zrodla', 'przegladarka', 'kosz', 'kolekcje', 'playlisty', 'wypelniacze',
     'harmonogramy', 'bloki', 'deco', 'playouty', 'grafika', 'live', 'ustawienia', 'logi', 'diagnostyka'];
   for (const v of views) {
     await page.goto(`${BASE}/#${v}`);
@@ -851,8 +851,8 @@ function check(cond, msg) {
   check(/\/iptv\/channel\/[^/]+\.m3u8$/.test(hls || ''), `test odtwarzania: odnośnik do strumienia (${hls})`);
   await page.click('#maint button:has-text("Zwolnij pamięć")');
   await page.click('#dlg-buttons button:has-text("Zwolnij pamięć")');
-  await page.waitForSelector('#toast.ok');
-  check(/w tle/.test(await page.textContent('#toast')), 'konserwacja: zadanie zlecone w tle legacy');
+  // czeka na komunikat tej akcji (poprzedni zielony toast może jeszcze wisieć)
+  check(await page.waitForFunction(() => /w tle/.test(document.querySelector('#toast.ok')?.textContent || '')).then(() => true, () => false), 'konserwacja: zadanie zlecone w tle legacy');
   await shot('r7-diagnostyka');
   await tab('logi');
   await page.selectOption('#log-level', 'Debug');
@@ -871,6 +871,84 @@ function check(cond, msg) {
   await page.selectOption('#s-logi-DefaultMinimumLogLevel', 'Information');
   await saveSettings('Poziomy logów');
   check((await api('GetLoggingSettings')).result.DefaultMinimumLogLevel === 'Information', 'ustawienia: poziom logów przywrócony');
+
+  // ---------- R8: źródła zewnętrzne (Jellyfin przez atrapę serwera, Plex PIN przez podstawiony adres) ----------
+  // Atrapa Jellyfin/Emby: kilka odpowiedzi API, których legacy potrzebuje do połączenia i listy bibliotek.
+  const http = require('http');
+  const fake = http.createServer((q, r) => {
+    const u = q.url.split('?')[0];
+    const b = u.endsWith('/System/Info') ? { ServerName: 'Atrapa E2E', OperatingSystem: 'Linux', Id: 'e2e' }
+      : u.endsWith('/Users') ? [{ Id: 'u1', Name: 'admin', Policy: { IsAdministrator: true } }]
+        : u.endsWith('/Library/VirtualFolders') ? [{ Name: 'Filmy E2E', CollectionType: 'movies', ItemId: 'lib1', Locations: ['/media/filmy'] }]
+          : { Items: [], TotalRecordCount: 0 };
+    r.writeHead(200, { 'Content-Type': 'application/json' });
+    r.end(JSON.stringify(b));
+  });
+  await new Promise((ok) => fake.listen(18096, '0.0.0.0', ok));
+  // legacy (w kontenerze) widzi gospodarza pod bramą sieci Dockera
+  let gw = process.env.E2E_FAKE_HOST;
+  if (!gw) {
+    try { gw = require('child_process').execSync("docker network inspect bridge -f '{{(index .IPAM.Config 0).Gateway}}'").toString().trim(); } catch { gw = '172.17.0.1'; }
+  }
+  const FAKE = `http://${gw}:18096`;
+  const KEY = 'e2e-tajny-klucz-' + Date.now().toString(36);
+  for (const K of ['Jellyfin', 'Emby']) await api(`Disconnect${K}`);
+  await tab('zrodla', 'Jellyfin');
+  check(await page.isVisible('#src-Jellyfin-apikey[type="password"]'), 'źródła: klucz API w polu hasła');
+  await page.fill('#src-Jellyfin-address', 'jellyfin:8096');
+  await page.fill('#src-Jellyfin-apikey', KEY);
+  await page.click('button:text-is("Połącz")');
+  await page.waitForSelector('#toast.bad');
+  check(/http:\/\//.test(await page.textContent('#toast')), 'źródła: adres bez http:// odrzucony przez panel');
+  await page.fill('#src-Jellyfin-address', 'http://127.0.0.1:1');
+  await page.click('button:text-is("Połącz")');
+  await page.waitForFunction(() => /nie połączył/.test(document.querySelector('#toast.bad')?.textContent || ''));
+  check(true, 'źródła: błąd połączenia z legacy pokazany operatorowi');
+  check((await api('GetAllJellyfinMediaSources')).result.length === 0, 'źródła: nieudane połączenie nic nie zapisało');
+  await page.fill('#src-Jellyfin-address', FAKE);
+  await page.fill('#src-Jellyfin-apikey', KEY);
+  await page.click('button:text-is("Połącz")');
+  await page.waitForSelector('[data-source^="Jellyfin-"]', { timeout: 20000 });
+  check(true, `źródła: połączono z atrapą Jellyfin (${FAKE})`);
+  const sec = (await api('GetJellyfinSecrets')).result;
+  check(sec.ApiKey === '********' && sec.Address === FAKE, 'źródła: klucz API zamaskowany przez serwer panelu (tylko zapis)');
+  check(!(await page.content()).includes(KEY) && (await page.inputValue('#src-Jellyfin-apikey')) === '', 'źródła: klucz nie wraca do przeglądarki');
+  const jsrc = (await api('GetAllJellyfinMediaSources')).result[0];
+  for (let i = 0; i < 10 && !(await page.isVisible('label:has-text("Filmy E2E")')); i++) {
+    await page.waitForTimeout(1000);
+    await rerender(() => page.click('.page-tabs button:has-text("Jellyfin")'));
+  }
+  await page.check(`[data-source="Jellyfin-${jsrc.Id}"] input[aria-label="Synchronizuj Filmy E2E"]`);
+  await rerender(() => page.click('button:has-text("Zapisz wybór bibliotek")'));
+  const jl = (await api('GetJellyfinLibrariesBySourceId', { JellyfinMediaSourceId: jsrc.Id })).result;
+  check(jl.length === 1 && jl[0].ShouldSyncItems === true, 'źródła: biblioteka Jellyfin włączona do synchronizacji');
+  await page.click('button:has-text("+ Dodaj zamianę")');
+  await page.fill('input[aria-label="Ścieżka w Jellyfin 1"]', '/media/filmy');
+  await page.fill('input[aria-label="Ścieżka w legacy 1"]', '/config/media/filmy');
+  await rerender(() => page.click('button:has-text("Zapisz zamiany ścieżek")'));
+  const pr = (await api('GetJellyfinPathReplacementsBySourceId', { JellyfinMediaSourceId: jsrc.Id })).result;
+  check(pr.length === 1 && pr[0].JellyfinPath === '/media/filmy' && pr[0].LocalPath === '/config/media/filmy', 'źródła: zamiana ścieżki zapisana');
+  check(await page.inputValue('input[aria-label="Ścieżka w legacy 1"]') === '/config/media/filmy', 'źródła: zamiana ścieżki po ponownym otwarciu');
+  await shot('r8-jellyfin');
+  await page.click('button:has-text("Rozłącz Jellyfin")');
+  await rerender(() => page.click('#dlg-buttons button:has-text("Rozłącz")'));
+  check((await api('GetAllJellyfinMediaSources')).result.length === 0 && !(await page.isVisible('[data-source^="Jellyfin-"]')), 'źródła: Jellyfin rozłączony (z potwierdzeniem)');
+  fake.close();
+
+  // Plex: PIN – legacy daje adres app.plex.tv; w teście podstawiony, żeby nie zależeć od plex.tv
+  await tab('zrodla', 'Plex');
+  check(!(await page.isVisible('button:has-text("Wyloguj z Plex")')), 'Plex: bez serwerów nie ma „Wyloguj”');
+  const PIN = 'https://app.plex.tv/auth#?clientID=e2e&code=e2e-pin';
+  await page.route('**/api/cmd/StartPlexPinFlow', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, result: PIN }) }));
+  await page.evaluate(() => { window.open = (u) => { window.__opened = u; return null; }; });
+  await rerender(() => page.click('button:has-text("Zaloguj do Plex")'));
+  check(await page.evaluate(() => window.__opened) === PIN && await page.getAttribute('#plex-pin a', 'href') === PIN, 'Plex: logowanie PIN otwiera stronę Plex i pokazuje odnośnik');
+  await shot('r8-plex');
+  await page.unroute('**/api/cmd/StartPlexPinFlow');
+  await tab('zrodla', 'Strumienie zdalne');
+  check(/is_live/.test(await page.textContent('main pre')), 'strumienie zdalne: przykład pliku .yml');
+  await shot('r8-strumienie');
+  await tab('antena');
 
   check(errors.length === 0, 'brak błędów JS' + (errors.length ? ': ' + errors.join(' | ') : ''));
   await browser.close();
