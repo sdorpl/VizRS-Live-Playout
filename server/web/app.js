@@ -4,7 +4,7 @@
 //   parts.js („lista + edytor”, edytor pozycji, wybór treści, grupy, oś doby) · when.js (dni, miesiące, zakres dat)
 //   · player.js + mux.js (podgląd strumienia kanału) · views/*.js (ekrany po grupach menu)
 
-import { S, main, h, btn, head, api, cmd, ApiError, route, hms, dialog, operatorName } from './core.js';
+import { S, main, h, btn, head, api, cmd, ApiError, route, hms, dialog, operatorName, has } from './core.js';
 import { openMonitor } from './player.js';
 import './views/antena.js';
 import './views/kanaly.js';
@@ -57,10 +57,79 @@ async function refreshStudio() {
     const st = (await api('/api/cg/live/state')).result;
     const air = (st.channels || []).filter((c) => c.on_air).map((c) => c.number);
     const held = (st.channels || []).filter((c) => c.hold).map((c) => c.number);
-    el.textContent = air.length ? `studio na antenie: ${air.join(', ')}` : held.length ? `studio wstrzymane: ${held.join(', ')}` : 'studio: ramówka';
-    el.className = 'pill ' + (air.length ? 'on' : held.length ? 'warn' : '');
+    el.textContent = air.length ? `studio na antenie: ${air.join(', ')}` : held.length ? `studio wstrzymane: ${held.join(', ')}` : 'CG Playout: połączony';
+    el.className = 'pill ' + (air.length ? 'on' : held.length ? 'warn' : 'ok');
+    el.title = air.length || held.length ? 'Kanały ze studiem (VizRS CG Playout) – Sloty na żywo' : 'VizRS CG Playout odpowiada; studio: ramówka (żaden kanał nie nadaje ze studia)';
     el.hidden = false;
   } catch { el.textContent = 'CG Playout: brak połączenia'; el.className = 'pill bad'; el.hidden = false; }
+}
+
+// ---------- liczniki w menu (jak w makiecie UI: „Kanały 3”, „Kolekcje 14”) ----------
+const len = (cmdName, args) => cmd(cmdName, args).then((r) => (Array.isArray(r) ? r.length : r?.TotalCount ?? r?.Page?.length ?? 0));
+/** Widok → [komendy z białej listy, licznik]. Bez którejś komendy licznika nie ma. */
+const COUNTS = {
+  kanaly: [['GetAllChannels'], () => len('GetAllChannels', { ShowDisabled: true })],
+  profile: [['GetAllFFmpegProfiles'], () => len('GetAllFFmpegProfiles')],
+  znaki: [['GetAllWatermarks'], () => len('GetAllWatermarks')],
+  media: [['GetAllLocalLibraries'], () => len('GetAllLocalLibraries')],
+  kolekcje: [['GetAllCollections', 'GetAllSmartCollections', 'GetAllMultiCollections', 'GetPagedRerunCollections'], async () => (await Promise.all([
+    len('GetAllCollections'), len('GetAllSmartCollections'), len('GetAllMultiCollections'),
+    len('GetPagedRerunCollections', { Query: '', PageNum: 0, PageSize: 1000 })])).reduce((a, b) => a + b, 0)],
+  playlisty: [['GetAllPlaylistGroups', 'GetPlaylistsByPlaylistGroupId'], async () => {
+    const groups = await cmd('GetAllPlaylistGroups');
+    return (await Promise.all(groups.map((g) => len('GetPlaylistsByPlaylistGroupId', { PlaylistGroupId: g.Id })))).reduce((a, b) => a + b, 0);
+  }],
+  wypelniacze: [['GetAllFillerPresets'], () => len('GetAllFillerPresets')],
+  harmonogramy: [['GetAllProgramSchedules'], () => len('GetAllProgramSchedules')],
+  bloki: [['GetAllBlocks'], () => len('GetAllBlocks')],
+  playouty: [['GetPagedPlayouts'], () => len('GetPagedPlayouts', { Query: '', PageNum: 0, PageSize: 500 })],
+};
+
+/** Odświeża licznik jednego widoku w menu (po starcie wszystkie, potem po każdym przerysowaniu tego widoku). */
+async function refreshCount(view) {
+  const c = COUNTS[view];
+  const a = document.querySelector(`.side a[href="#${view}"]`);
+  if (!c || !a || !c[0].every(has)) return;
+  let n;
+  try { n = await c[1](); } catch { return; }
+  let el = a.querySelector('.n');
+  if (!el) a.append((el = h('span', { class: 'n' })));
+  el.textContent = String(n);
+  if (view === 'kanaly') refreshChannels();
+}
+
+// ---------- wybór kanału w pasku górnym ----------
+const CH_KEY = 'vizrs-live-channel';
+const store = {
+  get: () => { try { return localStorage.getItem(CH_KEY) || ''; } catch { return ''; } },
+  set: (v) => { try { localStorage.setItem(CH_KEY, v); } catch { /* bez pamięci w przeglądarce */ } },
+};
+
+/** Lista kanałów w wyborze (po starcie i po zmianach na ekranie Kanały); kanał, którego już nie ma = wszystkie. */
+async function refreshChannels() {
+  const sel = document.getElementById('st-channel');
+  if (!has('GetAllChannels')) return;
+  let list;
+  try { list = await cmd('GetAllChannels', { ShowDisabled: true }); } catch { return; }
+  list.sort((a, b) => (parseFloat(a.Number) || 0) - (parseFloat(b.Number) || 0));
+  sel.replaceChildren(h('option', { value: '' }, `Wszystkie kanały (${list.length})`),
+    ...list.map((c) => h('option', { value: String(c.Number) }, `${c.Number} · ${c.Name}`)));
+  const want = S.channel || store.get();
+  S.channel = list.some((c) => String(c.Number) === want) ? want : '';
+  sel.value = S.channel;
+  sel.classList.toggle('on', !!S.channel);
+  sel.hidden = false;
+}
+
+function channelSelect() {
+  const sel = document.getElementById('st-channel');
+  S.channel = store.get();
+  sel.addEventListener('change', () => {
+    S.channel = sel.value;
+    store.set(S.channel);
+    sel.classList.toggle('on', !!S.channel);
+    route(true);
+  });
 }
 
 function operatorButton() {
@@ -88,6 +157,7 @@ function clock() {
 async function start() {
   clock();
   operatorButton();
+  channelSelect();
   document.getElementById('st-monitor').addEventListener('click', () => openMonitor());
   document.getElementById('logout').addEventListener('click', async () => { await api('/api/logout', { method: 'POST', body: '' }); location.reload(); });
   try {
@@ -108,7 +178,11 @@ async function start() {
       btn('Spróbuj ponownie', () => location.reload()));
     return;
   }
+  // ekran przerysowany (wejście, zapis, odświeżenie) → jego licznik w menu
+  new MutationObserver(() => refreshCount(main.dataset.view)).observe(main, { attributes: true, attributeFilter: ['data-render'] });
+  await refreshChannels();
   route();
+  Object.keys(COUNTS).forEach(refreshCount);
   refreshStudio();
   setInterval(refreshStudio, 5000);
 }

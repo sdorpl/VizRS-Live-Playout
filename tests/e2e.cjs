@@ -102,6 +102,7 @@ function check(cond, msg) {
     check(title && title !== 'Błąd', `widok #${v}: ${title}`);
   }
 
+
   // kanał: załóż, zmień, usuń – przez formularz
   const name = 'E2E ' + Date.now().toString(36);
   // czeka na kolejne przerysowanie widoku po akcji
@@ -110,6 +111,30 @@ function check(cond, msg) {
     await action();
     await page.waitForFunction((m) => document.querySelector('main').dataset.render !== m && document.querySelector('main').dataset.view, n);
   };
+  // M1: liczniki w menu, wybór kanału w pasku górnym (filtr ekranów kanałowych)
+  await page.waitForSelector('.side a[href="#kanaly"] .n');
+  await page.waitForSelector('.side a[href="#playouty"] .n');
+  const nCh = await page.textContent('.side a[href="#kanaly"] .n');
+  const chOpts = await page.$$eval('#st-channel option', (os) => os.map((o) => o.value));
+  check(+nCh === chOpts.length - 1 && chOpts[0] === '' && chOpts.includes('24'), `menu: licznik kanałów ${nCh} = lista wyboru kanału (${chOpts.join(',')})`);
+  check(/^\d+$/.test(await page.textContent('.side a[href="#kolekcje"] .n') || ''), 'menu: licznik kolekcji');
+  await page.goto(`${BASE}/#antena`);
+  await page.waitForSelector('main[data-view="antena"]');
+  const cardTitles = () => page.$$eval('main .panel header h2', (hs) => hs.map((x) => x.textContent).filter((t) => /^\d+ · /.test(t)));
+  check((await cardTitles()).length >= 2, 'antena: wszystkie kanały bez wyboru');
+  await rerender(() => page.selectOption('#st-channel', '24'));
+  const only = await cardTitles();
+  check(only.length === 1 && /^24 · /.test(only[0]) && await page.getAttribute('#st-channel', 'class') === 'on', `antena: tylko kanał 24 z paska (${only.join(' / ')})`);
+  await page.goto(`${BASE}/#epg`);
+  await page.waitForSelector('main[data-view="epg"]');
+  await page.reload();
+  await page.waitForSelector('main[data-view="epg"]');
+  check(await page.inputValue('#st-channel') === '24', 'wybór kanału pamiętany w przeglądarce');
+  await page.goto(`${BASE}/#antena`);
+  await page.waitForSelector('main[data-view="antena"]');
+  await rerender(() => page.selectOption('#st-channel', ''));
+  check((await cardTitles()).length >= 2, 'antena: „Wszystkie kanały” przywraca listę');
+
   await page.goto(`${BASE}/#kanaly`);
   await page.waitForSelector('main[data-view="kanaly"]');
   await rerender(() => page.click('text=+ Nowy kanał'));

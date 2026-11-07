@@ -1,7 +1,7 @@
 // Widok „Grafika kanału” (R9); Sloty na żywo i Audycje LIVE – views/live.js.
 // Dane VizRS CG Playout przez pośrednika serwera /api/cg/… (token CG zostaje w serwerze).
 
-import { VIEWS, S, h, head, panel, pill, btn, table, toast, api, cmd, cmdNote, confirmDlg, dialog, has, route, dateTime, vizrsPreview } from '../core.js';
+import { VIEWS, S, h, head, panel, pill, btn, table, toast, api, cmd, cmdNote, confirmDlg, dialog, has, route, dateTime, vizrsPreview, onChannel } from '../core.js';
 
 /** Zapytanie do CG Playout przez serwer panelu; zwraca `result` albo rzuca ApiError. */
 export async function cg(path, method = 'GET', body) {
@@ -41,6 +41,8 @@ VIEWS.grafika = async () => {
         { empty: 'Show VizRS nie ma stron dla tego kanału (albo CG Playout nie widzi VizRS).' }));
     } catch (e) { pagesBox.replaceChildren(cgError(e)); }
   };
+  // kanał z paska górnego jako domyślny wybór stron (i anteny podglądu)
+  if (S.channel && channels.some((c) => onChannel(c.number))) pick.value = S.channel;
   pick.addEventListener('change', loadPages);
   if (S.status.cg && !(health instanceof Error)) loadPages();
 

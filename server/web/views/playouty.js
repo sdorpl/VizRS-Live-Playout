@@ -6,7 +6,7 @@
 // ostatnią pozycję (Id = −1, najwyższy Index); ReplacePlayoutAlternateScheduleItems zapisuje pozycję
 // o najwyższym Index jako harmonogram główny. Panel pokazuje harmonogram główny jako osobne pole edytora.
 
-import { VIEWS, h, btn, panel, pill, cmd, pl, table, toast, confirmDlg, route, dateTime, isFiller, cmdNote } from '../core.js';
+import { VIEWS, h, btn, panel, pill, cmd, pl, table, toast, confirmDlg, route, dateTime, isFiller, cmdNote, onChannel } from '../core.js';
 import { form } from '../form.js';
 import { crudView, itemsEditor } from '../parts.js';
 import { build } from './antena.js';
@@ -72,7 +72,7 @@ VIEWS.playouty = crudView({
   load: async () => {
     const [res, channels, schedules] = await Promise.all([
       cmd('GetPagedPlayouts', { Query: '', PageNum: 0, PageSize: 500 }), cmd('GetAllChannels', { ShowDisabled: true }), cmd('GetAllProgramSchedules')]);
-    const rows = (res?.Page || []).sort((a, b) => (parseFloat(a.ChannelNumber) || 0) - (parseFloat(b.ChannelNumber) || 0));
+    const rows = (res?.Page || []).filter((p) => onChannel(p.ChannelNumber)).sort((a, b) => (parseFloat(a.ChannelNumber) || 0) - (parseFloat(b.ChannelNumber) || 0));
     channels.sort((a, b) => (parseFloat(a.Number) || 0) - (parseFloat(b.Number) || 0));
     schedules.sort((a, b) => a.Name.localeCompare(b.Name, 'pl'));
     return { rows, channels, schedules };

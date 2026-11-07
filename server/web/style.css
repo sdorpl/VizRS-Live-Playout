@@ -53,6 +53,9 @@ label { color: var(--dim); }
 .side a { display: flex; align-items: center; gap: 8px; padding: 5px 14px; text-decoration: none; color: #b9bec8; border-left: 3px solid transparent; }
 .side a:hover { background: #1a1d22; color: var(--text); }
 .side a.on { background: var(--sel); color: #fff; border-left-color: var(--acc); }
+.side a .n { margin-left: auto; font-size: 11px; color: var(--dim); font-variant-numeric: tabular-nums; }
+#st-channel { width: auto; max-width: 240px; }
+#st-channel.on { border-color: var(--acc); color: var(--acc); }
 .side a.viz::after { content: "VizRS"; margin-left: auto; font-size: 10px; color: var(--acc); border: 1px solid var(--acc-d); border-radius: 8px; padding: 0 5px; }
 main { overflow: auto; padding: 16px 18px 40px; min-width: 0; display: grid; gap: 14px; align-content: start; grid-auto-rows: max-content; outline: none; }
 
@@ -131,7 +134,7 @@ pre.out { margin: 0; font: 12px/1.5 var(--mono); background: #0e0f12; border: 1p
   .side h3 { display: none; }
   .side a { white-space: nowrap; border-left: 0; border-bottom: 3px solid transparent; }
   .side a.on { border-bottom-color: var(--acc); }
-  .side a.viz::after { display: none; }
+  .side a.viz::after, .side a .n { display: none; }
 }
 
 /* formularz z metadanych (form.js) */

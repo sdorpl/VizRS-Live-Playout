@@ -9,7 +9,11 @@ export const S = {
   meta: new Map(),   // nazwa komendy -> {name, kind, parameters}
   timers: [],
   vizrsAnt: null,    // wybrana antena kanału w podglądzie VizRS
+  channel: '',       // kanał wybrany w pasku górnym ('' = wszystkie) – filtr ekranów kanałowych
 };
+
+/** Czy kanał o numerze `num` przechodzi przez wybór kanału z paska górnego (pusty wybór = wszystkie). */
+export const onChannel = (num) => !S.channel || String(num) === S.channel;
 
 // ---------- narzędzia DOM ----------
 export function h(tag, attrs, ...kids) {

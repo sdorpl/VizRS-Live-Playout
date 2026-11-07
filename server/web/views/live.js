@@ -2,7 +2,7 @@
 // przeniesione do VizRS Live. Logika (odbiór sygnału, przejęcie kanału, pliki audycji) zostaje w CG Playout;
 // panel rozmawia z nim przez pośrednika serwera /api/cg/live/… (token CG zostaje w serwerze).
 
-import { VIEWS, S, h, head, panel, pill, btn, table, toast, cmd, cmdNote, confirmDlg, dialog, has, route, pad2, hm, operatorName } from '../core.js';
+import { VIEWS, S, h, head, panel, pill, btn, table, toast, cmd, cmdNote, confirmDlg, dialog, has, route, pad2, hm, operatorName, onChannel } from '../core.js';
 import { cg } from './grafika.js';
 
 const cgMissing = () => h('div', { class: 'note' },
@@ -159,7 +159,7 @@ function channelCard(c, receivedAt) {
 const GUIDE_KEY = 'vizrs-live-guide';
 
 function guideBox(state) {
-  const list = state.channels || [];
+  const list = (state.channels || []).filter((c) => onChannel(c.number));
   let ch = store.get(GUIDE_KEY);
   if (!list.some((c) => c.number === ch) && list.length) ch = list[0].number;
   const now = cgNow();
@@ -210,7 +210,7 @@ function signature(state) {
 function repaint(initial) {
   if (!view || (!initial && !view.root.isConnected)) return;
   const { state, receivedAt } = view;
-  const list = state.channels || [];
+  const list = (state.channels || []).filter((c) => onChannel(c.number));
   view.status.replaceChildren(statusBar(state));
   view.cards.replaceChildren(...(list.length ? list.map((c) => channelCard(c, receivedAt)) : [h('div', { class: 'note' }, 'CG Playout nie zna jeszcze kanałów (synchronizacja z legacy co 30 s), a żaden nadawca nie nadaje.')]));
   view.guide.replaceChildren(...guideBox(state));

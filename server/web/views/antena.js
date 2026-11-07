@@ -1,7 +1,7 @@
 // Widoki grupy „Antena”: Na antenie, Przewodnik EPG.
 
 import { openMonitor } from '../player.js';
-import { S, VIEWS, h, btn, pill, head, panel, cmdNote, toast, confirmDlg, cmd, route, pl, hm, dur, isFiller, trioLink, vizrsPreview } from '../core.js';
+import { S, VIEWS, h, btn, pill, head, panel, cmdNote, toast, confirmDlg, cmd, route, pl, hm, dur, isFiller, trioLink, vizrsPreview, onChannel } from '../core.js';
 
 /** Przebudowa playoutu przez kolejkę legacy (też w widoku Playouty). */
 export async function build(p, mode) {
@@ -14,7 +14,8 @@ export async function build(p, mode) {
 }
 
 VIEWS.antena = async () => {
-  const [channels, playouts] = await Promise.all([cmd('GetAllChannels', { ShowDisabled: false }), cmd('GetPagedPlayouts', { Query: '', PageNum: 0, PageSize: 500 })]);
+  const [allChannels, playouts] = await Promise.all([cmd('GetAllChannels', { ShowDisabled: false }), cmd('GetPagedPlayouts', { Query: '', PageNum: 0, PageSize: 500 })]);
+  const channels = allChannels.filter((c) => onChannel(c.Number));
   const byNumber = new Map((playouts?.Page || []).map((p) => [p.ChannelNumber, p]));
   const items = await Promise.all(channels.map(async (c) => {
     const p = byNumber.get(c.Number);
@@ -81,7 +82,7 @@ VIEWS.antena = async () => {
 
 VIEWS.epg = async () => {
   const res = await cmd('GetPagedPlayouts', { Query: '', PageNum: 0, PageSize: 100 });
-  const rows = (res?.Page || []).sort((a, b) => (parseFloat(a.ChannelNumber) || 0) - (parseFloat(b.ChannelNumber) || 0));
+  const rows = (res?.Page || []).filter((p) => onChannel(p.ChannelNumber)).sort((a, b) => (parseFloat(a.ChannelNumber) || 0) - (parseFloat(b.ChannelNumber) || 0));
   const lists = await Promise.all(rows.map((p) => cmd('GetFuturePlayoutItemsById', { PlayoutId: p.PlayoutId, ShowFiller: true, PageNum: 0, PageSize: 80 }).then((r) => r?.Page || []).catch(() => [])));
   const t0 = new Date(); t0.setMinutes(t0.getMinutes() < 30 ? 0 : 30, 0, 0);
   const span = 4 * 3600e3, t1 = +t0 + span;
