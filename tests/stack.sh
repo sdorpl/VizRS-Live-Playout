@@ -11,7 +11,8 @@
 # Inna wersja legacy (aktualizacja, DOKUMENTACJA §6): LEGACY_IMAGE=ghcr.io/ersatztv/legacy:<wersja> tests/stack.sh up
 #   (najlepiej z osobnym VIZRS_LIVE_TEST_DIR – nowsze legacy migruje bazę i starsze już jej nie otworzy)
 # Pełna bramka przed commitem: tests/gate.sh
-# Pamięć: dane na dysku, nie w /tmp (często tmpfs = RAM); legacy z workstation GC i limitem VIZRS_LIVE_TEST_MEM (domyślnie 1g;
+# Pamięć: dane na dysku, nie w /tmp (często tmpfs = RAM); legacy z workstation GC i limitem VIZRS_LIVE_TEST_MEM (domyślnie 1536m – e2e ogląda kanał,
+#   a ffmpeg legacy przy 1080p to ok. 775 MB;
 #   legacy ma w runtimeconfig Server GC – sterta na każdy rdzeń); VIZRS_LIVE_TEST_MEM=0 – bez limitu.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -19,7 +20,7 @@ cd "$(dirname "$0")/.."
 [ -f tests/local.env ] && . tests/local.env
 
 DIR="${VIZRS_LIVE_TEST_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/vizrs-live-test}"
-MEM="${VIZRS_LIVE_TEST_MEM:-1g}"
+MEM="${VIZRS_LIVE_TEST_MEM:-1536m}"
 # limit pamięci kontenera (docker run …): pusty przy VIZRS_LIVE_TEST_MEM=0
 mem_limit() { [ "$MEM" = 0 ] || printf -- '--memory=%s --memory-swap=%s' "$1" "$1"; }
 TOKEN="test-token-0123456789"

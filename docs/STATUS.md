@@ -6,7 +6,7 @@
 
 ## Bieżący etap
 
-**Wydanie 1.0.0** (2026-11-07) z ErsatzTV legacy **v26.12.0** (sprawdzone też z v26.11.6). Plan rozbudowy R0–R12 zrobiony w całości; zawartość wydań: [CHANGELOG.md](../CHANGELOG.md). Po wydaniu (sekcja „Niewydane”): VizRS Live Panel z CG Playout `/live` wchłonięty, a w CG Playout usunięty (zostaje tylko API `/api/live/*`) – Sloty na żywo jako stanowisko MCR, Audycje LIVE, studio i nazwa stanowiska w pasku górnym (R12).
+**Wydanie 1.0.0** (2026-11-07) z ErsatzTV legacy **v26.12.0** (sprawdzone też z v26.11.6). Plan rozbudowy R0–R12 zrobiony w całości; zawartość wydań: [CHANGELOG.md](../CHANGELOG.md). Po wydaniu (sekcja „Niewydane”): VizRS Live Panel z CG Playout `/live` wchłonięty, a w CG Playout usunięty (zostaje tylko API `/api/live/*`) – Sloty na żywo jako stanowisko MCR, Audycje LIVE, studio i nazwa stanowiska w pasku górnym (R12). Podgląd strumienia kanału w panelu (okno podglądu, własny odtwarzacz MSE równany do zegara anteny, pośrednik `/api/stream/…`).
 
 **Grafika i sloty na żywo** – przez **VizRS CG Playout** (`../VizRS CG Playout`): reguły grafiki (`/api/live/graphics`), stan wejść, przejęcie kanału, audycje LIVE. Logika zostaje w CG Playout; panel woła jego API przez pośrednika `/api/cg/…`.
 

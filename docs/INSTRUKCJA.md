@@ -17,6 +17,7 @@ Pasek górny: stan mostu do legacy (zielony = działa) i licznik playoutów z b�
 | Chcę… | Ekran | Jak |
 |---|---|---|
 | zobaczyć, co leci teraz i dalej | **Na antenie** | teraz / następnie z postępem, najbliższe pozycje każdego kanału |
+| obejrzeć kanał | **Podgląd** (pasek górny) albo **Podgląd ▶** na karcie kanału w Na antenie | okno w prawym dolnym rogu, zostaje przy zmianie ekranów; obraz idzie równo z zegarem anteny (stan „NA ŻYWO”); dźwięk domyślnie wyłączony („Dźwięk”), „Większy”, „Pełny” (pełny ekran), × zamyka. Gdy kanału nikt nie ogląda, start trwa do kilkunastu sekund |
 | sprawdzić przewodnik | **Przewodnik EPG** | oś 4 h wszystkich kanałów |
 | dodać / zmienić kanał | **Kanały** | „+ Nowy kanał”, formularz, „Załóż kanał”; zmiana → „Zapisz”; logo: wgraj obraz albo podaj adres |
 | dodać nowe pliki | **Biblioteki** → „Skanuj” | pliki muszą leżeć w katalogu mediów serwera; po skanie widać je w **Przeglądarce** |
@@ -51,7 +52,7 @@ Czerwony komunikat „legacy odrzucił: …” to odmowa ErsatzTV legacy z jego 
 |---|---|
 | pasek: most **czerwony**, ekrany puste | legacy nie działa albo się restartuje (start trwa do minuty). Odczekaj; dalej czerwony → **Diagnostyka** (komunikat błędu) i administrator (RUNBOOK „Awarie”) |
 | licznik ostrzeżeń playoutów > 0 | **Playouty** – kanał z błędem budowy; zwykle pusta kolekcja albo brak treści w harmonogramie. Popraw, „Przebuduj” |
-| kanał nie gra / czarny obraz | **Diagnostyka** → test odtwarzania (odnośnik HLS/TS kanału); **Logi** (próg Warning/Error); sprawdź, czy kanał ma playout i pozycje na **Na antenie** |
+| kanał nie gra / czarny obraz | **Podgląd** kanału albo **Diagnostyka** → test odtwarzania („Odtwórz w panelu”, odnośnik HLS/TS do VLC); **Logi** (próg Warning/Error); sprawdź, czy kanał ma playout i pozycje na **Na antenie** |
 | brak nowych plików | **Biblioteki** → „Skanuj”; plik w katalogu, którego biblioteka nie obejmuje, nie pojawi się |
 | EPG puste u widzów | „Przebuduj”; XMLTV pokazuje tylko zbudowane dni (Ustawienia → przewodnik XMLTV) |
 | „wymaga komendy X na białej liście mostu” | wersja mostu nie zna funkcji – administrator |

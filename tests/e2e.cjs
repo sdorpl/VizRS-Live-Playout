@@ -1138,6 +1138,38 @@ function check(cond, msg) {
   check(await page.$('main[data-view="harmonogramy"]') !== null, 'pokrycie: przejście do ekranu panelu');
 
 
+  // ---------- Podgląd strumienia kanału (player.js + mux.js, pośrednik /api/stream/…) ----------
+  // Prawdziwy strumień legacy (silnik Next) kanału 24 z seed: MSE w Chromium, obraz równany do zegara anteny.
+  {
+    const master = await fetch(`${BASE}/api/stream/24.m3u8`);
+    const mtext = await master.text();
+    check(master.ok && /^\/api\/stream\/session\/24\/[^\s]+\.m3u8$/m.test(mtext) && !/http:\/\//.test(mtext) && Number(master.headers.get('x-vizrs-now')) > 0,
+      'podgląd: playlista kanału przez panel, adresy sesji przepisane na /api/stream, zegar serwera');
+    check((await fetch(`${BASE}/api/stream/session/24/..%2F..%2Fetc.ts`)).status === 404 && (await fetch(`${BASE}/api/stream/24.ts`)).status === 404,
+      'podgląd: pośrednik przepuszcza tylko HLS kanału (biała lista)');
+    await tab('antena');
+    await page.click('.panel:has(h2:text-is("24 · INFO24")) button:has-text("Podgląd")');
+    await page.waitForSelector('#monitor:not([hidden])');
+    const playing = await page.waitForFunction(() => {
+      const v = document.querySelector('#mon-video');
+      return v.currentTime > 0 && !v.paused && v.videoWidth > 0 && document.querySelector('#mon-state').textContent === 'NA ŻYWO';
+    }, null, { timeout: 40000 }).then(() => true, () => false);
+    check(playing, `podgląd: kanał 24 gra w panelu (${await page.textContent('#mon-state')} · ${await page.textContent('#mon-info')})`);
+    check(await page.inputValue('#mon-ch') === '24', 'podgląd: wybrany kanał z karty Na antenie');
+    const t1 = await page.evaluate(() => document.querySelector('#mon-video').currentTime);
+    await tab('kanaly');
+    await page.waitForTimeout(5000);
+    const st = await page.evaluate(() => {
+      const v = document.querySelector('#mon-video');
+      return { t: v.currentTime, w: v.videoWidth, h: v.videoHeight, dropped: v.getVideoPlaybackQuality().droppedVideoFrames, info: document.querySelector('#mon-info').textContent };
+    });
+    check(st.t - t1 > 4 && st.w === 1920 && st.h === 1080, `podgląd: gra dalej po zmianie ekranu, przez granice segmentów (${(st.t - t1).toFixed(1)} s, ${st.w}×${st.h}, zgubione klatki: ${st.dropped})`);
+    check(/zgodnie z zegarem anteny|opóźnienie 0\.\d s/.test(st.info) && /H\.264 · AAC/.test(st.info), `podgląd: obraz równo z zegarem anteny, H.264 i AAC (${st.info})`);
+    await shot('podglad');
+    await page.click('#mon-close');
+    check(await page.evaluate(() => document.querySelector('#monitor').hidden && !document.querySelector('#mon-video').getAttribute('src')), 'podgląd: zamknięcie odłącza strumień');
+  }
+
   // ---------- R11: wydanie 1.0 – przegląd bezpieczeństwa (osobny panel z tokenem na 18091) ----------
   check(st10.panel === '1.0.0' && st10.bridge?.result?.bridge === '1.0.0', `wersja 1.0.0: panel ${st10.panel}, most ${st10.bridge?.result?.bridge}`);
   const SEC = 'http://127.0.0.1:18091', PTOK = 'e2e-panel-token-0123456789';
@@ -1152,6 +1184,7 @@ function check(cond, msg) {
     const apiCsp = (await fetch(`${SEC}/api/status`)).headers.get('content-security-policy');
     check(!!apiCsp, 'bezpieczeństwo: CSP także w odpowiedziach API');
     check((await fetch(`${SEC}/api/status`)).status === 401, 'bezpieczeństwo: API bez logowania = 401');
+    check((await fetch(`${SEC}/api/stream/24.m3u8`)).status === 401, 'bezpieczeństwo: podgląd strumienia bez logowania = 401');
     check((await fetch(`${SEC}/api/login`, { method: 'POST', body: PTOK })).status === 403, 'bezpieczeństwo: POST bez X-VizRS-Live (CSRF) = 403');
     check((await fetch(`${SEC}/api/cmd/GetAllChannels`, { method: 'POST', headers: { 'X-VizRS-Live': '1', Origin: 'http://zla.strona' }, body: '{}' })).status === 401,
       'bezpieczeństwo: komenda bez sesji odrzucona');

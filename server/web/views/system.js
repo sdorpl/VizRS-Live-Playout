@@ -4,6 +4,7 @@
 import { S, VIEWS, api, h, btn, pill, head, panel, cmdNote, table, cmd, pl, toast, confirmDlg, route, hms, pad2, missingNote, has } from '../core.js';
 import { form } from '../form.js';
 import { contentPicker } from '../parts.js';
+import { openMonitor } from '../player.js';
 
 // ---------- Ustawienia ----------
 
@@ -244,20 +245,22 @@ async function maintenance(name, args, label, text) {
 
 function playbackTest(channels) {
   const base = S.status.streamUrl;
-  if (!base) return h('div', { class: 'empty' }, 'Panel bez --stream-url (VIZRS_LIVE_STREAM_URL) nie zna adresu strumieni legacy.');
   if (!channels.length) return h('div', { class: 'empty' }, 'Brak kanałów.');
   const sel = h('select', { id: 'pt-ch' }, channels.map((c) => h('option', { value: c.Number }, `${c.Number} · ${c.Name}`)));
   const links = h('div', { class: 'bar' });
   const draw = () => {
     const n = encodeURIComponent(sel.value);
     links.replaceChildren(
-      h('a', { href: `${base}/iptv/channel/${n}.m3u8`, target: '_blank', rel: 'noopener', id: 'pt-hls' }, 'HLS (.m3u8) ↗'),
-      h('a', { href: `${base}/iptv/channel/${n}.ts`, target: '_blank', rel: 'noopener' }, 'MPEG-TS (.ts) ↗'));
+      btn('Odtwórz w panelu ▶', () => openMonitor(sel.value), 'acc'),
+      base ? h('a', { href: `${base}/iptv/channel/${n}.m3u8`, target: '_blank', rel: 'noopener', id: 'pt-hls' }, 'HLS (.m3u8) ↗') : null,
+      base ? h('a', { href: `${base}/iptv/channel/${n}.ts`, target: '_blank', rel: 'noopener' }, 'MPEG-TS (.ts) ↗') : null);
   };
   sel.addEventListener('change', draw);
   draw();
   return h('div', { class: 'form' }, h('label', { for: 'pt-ch' }, 'Kanał'), sel, h('label', null, 'Strumień'), links,
-    h('div', { class: 'hint' }, 'Otwórz w VLC/mpv albo w przeglądarce z obsługą HLS (Safari). Pierwszy segment może potrwać kilka sekund. Szczegółowy test pliku z wyborem profilu legacy robi w Blazorze – panel go nie powtarza (DOKUMENTACJA §5).'));
+    h('div', { class: 'hint' }, '„Odtwórz w panelu” otwiera okno podglądu (ten sam strumień, co u widzów, równany do zegara anteny). ',
+      base ? 'Odnośniki – do VLC/mpv. ' : 'Odnośniki do VLC/mpv – po ustawieniu --stream-url (VIZRS_LIVE_STREAM_URL). ',
+      'Szczegółowy test pliku z wyborem profilu legacy robi w Blazorze – panel go nie powtarza (DOKUMENTACJA §5).'));
 }
 
 // ---------- Zamknięcie web GUI legacy (R10) ----------

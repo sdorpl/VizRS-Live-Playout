@@ -270,3 +270,13 @@ details.how[open] summary { margin-bottom: 8px; }
 .live-side p { margin: 0; }
 .live-side select { min-width: 0; flex: 1; }
 dl.kv dd { flex-wrap: wrap; }
+
+/* Podgląd strumienia kanału (player.js): okno w rogu, zostaje przy zmianie ekranów. */
+.monitor { position: fixed; right: 14px; bottom: 14px; z-index: 40; width: 420px; max-width: calc(100vw - 28px); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 8px 30px #000a; overflow: hidden; }
+.monitor.big { width: 820px; }
+.monitor header { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 5px 7px; background: #0b0c0e; border-bottom: 1px solid var(--line); }
+.monitor header select { width: auto; flex: 0 1 auto; min-width: 120px; max-width: 200px; }
+.monitor header button { padding: 2px 7px; }
+.monitor video { display: block; width: 100%; aspect-ratio: 16 / 9; background: #000; }
+.monitor .mon-foot { display: flex; align-items: center; gap: 7px; padding: 4px 7px; min-height: 26px; font-size: 12px; }
+.monitor .mon-foot .pill { flex: none; }

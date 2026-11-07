@@ -50,6 +50,16 @@ const STATIC: &[(&str, &str, &str)] = &[
         include_str!("../web/when.js"),
     ),
     (
+        "/player.js",
+        "text/javascript; charset=utf-8",
+        include_str!("../web/player.js"),
+    ),
+    (
+        "/mux.js",
+        "text/javascript; charset=utf-8",
+        include_str!("../web/mux.js"),
+    ),
+    (
         "/views/antena.js",
         "text/javascript; charset=utf-8",
         include_str!("../web/views/antena.js"),
@@ -483,6 +493,9 @@ fn route(app: &App, req: &Request) -> Response {
             &req.body,
             &operator_name(req.header("x-operator")),
         ),
+        ("GET", p) if p.starts_with("/api/stream/") => {
+            stream_proxy(app, &p["/api/stream/".len()..])
+        }
         ("GET", "/api/commands") => forward(app.bridge.get("/commands"), "commands"),
         ("POST", p) if p.starts_with(http::UPLOAD_PREFIX) => {
             upload(app, req, &p[http::UPLOAD_PREFIX.len()..])
@@ -618,6 +631,97 @@ fn forward(r: Result<bridge::Reply, String>, what: &str) -> Response {
             502,
             &format!("most: nieoczekiwana odpowiedź {} dla {what}", rep.status),
         ),
+        Err(e) => Response::error(502, &e),
+    }
+}
+
+/// Numer kanału ErsatzTV w adresie strumienia: cyfry z kropkami (`24`, `1.1`), bez `..`.
+fn channel_number(s: &str) -> bool {
+    (1..=16).contains(&s.len())
+        && s.chars().all(|c| c.is_ascii_digit() || c == '.')
+        && s.starts_with(|c: char| c.is_ascii_digit())
+        && s.ends_with(|c: char| c.is_ascii_digit())
+        && !s.contains("..")
+}
+
+/// Biała lista podglądu strumienia (`/api/stream/…`) → ścieżka w legacy i typ treści.
+/// Tylko HLS kanału: playlista kanału (zawsze segmenter – ta sama sesja legacy, co u widzów,
+/// bez drugiego kodowania) oraz pliki sesji (`/iptv/session/{kanał}/{plik}`: playlista i segmenty).
+pub fn stream_path(rest: &str) -> Option<(String, &'static str)> {
+    const M3U8: &str = "application/vnd.apple.mpegurl";
+    if let Some(ch) = rest.strip_suffix(".m3u8").filter(|c| channel_number(c)) {
+        return Some((
+            format!("/iptv/channel/{ch}.m3u8?mode=segmenter&subtitles=false"),
+            M3U8,
+        ));
+    }
+    let ["session", ch, file] = rest.split('/').collect::<Vec<_>>()[..] else {
+        return None;
+    };
+    let (name, ext) = file.rsplit_once('.')?;
+    let ct = match ext {
+        "m3u8" => M3U8,
+        "ts" => "video/mp2t",
+        "m4s" | "mp4" => "video/mp4",
+        _ => return None,
+    };
+    let name_ok = (1..=64).contains(&name.len())
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-');
+    (channel_number(ch) && name_ok).then(|| (format!("/iptv/session/{ch}/{file}"), ct))
+}
+
+/// Adresy sesji w playliście legacy (`http://host:port/iptv/session/…`, legacy składa je z nagłówka
+/// `Host` – tu adres wewnętrzny) → ścieżki pośrednika panelu (`/api/stream/session/…`).
+pub fn rewrite_playlist(text: &str) -> String {
+    const FROM: &str = "/iptv/session/";
+    let mut out = String::with_capacity(text.len() + 64);
+    let mut rest = text;
+    while let Some(i) = rest.find(FROM) {
+        // początek adresu: za białym znakiem, cudzysłowem albo `=`
+        let start = rest[..i]
+            .rfind(|c: char| c.is_whitespace() || c == '"' || c == '=')
+            .map_or(0, |j| j + 1);
+        let url_prefix = &rest[start..i];
+        out.push_str(&rest[..start]);
+        if !url_prefix.is_empty() && !url_prefix.contains("://") {
+            out.push_str(url_prefix); // coś innego niż adres – bez zmian
+            out.push_str(FROM);
+        } else {
+            out.push_str("/api/stream/session/");
+        }
+        rest = &rest[i + FROM.len()..];
+    }
+    out.push_str(rest);
+    out
+}
+
+/// `GET /api/stream/…` – podgląd kanału w panelu: HLS legacy przez serwer panelu (ta sama sesja
+/// segmentera, co u widzów; nic się nie koduje drugi raz). Playlisty dostają przepisane adresy
+/// i `X-VizRS-Now` (zegar serwera w ms – odtwarzacz równa się do `PROGRAM-DATE-TIME`).
+fn stream_proxy(app: &App, rest: &str) -> Response {
+    let Some((path, ct)) = stream_path(rest) else {
+        return Response::error(404, "nieznany adres strumienia");
+    };
+    match app.bridge.get_plain(&path) {
+        Ok(r) if r.status == 200 => {
+            let playlist = ct.ends_with("mpegurl");
+            let body = if playlist {
+                rewrite_playlist(&String::from_utf8_lossy(&r.body)).into_bytes()
+            } else {
+                r.body
+            };
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| d.as_millis());
+            Response::new(200, ct, body).with_header("X-VizRS-Now", now.to_string())
+        }
+        Ok(r) if r.status == 404 => Response::error(
+            404,
+            "legacy nie podał strumienia (kanał wyłączony, sesja wygasła albo nie wystartowała – Logi legacy)",
+        ),
+        Ok(r) => Response::error(502, &format!("legacy: odpowiedź {} dla strumienia", r.status)),
         Err(e) => Response::error(502, &e),
     }
 }
@@ -1022,6 +1126,68 @@ mod tests {
         assert_eq!(
             (c.cg_url.as_str(), c.cg_token.as_str()),
             ("http://cg:7700", "x")
+        );
+    }
+
+    #[test]
+    fn stream_whitelist() {
+        let p = |r: &str| stream_path(r).map(|(p, _)| p);
+        assert_eq!(
+            p("24.m3u8").as_deref(),
+            Some("/iptv/channel/24.m3u8?mode=segmenter&subtitles=false")
+        );
+        assert_eq!(
+            p("1.1.m3u8").as_deref(),
+            Some("/iptv/channel/1.1.m3u8?mode=segmenter&subtitles=false")
+        );
+        assert_eq!(
+            p("session/24/live000123.ts").as_deref(),
+            Some("/iptv/session/24/live000123.ts")
+        );
+        assert_eq!(
+            stream_path("session/24/live.m3u8").unwrap().1,
+            "application/vnd.apple.mpegurl"
+        );
+        for bad in [
+            "x.m3u8",
+            "..m3u8",
+            "24.ts",
+            "session/../live.m3u8",
+            "session/24/../x.ts",
+            "session/24/a/b.ts",
+            "session/24/live.html",
+            "session/24/.ts",
+            "session/1..2/live.ts",
+            "session/24",
+            "",
+        ] {
+            assert!(stream_path(bad).is_none(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn playlist_rewrite() {
+        let master = "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\nhttp://ersatztv:8409/iptv/session/24/live.m3u8\n";
+        assert_eq!(
+            rewrite_playlist(master),
+            "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\n/api/stream/session/24/live.m3u8\n"
+        );
+        assert_eq!(
+            rewrite_playlist("#EXT-X-MEDIA:URI=\"http://h/iptv/session/1/s.m3u8\"\nlive000001.ts"),
+            "#EXT-X-MEDIA:URI=\"/api/stream/session/1/s.m3u8\"\nlive000001.ts"
+        );
+        assert_eq!(rewrite_playlist("x/iptv/session/1"), "x/iptv/session/1");
+    }
+
+    #[test]
+    fn stream_route_needs_login() {
+        assert_eq!(
+            route(&app(Some("t")), &req("GET", "/api/stream/24.m3u8", &[])).status,
+            401
+        );
+        assert_eq!(
+            route(&app(None), &req("GET", "/api/stream/session/24/x.exe", &[])).status,
+            404
         );
     }
 

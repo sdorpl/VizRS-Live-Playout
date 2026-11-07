@@ -5,7 +5,7 @@ use std::net::TcpStream;
 use std::time::Duration;
 
 /// CSP każdej odpowiedzi (też UI z `--web` i API): bez skryptów i stylów inline, bez osadzania panelu w ramce.
-pub const CSP: &str = "default-src 'self'; img-src 'self' data: http: https:; frame-src http: https:; connect-src 'self'; style-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
+pub const CSP: &str = "default-src 'self'; img-src 'self' data: http: https:; frame-src http: https:; connect-src 'self'; media-src 'self' blob:; style-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
 pub const MAX_HEAD: usize = 16 * 1024;
 pub const MAX_BODY: usize = 1024 * 1024;
 /// Limit treści dla wgrywania obrazów (`/api/upload/…`).

@@ -2,9 +2,10 @@
 // Dane: komendy ErsatzTV legacy przez most (POST /api/cmd/{Nazwa}); moduły:
 //   core.js (DOM, API, komunikaty, router, PL) · form.js (formularz z metadanych)
 //   parts.js („lista + edytor”, edytor pozycji, wybór treści, grupy, oś doby) · when.js (dni, miesiące, zakres dat)
-//   · views/*.js (ekrany po grupach menu)
+//   · player.js + mux.js (podgląd strumienia kanału) · views/*.js (ekrany po grupach menu)
 
 import { S, main, h, btn, head, api, cmd, ApiError, route, hms, dialog, operatorName } from './core.js';
+import { openMonitor } from './player.js';
 import './views/antena.js';
 import './views/kanaly.js';
 import './views/profile.js';
@@ -87,6 +88,7 @@ function clock() {
 async function start() {
   clock();
   operatorButton();
+  document.getElementById('st-monitor').addEventListener('click', () => openMonitor());
   document.getElementById('logout').addEventListener('click', async () => { await api('/api/logout', { method: 'POST', body: '' }); location.reload(); });
   try {
     await refreshStatus();

@@ -1,5 +1,6 @@
 // Widoki grupy „Antena”: Na antenie, Przewodnik EPG.
 
+import { openMonitor } from '../player.js';
 import { S, VIEWS, h, btn, pill, head, panel, cmdNote, toast, confirmDlg, cmd, route, pl, hm, dur, isFiller } from '../core.js';
 
 /** Przebudowa playoutu przez kolejkę legacy (też w widoku Playouty). */
@@ -43,6 +44,7 @@ VIEWS.antena = async () => {
           : h('div', { class: 'dim' }, p ? 'Teraz nic nie jest zaplanowane – leci wypełniacz zapasowy kanału.' : 'Kanał nie ma playoutu – załóż go w widoku Playouty.'),
         next.length ? h('div', { class: 'dim' }, 'Następnie: ', next.map((n, j) => [j ? ' · ' : '', h('span', { class: 'num' }, hm(new Date(n.Start))), ' ', n.Title])) : null,
         h('div', { class: 'bar' },
+          btn('Podgląd ▶', () => openMonitor(c.Number)),
           p ? btn('Przebuduj', () => build(p, 'Refresh')) : null,
           p ? btn('Od nowa', () => build(p, 'Reset'), 'danger') : null,
           stream,

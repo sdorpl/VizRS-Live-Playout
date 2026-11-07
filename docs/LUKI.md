@@ -20,7 +20,7 @@ Ograniczenia samego legacy, których panel nie obejdzie bez zmiany legacy (np. j
 
 | # | Luka | Uwagi |
 |---|---|---|
-| 8 | Test odtwarzania: tylko odnośniki do strumienia, bez odtwarzacza w panelu | legacy przekazuje między krokami obiekty wewnętrzne (DOKUMENTACJA §5); odtwarzacz HLS bez bibliotek – do rozważenia |
+| 8 | Test odtwarzania pliku z wyborem profilu (jak w Blazorze legacy) – panel ma tylko podgląd kanału | legacy przekazuje między krokami obiekty wewnętrzne (DOKUMENTACJA §5) |
 | 9 | Brak postępu skanu biblioteki | legacy podaje go tylko zdarzeniami Blazora; panel przez 30 s odświeża liczby pozycji (DOKUMENTACJA §4 „Media”) |
 | 10 | Wynik „Sprawdź nakładanie pozycji” i zadań konserwacji tylko w Logach | zadania w tle legacy (`queued`) |
 | 11 | Stan silnika Next w Profilach (`GetNextProbe`, `RefreshNextProbe`, `GetNextDescribe`) | dostępne od legacy v26.12.0, nie na białej liście (DOKUMENTACJA §4 R5, §6) |
@@ -38,3 +38,4 @@ Ograniczenia samego legacy, których panel nie obejdzie bez zmiany legacy (np. j
 | 18 | Komendy na białej liście bez UI: czas folderów obrazów (`GetImageFolders`, `UpdateImageFolderDuration`), skan jednego serialu (`QueueShowScanByLibraryId`) | do dołożenia w Bibliotekach |
 | 19 | Głęboki skan źródeł zewnętrznych | pominięty (rzadko potrzebny, długo trwa) – DOKUMENTACJA §4 R8 |
 | 20 | Elementy graficzne legacy (YAML): tylko lista i „Wczytaj pliki elementów” | element VizRS zakłada CG Playout; patrz #14 |
+| 21 | Podgląd kanału: HEVC/AV1 tylko przez natywny HLS przeglądarki, dźwięk tylko AAC | `mux.js` przepakowuje H.264 + AAC; HEVC wymagałby `hvcC` (DOKUMENTACJA §3 „UI”) |

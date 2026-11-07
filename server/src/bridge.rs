@@ -82,6 +82,12 @@ impl Bridge {
         self.call_as(method, path, body, ct, "VizRS Live")
     }
 
+    /// GET zwykłej ścieżki usługi – bez przedrostka i bez tokenu (strumienie `/iptv/…` legacy,
+    /// które legacy podaje każdemu widzowi; token mostu nie wychodzi poza `/vizrs-bridge`).
+    pub fn get_plain(&self, path: &str) -> Result<Reply, String> {
+        self.request("GET", "", path, b"", "")
+    }
+
     fn call_as(
         &self,
         method: &str,
@@ -89,6 +95,28 @@ impl Bridge {
         body: &[u8],
         ct: &str,
         operator: &str,
+    ) -> Result<Reply, String> {
+        let auth = format!(
+            "{}: {}{}\r\nX-Operator: {operator}\r\nContent-Type: {ct}\r\n",
+            self.auth,
+            if self.auth == "Authorization" {
+                "Bearer "
+            } else {
+                ""
+            },
+            self.token,
+        );
+        self.request(method, self.prefix, path, body, &auth)
+    }
+
+    /// Jedno żądanie HTTP/1.1; `extra` – dodatkowe wiersze nagłówka (każdy zakończony `\r\n`).
+    fn request(
+        &self,
+        method: &str,
+        prefix: &str,
+        path: &str,
+        body: &[u8],
+        extra: &str,
     ) -> Result<Reply, String> {
         let t = &self.target;
         let addr = (t.host.as_str(), t.port)
@@ -101,14 +129,10 @@ impl Bridge {
         let _ = s.set_read_timeout(Some(Duration::from_secs(60)));
         let _ = s.set_write_timeout(Some(Duration::from_secs(10)));
         let head = format!(
-            "{method} {}{}{path} HTTP/1.1\r\nHost: {}:{}\r\n{}: {}{}\r\nX-Operator: {operator}\r\nContent-Type: {ct}\r\nContent-Length: {}\r\nConnection: close\r\nUser-Agent: vizrs-live/{}\r\n\r\n",
+            "{method} {}{prefix}{path} HTTP/1.1\r\nHost: {}:{}\r\n{extra}Content-Length: {}\r\nConnection: close\r\nUser-Agent: vizrs-live/{}\r\n\r\n",
             t.base,
-            self.prefix,
             t.host,
             t.port,
-            self.auth,
-            if self.auth == "Authorization" { "Bearer " } else { "" },
-            self.token,
             body.len(),
             env!("CARGO_PKG_VERSION")
         );
