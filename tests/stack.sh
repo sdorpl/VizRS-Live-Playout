@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # Stos testowy VizRS Live na osobnych portach (nie rusza produkcyjnego ErsatzTV):
-#   legacy z mostem: 127.0.0.1:18409, panel: 127.0.0.1:18090, dane: $VIZRS_LIVE_TEST_DIR (domyślnie /tmp/vizrs-live-test)
+#   legacy z mostem: 127.0.0.1:18409, proxy dla widzów (R10): 127.0.0.1:18410, panel: 127.0.0.1:18090, dane: $VIZRS_LIVE_TEST_DIR (domyślnie /tmp/vizrs-live-test)
 #
 #   tests/stack.sh up      # buduje obraz mostu i panel, uruchamia, sprawdza most (smoke)
 #   tests/stack.sh seed    # wideo testowe + kanał INFO24 z ramówką – wszystko komendami przez panel (drugi raz nic nie dubluje)
 #   tests/stack.sh test    # e2e UI (tests/e2e.cjs) na działającym stosie; Playwright: PLAYWRIGHT_DIR albo tests/local.env
 #   tests/stack.sh down    # zatrzymuje (dane zostają)
 #   tests/stack.sh reset   # zatrzymuje i usuwa dane testowe ($VIZRS_LIVE_TEST_DIR)
+# Inna wersja legacy (aktualizacja, DOKUMENTACJA §6): LEGACY_IMAGE=ghcr.io/ersatztv/legacy:<wersja> tests/stack.sh up
+#   (najlepiej z osobnym VIZRS_LIVE_TEST_DIR – nowsze legacy migruje bazę i starsze już jej nie otworzy)
 # Pełna bramka przed commitem: tests/gate.sh
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -18,6 +20,9 @@ TOKEN="test-token-0123456789"
 # VizRS CG Playout w testach: atrapa z tests/e2e.cjs na 127.0.0.1:18700 (R9)
 CG_TOKEN="test-cg-token-0123456789"
 NAME="vizrs-live-test-legacy"
+PROXY_NAME="vizrs-live-test-proxy"
+NET="vizrs-live-test-net"
+PROXY="http://127.0.0.1:18410"
 BRIDGE="http://127.0.0.1:18409/vizrs-bridge"
 PANEL="http://127.0.0.1:18090"
 
@@ -47,23 +52,40 @@ expect() { # expect OPIS KOD_HTTP polecenie...
 case "${1:-}" in
   up)
     mkdir -p "$DIR/config"
-    docker build -q -f docker/legacy-bridge.Dockerfile -t vizrs-live-legacy:dev . >/dev/null
+    docker build -q -f docker/legacy-bridge.Dockerfile ${LEGACY_IMAGE:+--build-arg LEGACY_IMAGE="$LEGACY_IMAGE"} -t vizrs-live-legacy:dev . >/dev/null
     (cd server && cargo build --release -q)
-    docker rm -f "$NAME" >/dev/null 2>&1 || true
-    docker run -d --name "$NAME" -p 127.0.0.1:18409:8409 -e VIZRS_BRIDGE_TOKEN="$TOKEN" -v "$DIR/config:/config" vizrs-live-legacy:dev >/dev/null
+    docker rm -f "$NAME" "$PROXY_NAME" >/dev/null 2>&1 || true
+    docker network inspect "$NET" >/dev/null 2>&1 || docker network create "$NET" >/dev/null
+    docker run -d --name "$NAME" --network "$NET" -p 127.0.0.1:18409:8409 -e VIZRS_BRIDGE_TOKEN="$TOKEN" -v "$DIR/config:/config" vizrs-live-legacy:dev >/dev/null
+    # proxy jak w compose.yml (docker/proxy.Caddyfile); panel podaje widzom adres proxy
+    docker run -d --name "$PROXY_NAME" --network "$NET" -p 127.0.0.1:18410:8409 -e LEGACY_UPSTREAM="$NAME:8409" \
+      -v "$PWD/docker/proxy.Caddyfile:/etc/caddy/Caddyfile:ro" "${PROXY_IMAGE:-caddy:2.10-alpine}" >/dev/null
     wait_bridge
     pkill -f "[v]izrs-live --port 18090" 2>/dev/null || true
     nohup server/target/release/vizrs-live --port 18090 --bridge http://127.0.0.1:18409 --bridge-token "$TOKEN" \
-      --stream-url http://127.0.0.1:18409 --cg-url http://127.0.0.1:18700 --cg-token "$CG_TOKEN" >"$DIR/panel.log" 2>&1 &
+      --stream-url "$PROXY" --cg-url http://127.0.0.1:18700 --cg-token "$CG_TOKEN" >"$DIR/panel.log" 2>&1 &
     sleep 1
     # smoke: most i jego zabezpieczenia
     expect "most: zdrowie" 200 curl -s -H "X-VizRS-Token: $TOKEN" "$BRIDGE/health"
+    missing=$(curl -s -H "X-VizRS-Token: $TOKEN" "$BRIDGE/health" | grep -o '"commandsMissing":\[[^]]*\]')
+    if [ "$missing" = '"commandsMissing":[]' ]; then echo "ok   most: wszystkie komendy z białej listy są w legacy"; else echo "BŁĄD most: brak komend w legacy: $missing" >&2; exit 1; fi
     expect "most: zły token" 401 curl -s -H "X-VizRS-Token: zly" "$BRIDGE/health"
     expect "most: komenda spoza listy" 403 curl -s -X POST -H "X-VizRS-Token: $TOKEN" "$BRIDGE/command/SaveConfigElementByKey" -d '{}'
     expect "most: zapytanie" 200 curl -s -X POST -H "X-VizRS-Token: $TOKEN" "$BRIDGE/command/GetAllChannels" -d '{}'
     expect "panel: status" 200 curl -s "$PANEL/api/status"
     expect "panel: POST bez X-VizRS-Live" 403 curl -s -X POST "$PANEL/api/cmd/GetAllChannels" -d '{}'
-    echo "panel: $PANEL/  ·  legacy: http://127.0.0.1:18409/  ·  dane: $DIR"
+    # proxy (R10): web GUI legacy i most zamknięte, strumienie i M3U/XMLTV otwarte
+    # świeża baza: legacy tworzy xmltv.xml chwilę po starcie (wcześniej 500)
+    for _ in $(seq 1 30); do curl -sf -o /dev/null "$PROXY/iptv/xmltv.xml" && break; sleep 1; done
+    expect "proxy: web GUI legacy /" 403 curl -s "$PROXY/"
+    expect "proxy: web GUI legacy /channels" 403 curl -s "$PROXY/channels"
+    expect "proxy: API legacy" 403 curl -s "$PROXY/api/channels"
+    expect "proxy: most" 403 curl -s -H "X-VizRS-Token: $TOKEN" "$PROXY/vizrs-bridge/health"
+    expect "proxy: POST do /iptv" 403 curl -s -X POST "$PROXY/iptv/channels.m3u"
+    expect "proxy: M3U" 200 curl -s "$PROXY/iptv/channels.m3u"
+    expect "proxy: XMLTV" 200 curl -s "$PROXY/iptv/xmltv.xml"
+    expect "proxy: HDHomeRun" 200 curl -s "$PROXY/discover.json"
+    echo "panel: $PANEL/  ·  widzowie (proxy): $PROXY/iptv/channels.m3u  ·  legacy: http://127.0.0.1:18409/  ·  dane: $DIR"
     ;;
   seed)
     if cmd GetAllChannels | grep -q '"Number":"24"'; then
@@ -93,7 +115,8 @@ case "${1:-}" in
   reset)
     case "$DIR" in /|/tmp|/home|"$HOME"|"") echo "reset: odmawiam usunięcia '$DIR'" >&2; exit 1 ;; esac
     pkill -f "[v]izrs-live --port 18090" 2>/dev/null || true
-    docker rm -f "$NAME" >/dev/null 2>&1 || true
+    docker rm -f "$NAME" "$PROXY_NAME" >/dev/null 2>&1 || true
+    docker network rm "$NET" >/dev/null 2>&1 || true
     # pliki w config/ tworzy legacy w kontenerze (root) – usuwa je kontener
     [ -d "$DIR" ] && docker run --rm -v "$DIR:/d" alpine sh -c 'rm -rf /d/* /d/.[!.]*' >/dev/null 2>&1 || true
     rm -rf "$DIR"
@@ -101,7 +124,7 @@ case "${1:-}" in
     ;;
   down)
     pkill -f "[v]izrs-live --port 18090" 2>/dev/null || true
-    docker rm -f "$NAME" >/dev/null 2>&1 || true
+    docker rm -f "$NAME" "$PROXY_NAME" >/dev/null 2>&1 || true
     echo "zatrzymane; dane: $DIR"
     ;;
   *)

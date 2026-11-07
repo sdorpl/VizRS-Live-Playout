@@ -1,6 +1,6 @@
 # VizRS Live – dokumentacja
 
-Wersja 0.4.0, sprawdzona z ErsatzTV legacy **v26.11.6** (obraz `ghcr.io/ersatztv/legacy`, silnik Next).
+Wersja 0.4.0, sprawdzona z ErsatzTV legacy **v26.11.6** i **v26.12.0** (obraz `ghcr.io/ersatztv/legacy`, silnik Next; aktualizacja – §6).
 
 ## 1. Składniki
 
@@ -11,6 +11,8 @@ Wersja 0.4.0, sprawdzona z ErsatzTV legacy **v26.11.6** (obraz `ghcr.io/ersatztv
 | UI panelu | `server/web/` (moduły ES, bez bibliotek) | ekrany na wzór web GUI legacy, po polsku; wbudowane w binarkę (`include_str!`), budowa w §3 „UI” |
 | obraz legacy z mostem | `docker/legacy-bridge.Dockerfile` | `FROM ghcr.io/ersatztv/legacy` + `VizRS.Bridge.dll` + `commands.txt` + 2 zmienne środowiskowe |
 | obraz panelu | `docker/live.Dockerfile` | statyczna binarka musl w `scratch` |
+| proxy dla widzów | `docker/proxy.Caddyfile` (obraz `caddy`, usługa `proxy` w `compose.yml`) | na zewnątrz tylko strumienie, M3U/XMLTV, obrazy i HDHomeRun; web GUI legacy i most – 403 (§8) |
+| CI | `.github/workflows/ci.yml`, `legacy-latest.yml` | bramka na GitHub Actions; co tydzień najnowsze legacy (§7) |
 
 ## 2. Most (VizRS Bridge)
 
@@ -78,6 +80,7 @@ Biała lista: jedna nazwa komendy w wierszu, `#` – komentarz. Nazwy nieznane w
 | `POST /api/login` | treść = token panelu; ustawia ciasteczko `vizrs_live` (HttpOnly, SameSite=Strict, 30 dni) |
 | `POST /api/logout` | usuwa ciasteczko |
 | `GET /api/status` | wersje, adresy, stan mostu (`bridge`, `bridgeError`) |
+| `GET /api/exposure` | (R10) kody HTTP ścieżek `/`, `/channels`, `/vizrs-bridge/health`, `/iptv/channels.m3u` pod adresem dla widzów (`--stream-url`), sprawdzane z serwera panelu: `{"url","error","probes":[{"path","status"}]}` |
 | `GET /api/commands` | lista z mostu |
 | `POST /api/cmd/{Nazwa}` | komenda przez most (nazwa: litery i cyfry) |
 | `GET\|POST\|PUT\|DELETE /api/cg/…` | pośrednik do VizRS CG Playout (R9), biała lista niżej; odpowiedź `{"ok":true,"result":<JSON CG>}`, odrzucenie przez CG (4xx) = `{"ok":false,"error":"CG Playout odrzucił: …"}`, brak `--cg-url` = 409 |
@@ -130,7 +133,7 @@ Nowy plik w `server/web/` trzeba dopisać do `STATIC` w `server/src/main.rs`; te
 | Sloty na żywo | CG Playout: `/api/live/state`, `/api/live/shows`, `/api/live/channels/…` | karta kanału: **sygnał studia** (kodek, dźwięk, czas), NA ANTENIE / WSTRZYMANY / RAMÓWKA, bieżąca pozycja, najbliższa audycja LIVE; **■ ZDEJMIJ** (z potwierdzeniem) / **▶ WPUŚĆ**, „studio także poza audycjami”, przebudowa ramówki; **audycje LIVE** (nowa, zmiana, usunięcie z potwierdzeniem, skan biblioteki) ze stanem kolekcji w legacy i najbliższą emisją; zdarzenia; odświeżanie co 5 s |
 | Ustawienia | `GetFFmpegSettings`, `UpdateFFmpegSettings`, `GetMpegTsScripts`, `GetPlayoutSettings`, `UpdatePlayoutSettings`, `GetXmltvSettings`, `UpdateXmltvSettings`, `GetLibraryRefreshInterval`, `UpdateLibraryRefreshInterval`, `GetHDHRTunerCount`, `UpdateHDHRTunerCount`, `GetHDHRUUID`, `GetLoggingSettings`, `UpdateLoggingSettings`, `GetUiSettings`, `UpdateUiSettings` (+ profile, znaki wodne, wypełniacze do list) | **pełna edycja ustawień legacy** w zakładkach jak Settings legacy: FFmpeg i strumienie, playouty, XMLTV, skaner i HDHomeRun, poziomy logów, web GUI legacy; zakładka „Panel i most” – konfiguracja panelu i stan mostu |
 | Logi | `GetRecentLogEntries` | najnowsze wpisy logu legacy: próg poziomu, wyszukiwanie w treści, stronicowanie po 200, odświeżanie co 5 s |
-| Diagnostyka | `GetAllHealthCheckResults` (też z `Refresh`), `GetTroubleshootingInfo`, `RefreshFFmpegCapabilities`, `EmptyTrash`, `DeleteOrphanedArtwork`, `DeleteOrphanedSubtitles`, `ReleaseMemory`, `GetAllChannels` + wszystkie z listy, zapytania wyboru treści | kontrole legacy („Sprawdź ponownie”), wersje i sprzęt (legacy, ffmpeg, procesor, karty grafiki), konserwacja z potwierdzeniami, test odtwarzania (odnośniki do strumienia HLS/TS kanału), konsola komend, wybór treści |
+| Diagnostyka | `GetAllHealthCheckResults` (też z `Refresh`), `GetTroubleshootingInfo`, `RefreshFFmpegCapabilities`, `EmptyTrash`, `DeleteOrphanedArtwork`, `DeleteOrphanedSubtitles`, `ReleaseMemory`, `GetAllChannels` + wszystkie z listy, zapytania wyboru treści | kontrole legacy („Sprawdź ponownie”), wersje i sprzęt (legacy, ffmpeg, procesor, karty grafiki), konserwacja z potwierdzeniami, test odtwarzania (odnośniki do strumienia HLS/TS kanału), konsola komend, wybór treści; **web GUI legacy dla widzów** (R10: wynik `/api/exposure` – zamknięte / widoczne / nie sprawdzono) i **pokrycie web GUI legacy** (lista kontrolna §8 z odnośnikami do ekranów) |
 
 Na białej liście są też komendy bez ekranu, używane przez `tests/stack.sh seed` i testy oraz dostępne w konsoli: `CreateLocalLibrary`, `QueueLibraryScanByLibraryId`, `GetProgramScheduleById`, `GetPlayoutIdByChannelNumber`.
 
@@ -161,7 +164,8 @@ Na białej liście są też komendy bez ekranu, używane przez `tests/stack.sh s
 - `DeleteProgramSchedule` usuwa kaskadowo playouty, które używają harmonogramu (klucz obcy `OnDelete(Cascade)` w legacy) – panel wymienia te kanały w potwierdzeniu usunięcia.
 - `ReplacePlayoutAlternateScheduleItems` z pustą listą legacy odrzuca („must not be empty”) – panel zawsze wysyła co najmniej harmonogram główny.
 - Część wyników legacy to encje bazy (np. `BuildStatus` w `GetPagedPlayouts`) – most serializuje je z pominięciem cykli; mogą być duże.
-- Web GUI legacy dalej działa na porcie 8409 (ten sam port co strumienie). Żeby operatorzy go nie używali, wystaw na zewnątrz tylko `/iptv/*` (np. przez odwrotne proxy) – w prototypie tego nie wymuszamy.
+- Web GUI legacy i strumienie są na tym samym porcie 8409 – legacy nie umie ich rozdzielić. Rozdziela proxy przed legacy (R10, §8); bez proxy web GUI jest dostępne dla każdego, kto widzi port.
+- (v26.12.0) `ReplacePlayoutTemplateItems`, `UpdateDefaultDeco`, `UpdateDeco`, `DeleteWatermark`… same zlecają synchronizację playoutów Next (`QueueSyncNextPlayouts`) – to odświeża serializację, nie przebudowuje playoutu; „Przebuduj” dalej potrzebne po zmianie kalendarza.
 - `PreviewPlaylistPlayout` buduje podgląd z pozycji z bazy (handler ustawia `PlaylistId`, a budowniczy playoutu czyta playlistę po id), nie z pozycji wysłanych w komendzie – podgląd niezapisanej playlisty daje „has no valid items”. Panel przed podglądem zapisuje pozycje („Zapisz i pokaż podgląd”).
 - Zagnieżdżone obiekty w komendach powtórek (`CreateRerunCollection`, `UpdateRerunCollection`: `MediaCollectionViewModel`, `MultiCollectionViewModel`…) most deserializuje tylko z kompletem pól konstruktora – panel wysyła pełne obiekty z pustymi nazwami (legacy czyta z nich tylko `Id`).
 - `GetDecosByDecoGroupId` zwraca deco bez treści (kolekcje wypełniacza i martwego powietrza, playlisty przerw = `null`, tylko id w bazie). Zapis `UpdateDeco` na podstawie tej listy skasowałby treść – edytor deco czyta i zapisuje na podstawie `GetDecoById` (test e2e pilnuje ponownego zapisu).
@@ -175,10 +179,16 @@ Na białej liście są też komendy bez ekranu, używane przez `tests/stack.sh s
 
 ## 6. Aktualizacja legacy
 
-1. Zbuduj obraz z nową wersją: `--build-arg LEGACY_IMAGE=ghcr.io/ersatztv/legacy:<wersja>`.
-2. `tests/stack.sh up` – smoke mostu; `GET /vizrs-bridge/health` → `commandsMissing` musi być puste.
-3. `node tests/e2e.cjs` – e2e panelu.
-4. Dopiero potem zmień `LEGACY_IMAGE` w `.env` produkcji.
+1. Na stosie testowym, z osobnym katalogiem danych (nowsze legacy migruje bazę i starsze już jej nie otworzy):
+   `export VIZRS_LIVE_TEST_DIR=/tmp/vizrs-live-test-<wersja> LEGACY_IMAGE=ghcr.io/ersatztv/legacy:<wersja>`
+2. `tests/stack.sh up` – buduje obraz mostu na tej wersji, smoke mostu i proxy; smoke sam sprawdza, że `commandsMissing` z `GET /vizrs-bridge/health` jest puste.
+3. `tests/stack.sh seed && tests/stack.sh test` – ramówka od zera wyłącznie przez panel i e2e.
+4. Przejrzyj zmiany komend: `git diff v<stara>..v<nowa> -- ErsatzTV.Application` w źródle legacy (zmienione rekordy `Commands/*.cs`, `Queries/*.cs` = zmienione parametry; nowe pliki = nowe możliwości). Zmiany zachowania opisz w §5.
+5. Dopiero potem: kopia `etv-config`, zmiana `LEGACY_IMAGE` w `.env` produkcji, `docker compose up -d --build`.
+
+Wczesne ostrzeżenie: CI `legacy-latest.yml` co tydzień robi kroki 1–3 na `ghcr.io/ersatztv/legacy:latest`.
+
+**Przejście 26.11.6 → 26.12.0 (R10, 2026-11-07):** smoke, `commandsMissing = []`, seed na świeżej bazie i całe e2e – zielone bez zmian w moście i panelu. Rekordy komend bez zmian; nowe: `GetNextProbe`, `RefreshNextProbe`, `GetNextDescribe` (stan silnika Next – do dopisania w Profilach, zob. R5 w §4; nie na białej liście). Kilka komend deco/szablonów/znaków sama zleca synchronizację playoutów Next (§5). Domyślny `LEGACY_IMAGE` zostaje `latest` – przypięcie wersji w `.env.example` robi wydanie 1.0 (R11).
 
 ## 7. Testy
 
@@ -188,6 +198,56 @@ Na białej liście są też komendy bez ekranu, używane przez `tests/stack.sh s
 | most + panel (smoke) | `tests/stack.sh up` |
 | ramówka przez panel | `tests/stack.sh seed` (drugi raz nic nie dubluje; od zera: `tests/stack.sh reset`) |
 | e2e UI | `tests/stack.sh test` (Playwright: `PLAYWRIGHT_DIR` albo `tests/local.env`; zrzuty nowych widoków: `E2E_SHOTS=<katalog poza repo>`) |
+| proxy (smoke) | w `tests/stack.sh up`: proxy na 127.0.0.1:18410 (`docker/proxy.Caddyfile`, sieć `vizrs-live-test-net`): `/`, `/channels`, `/api/…`, `/vizrs-bridge/…`, `POST` = 403; M3U, XMLTV, `discover.json` = 200. Panel testowy podaje widzom adres proxy (`--stream-url http://127.0.0.1:18410`) |
 | **bramka przed commitem** | `tests/gate.sh` – wszystko powyżej po kolei |
+| CI | `.github/workflows/ci.yml` (push, PR): serwer, obraz panelu, `tests/gate.sh` z Playwright 1.58.2; `legacy-latest.yml` (poniedziałek 04:17 UTC i ręcznie): stos na `ghcr.io/ersatztv/legacy:latest` + seed + e2e |
 
 Plan rozbudowy realizuje automat `scripts/plan.sh` (opis w `docs/PLAN-rozbudowy.md`, „Jak pracować”).
+
+## 8. Zamknięcie web GUI legacy (R10)
+
+Operatorzy pracują wyłącznie w panelu. Legacy nie ma portu na zewnątrz (`expose`, nie `ports` w `compose.yml`); panel i most rozmawiają w sieci wewnętrznej Dockera (`http://ersatztv:8409`). Na zewnątrz port 8409 wystawia **proxy** (Caddy, `docker/proxy.Caddyfile`):
+
+| Na zewnątrz (tylko `GET`/`HEAD`) | Po co |
+|---|---|
+| `/iptv/*` | strumienie (HLS, TS, HLS Direct, segmenty sesji), `channels.m3u`, `xmltv.xml`, logo kanałów i okładki EPG |
+| `/artwork/*` | obrazy legacy tylko do odczytu – podgląd znaków wodnych i logo w panelu (przeglądarka operatora ładuje je spod `--stream-url`) |
+| `/discover.json`, `/device.xml`, `/lineup.json`, `/lineup_status.json` | HDHomeRun (Plex, Jellyfin, Emby jako tuner) |
+| wszystko inne, też `POST` do powyższych | **403**: web GUI (Blazor), `/api/*` legacy, `/vizrs-bridge/*` |
+
+**Decyzje (2026-11-07, sesja automatu – zachowawczo):**
+- **Caddy, nie nginx** – jeden krótki plik, dopasowanie ścieżek i metod bez warunków `if`, `flush_interval -1` dla strumieni; obraz `caddy:2.10-alpine` (do zmiany `PROXY_IMAGE`). TLS proxy nie robi (`auto_https off`) – jak dotąd port 8409 był zwykłym HTTP; certyfikat to osobna decyzja wdrożenia (R11).
+- **`/artwork/*` otwarte** – to tylko obrazy (plakaty, miniatury, znaki wodne, adresy z identyfikatorem/skrótem), a panel z nich korzysta; zamknięcie zepsułoby podgląd w Znakach wodnych. `/api/*` legacy (np. `/api/channels`, `/api/sessions`) zamknięte – nic z zewnątrz ich nie potrzebuje.
+- **HDHomeRun otwarty** – to funkcja dla widzów (tuner), nie GUI.
+- Panel nie dostał osobnego adresu „wewnętrznego” legacy do obrazów: `--stream-url` = adres proxy dla widzów.
+- **Sprawdzanie w panelu** (Diagnostyka → „Web GUI legacy dla widzów”): serwer panelu pyta adres `--stream-url` o `/`, `/channels`, `/vizrs-bridge/health` (oczekiwane 403/404) i `/iptv/channels.m3u` (200). Sprawdza ze swojej sieci – gdy `--stream-url` to `localhost` albo adres publiczny niewidoczny z kontenera, wynik to „nie sprawdzono”, a sprawdzić trzeba z zewnątrz (`curl -I http://<serwer>:8409/` → 403).
+
+**Pierwsze uruchomienie legacy bez GUI.** Legacy nie wymaga konfiguracji startowej: na pustym `/config` tworzy bazę i domyślny profil kodowania (id 1), a całą resztę (biblioteka, skan, kolekcja, harmonogram, kanał, playout) robi `tests/stack.sh seed` wyłącznie komendami przez panel – sprawdzone na świeżej bazie v26.11.6 i v26.12.0. Jedyne, czego trzeba przy pierwszym starcie: `xmltv.xml` pojawia się kilka–kilkanaście sekund po starcie (wcześniej legacy zwraca 500 – smoke czeka).
+
+**Lista kontrolna pokrycia** (menu `ErsatzTV/Shared/MainLayout.razor`; ta sama lista w UI: Diagnostyka → „Pokrycie web GUI legacy”, `COVERAGE` w `server/web/views/system.js`; e2e pilnuje, że każdy wiersz ma ekran albo uzasadnione pominięcie):
+
+| Legacy | Panel |
+|---|---|
+| Channels | Kanały |
+| FFmpeg Profiles | Profile kodowania |
+| Watermarks | Znaki wodne |
+| Media Sources → Local / Libraries | Biblioteki |
+| Media Sources → Emby / Jellyfin / Plex | Źródła zewnętrzne |
+| Media → Trash | Kosz |
+| Media → TV Shows, Movies, Music, Other Videos, Songs, Images, Remote Streams | Przeglądarka |
+| Lists → Collections, Smart, Multi, Rerun | Kolekcje |
+| Lists → Playlists | Playlisty |
+| Lists → Trakt Lists | **pominięte**: wymaga klucza API Trakt; listy założone wcześniej widać jako playlisty systemowe (tylko odczyt) |
+| Lists → Filler Presets | Wypełniacze |
+| Scheduling → Schedules / Blocks, Templates / Decos, Deco Templates / Playouts | Harmonogramy / Bloki i szablony / Wystrój (deco) / Playouty |
+| Settings → FFmpeg, Logging, HDHomeRun, Scanner, Playout, XMLTV, UI | Ustawienia (UI legacy – tylko wygląd web GUI, bez znaczenia po zamknięciu) |
+| Support → Health Checks / Logs | Diagnostyka / Logi |
+| Support → Troubleshooting | **częściowo**: wersje i sprzęt, odnośniki do strumienia; test pliku w odtwarzaczu Blazora – nie (§5) |
+| pasek: M3U, XMLTV | odnośniki w Kanałach, Na antenie, Przewodniku EPG |
+| pasek: Docs, pomoc, GitHub | **pominięte**: strony projektu ErsatzTV |
+
+**Kroki ręczne (poza repozytorium / poza sesją automatu):**
+1. Produkcja: po aktualizacji `compose.yml` legacy traci port 8409, a dostaje go proxy – `docker compose up -d` przestawia to bez zmian w `etv-config`. Jeśli coś (np. Plex/Jellyfin jako tuner HDHomeRun, odtwarzacze) korzystało dotąd z innych ścieżek niż powyżej, sprawdzić po przejściu (`curl -I`).
+2. Administrator, który wyjątkowo potrzebuje web GUI legacy: tunel SSH do sieci Dockera albo tymczasowo `ports: ["127.0.0.1:8410:8409"]` przy usłudze `ersatztv` – nie dla operatorów.
+3. CI zacznie działać po wypchnięciu `.github/workflows/` na GitHub (sesja automatu nie robi push); w ustawieniach repozytorium Actions muszą być włączone. `legacy-latest.yml` nie wymaga sekretów (obraz legacy jest publiczny).
+

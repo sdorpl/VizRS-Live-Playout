@@ -440,6 +440,7 @@ fn route(app: &App, req: &Request) -> Response {
         ),
         _ if !authorized(app, req) => Response::error(401, "zaloguj się tokenem panelu"),
         ("GET", "/api/status") => status(app),
+        ("GET", "/api/exposure") => exposure(app),
         (m, p) if p.starts_with("/api/cg/") => cg_proxy(app, m, &p["/api/cg/".len()..], &req.body),
         ("GET", "/api/commands") => forward(app.bridge.get("/commands"), "commands"),
         ("POST", p) if p.starts_with(http::UPLOAD_PREFIX) => {
@@ -724,6 +725,63 @@ fn status(app: &App) -> Response {
             json_str(&app.cfg.vizrs_url),
             app.cg.is_some(),
             app.cfg.token.is_some()
+        ),
+    )
+}
+
+/// Ścieżki sprawdzane pod adresem dla widzów (R10): web GUI legacy, most, M3U.
+pub const EXPOSURE_PROBES: [&str; 4] = [
+    "/",
+    "/channels",
+    "/vizrs-bridge/health",
+    "/iptv/channels.m3u",
+];
+
+/// Czy pod adresem dla widzów (`--stream-url`) widać web GUI legacy (R10). Kody HTTP ścieżek
+/// z `EXPOSURE_PROBES`; ocenę robi UI. Sprawdza serwer panelu – z jego sieci, nie z internetu.
+fn exposure(app: &App) -> Response {
+    if app.cfg.stream_url.is_empty() {
+        return Response::json(
+            200,
+            "{\"ok\":true,\"result\":{\"url\":\"\",\"error\":\"panel bez --stream-url\",\"probes\":[]}}",
+        );
+    }
+    let target = match bridge::parse_url(&app.cfg.stream_url) {
+        Ok(t) => t,
+        Err(e) => {
+            return Response::json(
+                200,
+                format!(
+                    "{{\"ok\":true,\"result\":{{\"url\":{},\"error\":{},\"probes\":[]}}}}",
+                    json_str(&app.cfg.stream_url),
+                    json_str(&e)
+                ),
+            )
+        }
+    };
+    let probe = Bridge {
+        target,
+        token: String::new(),
+        prefix: "",
+        auth: "X-VizRS-Probe",
+    };
+    let probes: Vec<String> = EXPOSURE_PROBES
+        .iter()
+        .map(|p| match probe.get(p) {
+            Ok(r) => format!("{{\"path\":{},\"status\":{}}}", json_str(p), r.status),
+            Err(e) => format!(
+                "{{\"path\":{},\"status\":null,\"error\":{}}}",
+                json_str(p),
+                json_str(&e)
+            ),
+        })
+        .collect();
+    Response::json(
+        200,
+        format!(
+            "{{\"ok\":true,\"result\":{{\"url\":{},\"error\":null,\"probes\":[{}]}}}}",
+            json_str(&app.cfg.stream_url),
+            probes.join(",")
         ),
     )
 }
@@ -1076,6 +1134,27 @@ mod tests {
             route(&app(None), &req("GET", "/api/commands", &[])).status,
             502,
             "bez tokenu panelu lokalnie wpuszcza"
+        );
+    }
+
+    #[test]
+    fn exposure_probes() {
+        let mut a = app(None);
+        let r = route(&a, &req("GET", "/api/exposure", &[]));
+        assert_eq!(r.status, 200);
+        assert!(String::from_utf8_lossy(&r.body).contains("panel bez --stream-url"));
+        a.cfg.stream_url = "http://127.0.0.1:1".into();
+        let body = String::from_utf8_lossy(&route(&a, &req("GET", "/api/exposure", &[])).body)
+            .into_owned();
+        for p in EXPOSURE_PROBES {
+            assert!(
+                body.contains(&format!("{{\"path\":\"{p}\",\"status\":null")),
+                "{body}"
+            );
+        }
+        assert_eq!(
+            route(&app(Some("t")), &req("GET", "/api/exposure", &[])).status,
+            401
         );
     }
 }

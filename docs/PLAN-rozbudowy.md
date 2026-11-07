@@ -35,7 +35,7 @@ Cel końcowy: **operator nie korzysta z web GUI ErsatzTV legacy** – wszystko, 
 | R7 | Ustawienia legacy, logi, konserwacja, test odtwarzania | R0 | zrobione (2026-11-07) |
 | R8 | Źródła zewnętrzne: Jellyfin, Emby, Plex (PIN), strumienie zdalne | R3 | zrobione (2026-11-07) |
 | R9 | Grafika VizRS i sloty na żywo (VizRS CG Playout) | R2 | zrobione (2026-11-07) |
-| R10 | Zamknięcie web GUI legacy, proxy, aktualizacje legacy, CI | R1–R8 | do zrobienia |
+| R10 | Zamknięcie web GUI legacy, proxy, aktualizacje legacy, CI | R1–R8 | zrobione (2026-11-07) |
 | R11 | Wydanie 1.0: instrukcja operatora, obrazy, przegląd bezpieczeństwa | R10 | do zrobienia |
 
 ---
@@ -155,6 +155,8 @@ Cel końcowy: **operator nie korzysta z web GUI ErsatzTV legacy** – wszystko, 
 - **Lista kontrolna pokrycia:** każdy ekran z menu legacy (`ErsatzTV/Shared/MainLayout.razor`) → odpowiednik w panelu albo świadome pominięcie z uzasadnieniem (DOKUMENTACJA). Pierwsze uruchomienie legacy bez GUI (czy legacy wymaga jakiejś konfiguracji startowej).
 - **Aktualizacja legacy:** przejść procedurę DOKUMENTACJA §6 na nowszym wydaniu niż 26.11.6; poprawić to, co się zmieni.
 - **CI (GitHub Actions):** `cargo fmt/clippy/test`, budowa obu obrazów, `tests/stack.sh up && seed`, e2e z Playwright; zadanie cykliczne: najnowszy `ghcr.io/ersatztv/legacy:latest` + smoke (wczesne ostrzeżenie o zmianach komend).
+
+**Zrobione (2026-11-07) – decyzje:** proxy = Caddy (`docker/proxy.Caddyfile`, usługa `proxy`), na zewnątrz GET/HEAD `/iptv/*`, `/artwork/*` (obrazy, potrzebne podglądowi w panelu) i HDHomeRun, reszta 403; legacy tylko `expose`; bez TLS (decyzja wdrożenia – R11). Stos testowy ma proxy na 18410, panel podaje widzom jego adres. Diagnostyka: sprawdzenie adresu dla widzów (`/api/exposure`) i lista pokrycia (Trakt i strony projektu – pominięte z uzasadnieniem, Troubleshooting – częściowo). Legacy nie wymaga konfiguracji startowej. Aktualizacja do v26.12.0 przeszła bez zmian (DOKUMENTACJA §6); domyślny `LEGACY_IMAGE` zostaje `latest`, przypięcie – R11. CI w `.github/workflows/` (nie uruchomione – wymaga push, krok ręczny, DOKUMENTACJA §8).
 
 ## R11 – Wydanie 1.0
 

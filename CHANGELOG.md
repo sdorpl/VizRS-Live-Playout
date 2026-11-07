@@ -2,6 +2,13 @@
 
 ## Niewydane
 
+- **Web GUI legacy zamknięte** (R10): usługa `proxy` (Caddy, `docker/proxy.Caddyfile`) w `compose.yml` wystawia na 8409 tylko `/iptv/*`, `/artwork/*` (GET/HEAD) i HDHomeRun; web GUI, `/api` legacy i `/vizrs-bridge/*` = 403. Legacy bez portu na zewnątrz (`expose`). `.env.example`: `PROXY_IMAGE`.
+- **Diagnostyka**: „Web GUI legacy dla widzów” (serwer panelu sprawdza adres `--stream-url`: GUI i most zamknięte, M3U otwarte; nowe `GET /api/exposure`) i **lista kontrolna pokrycia** menu legacy → ekrany panelu (pominięcia z uzasadnieniem).
+- Sprawdzone z ErsatzTV legacy **v26.12.0** (smoke, seed na świeżej bazie, e2e) – bez zmian w moście; procedura aktualizacji w DOKUMENTACJA §6 rozpisana.
+- Stos testowy: proxy na 127.0.0.1:18410 (sieć `vizrs-live-test-net`), smoke proxy (403/200), smoke sprawdza `commandsMissing = []`, `LEGACY_IMAGE=… tests/stack.sh up` dla innej wersji legacy.
+- **CI** (GitHub Actions): `ci.yml` – fmt/clippy/test, obraz panelu, obraz legacy z mostem, stos, seed, e2e (Playwright); `legacy-latest.yml` – co tydzień najnowsze legacy + smoke, seed, e2e.
+- e2e: proxy (kody ścieżek, XMLTV przez proxy), ocena w Diagnostyce, pokrycie (każdy ekran legacy ma odpowiednik albo pominięcie, odnośniki do menu panelu).
+
 - **Grafika kanału** (R9): stan VizRS CG Playout (sesje elementu VizRS, nakładka ffmpeg, live ingest, przechwytywanie grafiki per kanał), **strony VizRS kanału**, podgląd anteny `/output`, elementy graficzne legacy z „Wczytaj pliki elementów” (`RefreshGraphicsElements`). Reguł grafiki panel nie edytuje – CG Playout nie ma do nich API (krok ręczny, DOKUMENTACJA §4).
 - **Sloty na żywo** (R9): sygnał studia per kanał, NA ANTENIE / WSTRZYMANY / RAMÓWKA, **ZDEJMIJ** (z potwierdzeniem) / **WPUŚĆ**, „studio także poza audycjami”, przebudowa ramówki; **audycje LIVE** (nowa, zmiana, usunięcie, skan) ze stanem kolekcji w legacy i najbliższą emisją; zdarzenia.
 - Serwer: opcje `--cg-url`/`VIZRS_LIVE_CG_URL` i `--cg-token`/`VIZRS_LIVE_CG_TOKEN`, pośrednik `/api/cg/…` z białą listą adresów CG Playout (token CG zostaje w serwerze); `X-VizRS-Live` wymagany dla każdego żądania zmieniającego (też `PUT`, `DELETE`); `/api/status` → `cg`.

@@ -1,0 +1,59 @@
+# CI VizRS Live (R10): serwer (fmt, clippy, testy), oba obrazy, stos testowy z proxy, e2e z Playwright.
+# Te same kroki co tests/gate.sh. Niczego nie publikuje (obrazy tylko lokalnie na maszynie CI).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  serwer:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: cargo fmt / clippy / test
+        working-directory: server
+        run: |
+          cargo fmt --check
+          cargo clippy --all-targets -- -D warnings
+          cargo test
+
+  obrazy-i-e2e:
+    needs: serwer
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      PLAYWRIGHT_DIR: ${{ runner.temp }}/pw
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Playwright (Chromium)
+        run: |
+          mkdir -p "$PLAYWRIGHT_DIR" && cd "$PLAYWRIGHT_DIR"
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund playwright@1.58.2
+          npx playwright install --with-deps chromium
+      - name: obraz panelu
+        run: docker build -f docker/live.Dockerfile -t vizrs-live:ci .
+      - name: bramka (serwer, obraz legacy z mostem, stos z proxy, seed, e2e)
+        run: tests/gate.sh
+      - name: dziennik przy błędzie
+        if: failure()
+        run: |
+          docker logs vizrs-live-test-legacy 2>&1 | tail -200 || true
+          cat /tmp/vizrs-live-test/panel.log || true

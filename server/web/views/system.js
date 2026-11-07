@@ -1,7 +1,7 @@
 // Widoki grupy „System” (R7): Ustawienia (panel + ustawienia legacy w sekcjach), Logi, Diagnostyka
 // (kontrole, informacje o sprzęcie i wersjach, konserwacja, test odtwarzania, konsola komend).
 
-import { S, VIEWS, h, btn, pill, head, panel, cmdNote, table, cmd, pl, toast, confirmDlg, route, hms, pad2, missingNote, has } from '../core.js';
+import { S, VIEWS, api, h, btn, pill, head, panel, cmdNote, table, cmd, pl, toast, confirmDlg, route, hms, pad2, missingNote, has } from '../core.js';
 import { form } from '../form.js';
 import { contentPicker } from '../parts.js';
 
@@ -260,11 +260,63 @@ function playbackTest(channels) {
     h('div', { class: 'hint' }, 'Otwórz w VLC/mpv albo w przeglądarce z obsługą HLS (Safari). Pierwszy segment może potrwać kilka sekund. Szczegółowy test pliku z wyborem profilu legacy robi w Blazorze – panel go nie powtarza (DOKUMENTACJA §5).'));
 }
 
+// ---------- Zamknięcie web GUI legacy (R10) ----------
+
+/** Lista kontrolna pokrycia: menu web GUI legacy (Shared/MainLayout.razor, v26.11–26.12) → ekran panelu albo świadome pominięcie. */
+export const COVERAGE = [
+  ['Channels', 'kanaly'], ['FFmpeg Profiles', 'profile'], ['Watermarks', 'znaki'],
+  ['Media Sources → Local', 'media'], ['Media Sources → Emby / Jellyfin / Plex', 'zrodla'],
+  ['Media → Libraries', 'media'], ['Media → Trash', 'kosz'],
+  ['Media → TV Shows / Movies / Music / Other Videos / Songs / Images / Remote Streams', 'przegladarka'],
+  ['Lists → Collections / Smart / Multi / Rerun', 'kolekcje'], ['Lists → Playlists', 'playlisty'],
+  ['Lists → Trakt Lists', null, 'pominięte: wymaga klucza API Trakt; listy Trakt założone wcześniej są widoczne jako playlisty systemowe (tylko do odczytu)'],
+  ['Lists → Filler Presets', 'wypelniacze'],
+  ['Scheduling → Schedules', 'harmonogramy'], ['Scheduling → Blocks / Templates', 'bloki'],
+  ['Scheduling → Decos / Deco Templates', 'deco'], ['Scheduling → Playouts', 'playouty'],
+  ['Settings → FFmpeg / Logging / HDHomeRun / Scanner / Playout / XMLTV', 'ustawienia'],
+  ['Settings → UI', 'ustawienia', 'tylko wygląd web GUI legacy – bez znaczenia po jego zamknięciu'],
+  ['Support → Health Checks', 'diagnostyka'], ['Support → Logs', 'logi'],
+  ['Support → Troubleshooting', 'diagnostyka', 'częściowo: informacje o sprzęcie i odnośniki do strumienia; test pliku w odtwarzaczu Blazora – nie (DOKUMENTACJA §5)'],
+  ['Pasek: M3U / XMLTV', 'kanaly', 'odnośniki channels.m3u i xmltv.xml (Kanały, Przewodnik EPG)'],
+  ['Pasek: Docs, pomoc, GitHub', null, 'pominięte: odnośniki do stron projektu ErsatzTV, nie funkcje kanału'],
+];
+
+const SCREEN_PL = () => Object.fromEntries([...document.querySelectorAll('nav a[href^="#"]')].map((a) => [a.getAttribute('href').slice(1), a.textContent]));
+
+/** Ocena sprawdzenia adresu dla widzów: web GUI i most mają być niedostępne, M3U dostępne. */
+export function exposureVerdict(x) {
+  if (!x || x.error) return { cls: 'info', text: `nie sprawdzono (${x?.error || 'brak danych'})` };
+  const st = Object.fromEntries(x.probes.map((p) => [p.path, p.status]));
+  if (Object.values(st).every((v) => v == null)) return { cls: 'info', text: 'adres dla widzów nieosiągalny z serwera panelu – sprawdź z zewnątrz' };
+  const open = (v) => v != null && v >= 200 && v < 400;
+  if (open(st['/']) || open(st['/channels']) || open(st['/vizrs-bridge/health']) || st['/vizrs-bridge/health'] === 401)
+    return { cls: 'bad', text: 'web GUI legacy albo most widoczne dla widzów – wystaw legacy przez proxy (compose.yml, docker/proxy.Caddyfile)' };
+  if (!open(st['/iptv/channels.m3u'])) return { cls: 'warn', text: 'web GUI zamknięte, ale M3U niedostępne – widzowie nie dostaną listy kanałów' };
+  return { cls: 'ok', text: 'zamknięte: na zewnątrz tylko strumienie, M3U/XMLTV i HDHomeRun' };
+}
+
+function exposurePanel(x) {
+  const v = exposureVerdict(x);
+  const names = SCREEN_PL();
+  return [
+    panel('Web GUI legacy dla widzów', btn('Sprawdź ponownie', () => route(true)),
+      h('div', { class: 'pad', id: 'exp-verdict' }, pill(v.text, v.cls)),
+      x?.probes?.length ? table(x.probes, [['path', 'Ścieżka'], [(p) => (p.status == null ? '—' : String(p.status)), 'Kod HTTP', { class: 'num' }],
+        [(p) => (p.path.startsWith('/iptv/') ? 'ma być otwarte' : 'ma być zamknięte (403/404)'), 'Oczekiwane', { class: 'w' }]]) : null,
+      h('div', { class: 'cmd' }, `Adres dla widzów: ${x?.url || '—'} (sprawdza serwer panelu ze swojej sieci). Operatorzy pracują tylko w panelu; legacy ma na zewnątrz tylko /iptv/*, /artwork/* i HDHomeRun (DOKUMENTACJA §8).`)),
+    panel('Pokrycie web GUI legacy', null,
+      table(COVERAGE.map(([legacy, screen, note]) => ({ legacy, screen, note })), [['legacy', 'Ekran legacy'],
+        [(r) => (r.screen ? h('a', { href: '#' + r.screen }, names[r.screen] || r.screen) : pill('pominięte', 'warn')), 'W panelu'],
+        [(r) => r.note || '', 'Uwagi', { class: 'w' }]]),
+      h('div', { class: 'cmd' }, 'Menu web GUI legacy (Shared/MainLayout.razor) → odpowiednik w panelu albo świadome pominięcie (DOKUMENTACJA §8).'))];
+}
+
 VIEWS.diagnostyka = async () => {
-  const [health, info, channels] = await Promise.all([
+  const [health, info, channels, exposure] = await Promise.all([
     cmd('GetAllHealthCheckResults', { Refresh: !!S.healthRefresh }).catch((e) => ({ error: e.message })),
     has('GetTroubleshootingInfo') ? cmd('GetTroubleshootingInfo', { NextVersion: '' }).catch((e) => ({ error: e.message })) : null,
     cmd('GetAllChannels', { ShowDisabled: false }).catch(() => []),
+    api('/api/exposure').then((r) => r.result).catch((e) => ({ error: e.message, probes: [] })),
   ]);
   S.healthRefresh = false;
   const kind = { Pass: 'ok', Warning: 'warn', Error: 'bad', Info: 'info' };
@@ -317,6 +369,7 @@ VIEWS.diagnostyka = async () => {
         !info ? missingNote(['GetTroubleshootingInfo']) : info.error ? h('div', { class: 'empty err' }, info.error)
           : table(infoRows, [['k', 'Pole'], ['v', 'Wartość', { class: 'w' }]]),
         cmdNote('GetTroubleshootingInfo', 'RefreshFFmpegCapabilities'))),
+    ...exposurePanel(exposure),
     h('div', { class: 'split' },
       panel('Konserwacja', null,
         h('div', { class: 'bar pad', id: 'maint' }, MAINT.filter(([n]) => has(n)).map(([n, a, label, text]) => btn(label, () => maintenance(n, a, label, text)))),

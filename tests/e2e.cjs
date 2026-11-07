@@ -1040,6 +1040,27 @@ function check(cond, msg) {
   await tab('antena');
   cgServer.close();
 
+  // ---------- R10: web GUI legacy zamknięte (proxy na 18410 – tests/stack.sh), lista pokrycia ----------
+  const st10 = (await (await fetch(`${BASE}/api/status`)).json()).result;
+  const exp = (await (await fetch(`${BASE}/api/exposure`)).json()).result;
+  const code = (p) => exp.probes.find((x) => x.path === p)?.status;
+  check(/:18410$/.test(st10.streamUrl), `widzowie dostają adres proxy (${st10.streamUrl})`);
+  check(code('/') === 403 && code('/channels') === 403 && code('/vizrs-bridge/health') === 403, `proxy: web GUI legacy i most zamknięte (${JSON.stringify(exp.probes)})`);
+  check(code('/iptv/channels.m3u') === 200, 'proxy: M3U dostępne dla widzów');
+  const viaProxy = await fetch(`${st10.streamUrl}/iptv/xmltv.xml`);
+  check(viaProxy.status === 200 && /<tv/.test(await viaProxy.text()), 'proxy: XMLTV przez proxy');
+  await tab('diagnostyka');
+  await page.waitForSelector('#exp-verdict .pill');
+  check(await page.$('#exp-verdict .pill.ok') !== null, 'diagnostyka: web GUI legacy oceniony jako zamknięty');
+  const cov = await page.$$eval('.panel:has(h2:text-is("Pokrycie web GUI legacy")) tbody tr', (rows) => rows.map((r) => ({
+    link: r.querySelector('td:nth-child(2) a')?.getAttribute('href') || null, note: r.querySelector('td:nth-child(3)')?.textContent.trim() || '' })));
+  check(cov.length >= 20 && cov.every((r) => r.link || /pominięte/.test(r.note)), `pokrycie: każdy ekran legacy ma odpowiednik albo uzasadnione pominięcie (${cov.length})`);
+  const navViews = await page.$$eval('nav a[href^="#"]', (as) => as.map((a) => a.getAttribute('href')));
+  check(cov.every((r) => !r.link || navViews.includes(r.link)), 'pokrycie: odnośniki prowadzą do ekranów z menu panelu');
+  await shot('r10-diagnostyka');
+  await rerender(() => page.click('.panel:has(h2:text-is("Pokrycie web GUI legacy")) a[href="#harmonogramy"]'));
+  check(await page.$('main[data-view="harmonogramy"]') !== null, 'pokrycie: przejście do ekranu panelu');
+
   check(errors.length === 0, 'brak błędów JS' + (errors.length ? ': ' + errors.join(' | ') : ''));
   await browser.close();
   console.log(failed ? `\n${failed} błędów` : '\nwszystko zielone');
