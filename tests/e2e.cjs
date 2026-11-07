@@ -902,6 +902,16 @@ function check(cond, msg) {
   await page.selectOption('#cal-DecoId', { label: `${dgName} / ${decoName}` });
   const weekText = await page.textContent('#cal-week');
   check(weekText.split(tplName).length - 1 === 7 && (await page.$$('#cal-week .daybar:not(.thin) .seg')).length >= 14, 'kalendarz tygodnia: szablon dnia w każdym dniu, bloki na osi');
+  // M7: siatka godziny × dni (domyślny widok) – bloki w każdym dniu, deco z prawej, pigułka szablonu „pon–nd”; przełącznik na paski
+  check(await page.isVisible('#cal-grid') && (await page.$$('#cal-grid .gday')).length === 7 && (await page.$$('#cal-grid .gblk')).length >= 14
+    && (await page.$$('#cal-grid .gdeco')).length >= 7 && (await page.textContent('#cal-tpl')).includes('pon–nd'), 'kalendarz: siatka tygodnia z blokami, deco i pigułką szablonu');
+  check(/^tydzień \d+ \(/.test(await page.textContent('#cal-range')), 'kalendarz: tytuł z numerem tygodnia');
+  await page.click('#cal-grid .gblk >> nth=0');
+  await page.waitForFunction(() => { const t = document.querySelector('#cal-block')?.textContent || ''; return t.includes('Blok „') && !t.includes('wczytuję'); });
+  check((await page.textContent('#cal-block')).includes('Pozycje'), 'kalendarz: klik w blok – szczegóły bloku z pozycjami');
+  await page.click('main .panel header button:text-is("Paski")');
+  check(await page.isVisible('#cal-week') && !(await page.isVisible('#cal-grid')), 'kalendarz: przełącznik Siatka → Paski');
+  await page.click('main .panel header button:text-is("Siatka")');
   await rerender(() => page.click('main .panel header button:has-text("Zapisz")'));
   const bPo = (await api('GetPagedPlayouts', { Query: '', PageNum: 0, PageSize: 500 })).result.Page.find((p) => p.ChannelName === bChName);
   const pts = (await api('GetPlayoutTemplates', { PlayoutId: bPo.PlayoutId })).result;

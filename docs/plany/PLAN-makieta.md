@@ -23,7 +23,7 @@ Jak w [PLAN-rozbudowy.md](PLAN-rozbudowy.md) („Jak pracować”): jeden punkt 
 | M4 | Media: kafle w Przeglądarce, „Zapisz jako kolekcję inteligentną” | M0 | zrobione (2026-11-07) |
 | M5 | Kolekcje: jedna lista z pigułką rodzaju, podgląd zawartości w edytorze | M4 | zrobione (2026-11-07; bez łącznego czasu – brak danych w legacy) |
 | M6 | Playouty: „Zbudowany do” i „Przebuduj” w wierszu, najbliższe pozycje z blokiem i LIVE | M0 | zrobione (2026-11-07; „Od nowa o” i „Budowa” wchłonięte przez „Zbudowany do”) |
-| M7 | Bloki: kalendarz tygodnia jako siatka godzin × dni | M6 | do zrobienia |
+| M7 | Bloki: kalendarz tygodnia jako siatka godzin × dni | M6 | zrobione (2026-11-07) |
 | M8 | Grafika kanału i Sloty na żywo: reguły „Kiedy / Co / Ile”, tabela wejść ze stanem | M2 | do zrobienia |
 | M9 | Ustawienia i Diagnostyka: panele obok siebie, „Stan” stosu na górze, logi ze źródłem | M0 | do zrobienia |
 

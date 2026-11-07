@@ -226,6 +226,30 @@ img.thumb.sm { max-width: 64px; max-height: 32px; }
 .week .bars { border-bottom: 1px solid #23262c; }
 .week .bars .daybar { margin: 6px 12px 2px; }
 .week .bars .daybar.thin { margin: 0 12px 6px; }
+/* kalendarz tygodnia – siatka godziny × dni (M7, wg makiety) */
+.wgrid { display: grid; grid-template-columns: 52px repeat(7, minmax(84px, 1fr)); min-width: 720px; }
+.wgrid .hd { padding: 5px 6px; text-align: center; font-size: 11px; color: var(--dim); border-bottom: 1px solid var(--line); background: #1b1e23; display: grid; gap: 1px; min-width: 0; }
+.wgrid .hd b { font-size: 12px; color: var(--text); font-weight: 600; }
+.wgrid .hd span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.wgrid .hd.today b { color: var(--acc); }
+.wgrid .hrs span { display: block; box-sizing: border-box; font: 11px var(--mono); color: var(--dim); padding: 2px 6px; border-top: 1px solid #23262c; }
+.wgrid .gday { position: relative; border-left: 1px solid #23262c; background-image: linear-gradient(to bottom, #23262c 1px, transparent 1px); }
+.wgrid .gday.today { background-color: #1d1a14; }
+.gblk { position: absolute; left: 3px; right: 9px; border-radius: 3px; padding: 2px 5px; font-size: 11px; line-height: 1.25; overflow: hidden; border-left: 3px solid; display: grid; align-content: start; min-height: 3px; }
+.gblk b { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gblk span { font: 10px var(--mono); color: var(--dim); }
+.gblk.short { padding: 0 5px; font-size: 10px; line-height: 10px; }
+.gblk.c0 { background: #2b3c5a; border-color: var(--blue); }
+.gblk.c1 { background: #3d2c10; border-color: var(--acc); }
+.gblk.c2 { background: #173d29; border-color: var(--green); }
+.gblk.c3 { background: #3a1c1c; border-color: var(--red); }
+.gdeco { position: absolute; right: 2px; width: 5px; background: #3d6b84; border-radius: 2px; }
+.gblk { cursor: pointer; }
+.gblk:hover { filter: brightness(1.25); }
+.gspill { font-size: 10px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cal-detail { border-top: 1px solid var(--line); }
+.gnow { position: absolute; left: 0; right: 0; height: 2px; background: var(--red); pointer-events: none; }
+.gempty { position: absolute; left: 6px; right: 6px; top: 8px; font-size: 11px; color: var(--dim); }
 td.log { font-family: var(--mono, monospace); font-size: 12px; white-space: pre-wrap; word-break: break-word; }
 .logbar select { width: auto; } .logbar input[type=search] { width: auto; flex: 1 1 220px; max-width: 420px; }
 
