@@ -66,6 +66,8 @@ jobs:
         run: docker build -f docker/live.Dockerfile -t vizrs-live:ci .
       - name: bramka (serwer, obraz legacy z mostem, stos z proxy, seed, e2e)
         run: tests/gate.sh
+      - name: akceleracja sprzętowa w obrazie legacy (Intel VAAPI/QSV, AMD VAAPI, NVIDIA NVENC)
+        run: tests/hwaccel.sh vizrs-live-legacy:dev
       - name: dziennik przy błędzie
         if: failure()
         run: |

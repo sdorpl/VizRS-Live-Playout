@@ -6,6 +6,7 @@ name: Release
 #   obrazy (amd64 + arm64) ghcr.io/<właściciel>/vizrs-live:<wersja> i :latest
 #                          ghcr.io/<właściciel>/vizrs-live-legacy:<wersja>[-legacy<legacy>] i :latest
 #     (-legacy<wersja> tylko przy legacy przypiętym w .env.example, np. ghcr.io/ersatztv/legacy:v26.12.0)
+#   obraz legacy (amd64) z akceleracją Intel VAAPI/QSV, AMD VAAPI, NVIDIA NVENC – sprawdza tests/hwaccel.sh przed publikacją
 #   wydanie na GitHubie z sumami SHA256SUMS.txt
 # Wersja = server/Cargo.toml (znacznik musi się zgadzać). Z łącznikiem (v1.2.0-rc1) = wydanie wstępne, bez :latest.
 # Kroki opiekuna: docs/RUNBOOK.md §7.
@@ -80,6 +81,8 @@ jobs:
           npx playwright install --with-deps chromium
       - name: bramka na wersji legacy z .env.example
         run: tests/gate.sh
+      - name: akceleracja sprzętowa w obrazie legacy (Intel VAAPI/QSV, AMD VAAPI, NVIDIA NVENC)
+        run: tests/hwaccel.sh vizrs-live-legacy:dev
       - name: dziennik przy błędzie
         if: failure()
         run: |
@@ -109,7 +112,7 @@ jobs:
           b=server/target/${{ matrix.musl }}/release/vizrs-live
           "$b" --version
           d=VizRS-Live-$V-${{ matrix.name }}; mkdir -p "dist/$d"
-          cp "$b" README.md CHANGELOG.md .env.example compose.yml "dist/$d/"
+          cp "$b" README.md CHANGELOG.md .env.example compose.yml compose.vaapi.yml compose.nvidia.yml "dist/$d/"
           cd dist && tar czf "$d.tar.gz" "$d" && rm -rf "$d" && ls -la
       - uses: actions/upload-artifact@v4
         with:
@@ -181,5 +184,6 @@ jobs:
           files: dist/*
           body: |
             **Docker (amd64 / arm64):** `ghcr.io/${{ needs.wersja.outputs.owner }}/vizrs-live:${{ needs.wersja.outputs.v }}` (panel) i `ghcr.io/${{ needs.wersja.outputs.owner }}/vizrs-live-legacy:${{ needs.wersja.outputs.v }}${{ needs.wersja.outputs.lv }}` (ErsatzTV legacy `${{ needs.wersja.outputs.legacy }}` z mostem) – wdrożenie: `cp .env.example .env && docker compose up -d` (docs/RUNBOOK.md §2), w stosie VizRS CG Playout: `compose.cg-playout.yml` (RUNBOOK §2a).
+            **Akceleracja sprzętowa (amd64):** obraz legacy ma ffmpeg z Intel VAAPI/QSV, AMD VAAPI i NVIDIA NVENC (sprawdzone `tests/hwaccel.sh` przed publikacją); kartę przekazują nakładki `compose.vaapi.yml` (Intel, AMD) i `compose.nvidia.yml` (NVIDIA, NVIDIA Container Toolkit) – RUNBOOK §2b.
             **Linux x86_64 / arm64:** archiwum z panelem `vizrs-live` (statyczny, UI w binarce) – wymaga ErsatzTV legacy z mostem: `vizrs-live --bridge http://<legacy>:8409 --bridge-token …`.
             Zmiany: CHANGELOG.md.

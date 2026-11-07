@@ -2,6 +2,7 @@
 
 ## Niewydane
 
+- **Akceleracja sprzętowa w wydaniu**: obraz legacy z mostem (amd64) zawiera akcelerację Intel VAAPI/QSV, AMD VAAPI i NVIDIA NVENC z oficjalnego obrazu upstream (sterowniki iHD, i965, radeonsi, libmfx, libva, kodery ffmpeg); nowe nakładki `compose.vaapi.yml` (przekazanie `/dev/dri/renderD128` dla Intela i AMD) oraz `compose.nvidia.yml` (karta przez CDI, `NVIDIA_DRIVER_CAPABILITIES`); nowy skrypt `tests/hwaccel.sh` sprawdza obecność akceleracji bez GPU i jest uruchamiany w bramce `ci.yml` oraz `release.yml` przed publikacją obrazów; nakładki dołączone do archiwów binarek wydania; opis wdrożenia i konfiguracji w profilach kodowania w RUNBOOK §2b.
 - **Poprawki po pierwszym przebiegu bramki w CI** (tag v1.2.0 bez publikacji – bramka nie przeszła): przejściowy błąd legacy (500) przy zapytaniach tylko do odczytu serwer panelu ponawia raz, treść błędu w dzienniku; „Zbudowany do” w Playoutach odpytuje legacy po kolei, nie naraz; Na antenie – audycje LIVE z CG Playout zawsze w „Najbliższych zdarzeniach” (wcześniej wypychały je bliskie pozycje ramówki); Logi – zmiana źródła czyści filtr tekstu.
 ## 1.2.0 – wydanie (2026-11-07)
 

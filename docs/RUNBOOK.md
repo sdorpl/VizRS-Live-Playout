@@ -7,7 +7,7 @@ Wdrożenie, kopie, aktualizacja legacy, odtworzenie. Praca operatora: [INSTRUKCJ
 | Usługa (`compose.yml`) | Obraz (wydanie 1.2.0) | Port na zewnątrz |
 |---|---|---|
 | `live` – panel | `ghcr.io/sdorpl/vizrs-live:1.2.0` | 8090 – operatorzy |
-| `ersatztv` – legacy z mostem | `vizrs-live-legacy:local` – budowany na miejscu na najnowszym `ghcr.io/ersatztv/legacy` + VizRS Bridge | brak (`expose`) |
+| `ersatztv` – legacy z mostem | `vizrs-live-legacy:local` – budowany na miejscu na najnowszym `ghcr.io/ersatztv/legacy` + VizRS Bridge, ffmpeg z VAAPI/QSV/NVENC (§2b) | brak (`expose`) |
 | `proxy` – Caddy | `caddy:2.10.2-alpine` | 8409 – widzowie: strumienie, M3U, XMLTV, HDHomeRun |
 
 Dane: `ETV_CONFIG` (domyślnie `./etv-config`, cała baza i stan legacy) i `MEDIA_DIR` (media, tylko do odczytu). Panel nie trzyma żadnych danych.
@@ -36,6 +36,67 @@ Gdy ErsatzTV legacy działa już w stosie CG Playout (`../VirtRS CG Playout/dock
 4. `docker compose up -d` w katalogu CG Playout; sprawdzenie jak w §2 pkt 4 (most zielony, `curl -I :8409/` → 403, `:8409/iptv/channels.m3u` → 200) i w panelu Sloty na żywo (CG Playout połączony).
 
 Cofnięcie: przywróć poprzedni `.env` CG Playout i kopię `ersatztv-config` (§5), `docker compose up -d --remove-orphans`.
+
+### 2b. Akceleracja sprzętowa (Intel, AMD, NVIDIA)
+
+Kodowanie wideo wykonuje ffmpeg w procesie ErsatzTV legacy (silnik Next); obraz panelu `vizrs-live` (`scratch`) nie zawiera ffmpeg – akceleracja dotyczy wyłącznie usługi `ersatztv` (obraz `vizrs-live-legacy`, lokalnie `vizrs-live-legacy:local`).
+
+Oficjalny obraz bazowy `ghcr.io/ersatztv/legacy` (Ubuntu 24.04, ffmpeg 8.1.2-etv, amd64) zawiera już komplet koderów i sterowników:
+- **`ffmpeg -hwaccels`**: `vaapi`, `qsv`, `cuda`;
+- **kodery**: `h264_vaapi`, `hevc_vaapi`, `av1_vaapi`, `h264_qsv`, `hevc_qsv`, `av1_qsv`, `h264_nvenc`, `hevc_nvenc`;
+- **sterowniki**: Intel VAAPI `iHD` (od generacji Broadwell) i `i965` (starszy Intel), AMD VAAPI `radeonsi` (Mesa); Intel QSV (`libmfx-gen` / Media SDK); `libva`.
+- **NVIDIA**: biblioteki sterownika (`libcuda`, `libnvidia-encode`) muszą odpowiadać wersji sterownika na hoście, dlatego nie mogą znajdować się wewnątrz obrazu – dostarcza je w locie NVIDIA Container Toolkit przez CDI.
+- **AMD**: AMD AMF (sterownik zamknięty) nie jest używany; karty AMD działają przez otwarte sterowniki VAAPI (Mesa `radeonsi`).
+
+Most VizRS Bridge nie ingeruje w ffmpeg ani system bazowy (obraz legacy bez zmian).
+
+| Karta | Nakładka | Na hoście | W panelu (Profile kodowania → Akceleracja) |
+|---|---|---|---|
+| **Intel** (iGPU, Arc) | `compose.vaapi.yml` | sterownik jądra `i915` albo `xe` (`/dev/dri/renderD128`) | **VAAPI** (urządzenie `/dev/dri/renderD128`, sterownik `iHD` lub `i965`) albo **QSV** |
+| **AMD** (Radeon) | `compose.vaapi.yml` | sterownik jądra `amdgpu` (`/dev/dri/renderD128`) | **VAAPI** (urządzenie `/dev/dri/renderD128`, sterownik `RadeonSI`) |
+| **NVIDIA** | `compose.nvidia.yml` | sterownik NVIDIA + `nvidia-container-toolkit` + CDI (`/var/run/cdi/nvidia.yaml`) | **NVIDIA** |
+
+#### Wymagania na hoście i nakładki compose
+
+1. **Intel i AMD – VAAPI / QSV (`compose.vaapi.yml`)**:
+   - Nakładka przekazuje urządzenie `${VAAPI_DEVICE:-/dev/dri/renderD128}:/dev/dri/renderD128` do kontenera `ersatztv`.
+   - W przypadku kilku kart graficznych wskaż właściwy węzeł za pomocą zmiennej środowiskowej `VAAPI_DEVICE` (np. sprawdzając `ls -l /dev/dri/by-path`).
+   - Proces legacy w kontenerze działa jako `root`, więc dodawanie użytkownika do grupy `render` na hoście nie jest wymagane.
+
+2. **NVIDIA – NVENC / CUDA (`compose.nvidia.yml`)**:
+   - Ustawia `NVIDIA_DRIVER_CAPABILITIES=compute,video,utility` i przekazuje kartę przez mechanizm CDI (`driver: cdi`, `device_ids: ["nvidia.com/gpu=${NVIDIA_GPU:-all}"]`) – nie wymaga przestarzałego runtime `nvidia` w Dockerze.
+   - Na hoście wymagany jest sterownik NVIDIA oraz pakiet `nvidia-container-toolkit`.
+   - Wygeneruj specyfikację CDI: `sudo nvidia-ctk cdi generate --output=/var/run/cdi/nvidia.yaml`.
+   - Sprawdź dostępność urządzeń: `nvidia-ctk cdi list`.
+   - Przy kilku kartach NVIDIA można wybrać konkretną przez zmienną `NVIDIA_GPU` (numer np. `0` lub UUID `GPU-…`, domyślnie `all`).
+
+#### Uruchomienie
+
+- **Samodzielny stos VizRS Live**:
+  ```bash
+  docker compose -f compose.yml -f compose.vaapi.yml up -d     # Intel / AMD
+  docker compose -f compose.yml -f compose.nvidia.yml up -d    # NVIDIA
+  ```
+- **W stosie VizRS CG Playout**: dołóż nakładkę po `compose.cg-playout.yml` (obie nakładki celują w usługę `ersatztv`):
+  ```bash
+  docker compose -f docker-compose.yml -f "$VIZRS_LIVE_DIR/compose.cg-playout.yml" -f "$VIZRS_LIVE_DIR/compose.vaapi.yml" up -d
+  # lub w pliku .env CG Playout w COMPOSE_FILE dopisz nakładkę po compose.cg-playout.yml
+  ```
+
+#### Ustawienie w panelu
+
+W menu przejdź do **Profile kodowania** → edytuj wybrany profil (lub utwórz nowy):
+- W sekcji **Akceleracja sprzętowa** wybierz:
+  - dla Intel/AMD: **VAAPI** (urządzenie: `/dev/dri/renderD128`, sterownik: `iHD` dla nowszego Intela, `i965` dla starszego, `RadeonSI` dla AMD) lub **QSV** (Intel);
+  - dla NVIDIA: **NVIDIA**.
+- Zapisz profil i upewnij się, że jest przypisany do kanału w menu **Kanały**.
+
+#### Sprawdzenie poprawności
+
+1. **Test obrazu bez GPU**: uruchom skrypt `tests/hwaccel.sh [obraz]` (domyślnie `vizrs-live-legacy:dev`). Skrypt weryfikuje obecność akceleracji, koderów i sterowników wewnątrz kontenera i zwraca kod ≠ 0 przy jakimkolwiek braku (używany w CI i przy wydaniach).
+2. **W panelu**:
+   - **Diagnostyka** → panel „Stan” / „Kontrole legacy” / „Hardware Acceleration”: weryfikuje zgłaszane akceleratory; panel pokazuje także wykryte karty grafiki oraz wersje i możliwości ffmpeg.
+   - **Logi**: podczas transkodowania i nadawania sprawdź logi ffmpeg legacy (oraz raporty w `etv-config/ffmpeg-reports`), aby upewnić się, że strumień kodowany jest przez sprzętowy enkoder (np. `h264_vaapi`, `h264_nvenc`, `h264_qsv`).
 
 ## 3. Kopie zapasowe `etv-config`
 
