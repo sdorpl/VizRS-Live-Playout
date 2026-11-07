@@ -6,7 +6,7 @@
 
 ## Bieżący etap
 
-**Wydanie 1.1.0** (2026-11-07) z ErsatzTV legacy **v26.12.0** (sprawdzone też z v26.11.6). Plan rozbudowy R0–R12 zrobiony w całości; zawartość wydań: [CHANGELOG.md](../CHANGELOG.md). W 1.1.0 względem 1.0.0: VizRS Live Panel z CG Playout `/live` wchłonięty, a w CG Playout usunięty (zostaje tylko API `/api/live/*`) – Sloty na żywo jako stanowisko MCR, Audycje LIVE, studio i nazwa stanowiska w pasku górnym (R12). Podgląd strumienia kanału w panelu (okno podglądu, własny odtwarzacz MSE równany do zegara anteny, pośrednik `/api/stream/…`).
+**Wydanie 1.2.0** (2026-11-07) na najnowszym ErsatzTV legacy (sprawdzone z v26.12.0 i v26.11.6). Zrobione w całości: plan rozbudowy R0–R12 i plan makiety M0–M9; zawartość wydań: [CHANGELOG.md](../CHANGELOG.md). W 1.2.0 względem 1.1.0: panel na wzór makiety UI (liczniki w menu, wybór kanału, Na antenie z ramką VizRS, EPG, kafle mediów, kolekcje, playouty, siatka tygodnia bloków, reguły grafiki i wejścia studia w tabelach, Ustawienia w panelach, „Stan” stosu), limit logowań na adres klienta, poprawiona integracja z VizRS (Trio, `/output`), legacy zawsze najnowsze, działające workflow wydań (amd64 + arm64).
 
 **Grafika i sloty na żywo** – przez **VizRS CG Playout** (`../VizRS CG Playout`): reguły grafiki (`/api/live/graphics`), stan wejść, przejęcie kanału, audycje LIVE. Logika zostaje w CG Playout; panel woła jego API przez pośrednika `/api/cg/…`.
 
@@ -34,7 +34,7 @@ Plan [PLAN-makieta.md](plany/PLAN-makieta.md) (panel na wzór makiety UI) zrobio
 
 Sesje automatu niczego nie publikują i nie ruszają produkcji; to zostało do zrobienia ręcznie:
 
-- `git push origin main`, potem `git tag v1.1.0 && git push origin v1.1.0` (tag v1.0.0 nie był wypchnięty – wystarczy v1.1.0) – uruchamia `release.yml` (DOKUMENTACJA §9); po pierwszej publikacji pakiety ghcr ustawić jako publiczne.
+- Wydanie 1.2.0: `main` i tag `v1.2.0` wypchnięte 2026-11-07 – sprawdzić przebieg `release.yml` w Actions (bramka, obrazy, wydanie na GitHubie); po pierwszej publikacji pakiety ghcr ustawić jako publiczne.
 - CI (`ci.yml`, `legacy-latest.yml`) zacznie działać po wypchnięciu `.github/workflows/` i włączeniu Actions w repozytorium (DOKUMENTACJA §8).
 - Lokalna produkcja (stos `virtrs` CG Playout) przełączona 2026-11-07 na VizRS Live nakładką `compose.cg-playout.yml` (RUNBOOK §2a): legacy v26.11.6 → v26.12.0 z mostem (migracja bazy; kopia w `~/vizrs-kopie/`), proxy na 8409, panel na 8090, CG Playout z live API. Do sprawdzenia: tunery i odtwarzacze, które korzystały z innych ścieżek niż `/iptv/*` (`curl -I`, DOKUMENTACJA §8).
 - Produkcja (stos `virtrs`) po poprawce integracji z VizRS (Trio, podgląd `/output`): przebudować obraz panelu (`vizrs-live:local`), w `.env` CG Playout usunąć `VIZRS_LIVE_VIZRS_URL=http://127.0.0.1:8789` (nakładka ustawi `:8789` = host panelu, token wyjścia i anteny kanałów), `docker compose up -d live`; sprawdzić ramkę w Grafice kanału i „Trio ↗”.

@@ -1,6 +1,6 @@
 # VizRS Live – dokumentacja
 
-Wersja 1.1.0, sprawdzona z ErsatzTV legacy **v26.11.6** i **v26.12.0** (obraz `ghcr.io/ersatztv/legacy`, silnik Next; od 2026-11-07 zawsze najnowszy `ghcr.io/ersatztv/legacy:latest` – §6, §9).
+Wersja 1.2.0, sprawdzona z ErsatzTV legacy **v26.11.6** i **v26.12.0** (obraz `ghcr.io/ersatztv/legacy`, silnik Next; od 2026-11-07 zawsze najnowszy `ghcr.io/ersatztv/legacy:latest` – §6, §9).
 
 Instrukcja operatora: [INSTRUKCJA.md](INSTRUKCJA.md). Wdrożenie, kopie, aktualizacja, odtworzenie: [RUNBOOK.md](RUNBOOK.md). Znane braki panelu: [LUKI.md](LUKI.md); stan prac: [STATUS.md](STATUS.md); spis dokumentów: [README.md](README.md).
 
@@ -290,8 +290,8 @@ Operatorzy pracują wyłącznie w panelu. Legacy nie ma portu na zewnątrz (`exp
 
 | Obraz | Tag | Z czego |
 |---|---|---|
-| `ghcr.io/sdorpl/vizrs-live` | `1.1.0`; od następnego wydania amd64 + arm64 i `latest` | `docker/live.Dockerfile` (kompilacja krzyżowa musl z `rust-lld` na platformie budującej, bez QEMU) |
-| `ghcr.io/sdorpl/vizrs-live-legacy` | `1.1.0-legacy26.12.0` (wydanie 1.1.0); kolejne: `<panel>`, amd64 + arm64 i `latest` | `docker/legacy-bridge.Dockerfile` (SDK .NET na platformie budującej – DLL mostu to IL) na `LEGACY_IMAGE` z `.env.example` – od 2026-11-07 `ghcr.io/ersatztv/legacy:latest`; compose go nie używa (most budowany na miejscu, §6) |
+| `ghcr.io/sdorpl/vizrs-live` | `1.2.0` (wydanie 1.2.0) i `latest`, amd64 + arm64; wcześniej `1.1.0` (tylko amd64) | `docker/live.Dockerfile` (kompilacja krzyżowa musl z `rust-lld` na platformie budującej, bez QEMU) |
+| `ghcr.io/sdorpl/vizrs-live-legacy` | `1.2.0` i `latest` (wydanie 1.2.0, na najnowszym legacy), amd64 + arm64; wcześniej `1.1.0-legacy26.12.0` | `docker/legacy-bridge.Dockerfile` (SDK .NET na platformie budującej – DLL mostu to IL) na `LEGACY_IMAGE` z `.env.example` – od 2026-11-07 `ghcr.io/ersatztv/legacy:latest`; compose go nie używa (most budowany na miejscu, §6) |
 | `caddy` (proxy) | `2.10.2-alpine` | obraz oficjalny |
 
 Przypięte w `.env.example` i jako domyślne w `compose.yml`: `LIVE_IMAGE`, `PROXY_IMAGE`. Legacy – nie (od 2026-11-07 zawsze najnowsze, §6): `LEGACY_IMAGE=ghcr.io/ersatztv/legacy:latest`, `LIVE_LEGACY_IMAGE=vizrs-live-legacy:local` (lokalny obraz z mostem); inna wersja: `LEGACY_IMAGE=…` w `.env` albo `LEGACY_IMAGE=… tests/stack.sh up`. `release.yml` dokleja `-legacy<wersja>` do tagu tylko przy `LEGACY_IMAGE=…:v<wersja>`. Publikację robi `.github/workflows/release.yml` (wzór: VizRS CG System i CG Playout) po tagu `v<wersja>` albo ręcznie (Actions → Release, wersja = szkic wydania, bez `latest`): sprawdza zgodność wersji z `server/Cargo.toml`, przechodzi `tests/gate.sh` na `LEGACY_IMAGE` z `.env.example` i dopiero wtedy wypycha oba obrazy (buildx, amd64 + arm64, `GITHUB_TOKEN`, nazwa z właściciela repozytorium); równolegle buduje binarki panelu `VizRS-Live-<wersja>-linux-{x86_64,arm64}.tar.gz` (statyczne musl, z `README.md`, `CHANGELOG.md`, `.env.example`, `compose.yml`) i zakłada wydanie na GitHubie z `SHA256SUMS.txt` i notą z commitów. Wersja z łącznikiem (`v1.2.0-rc1`) = wydanie wstępne, bez `latest`. Zbędny szkic usuwa `drafts.yml` (Actions → Usuń szkic wydania).
@@ -302,7 +302,7 @@ Przypięte w `.env.example` i jako domyślne w `compose.yml`: `LIVE_IMAGE`, `PRO
 - TLS: panel i proxy zostają na HTTP (decyzja R10 podtrzymana); w RUNBOOK zalecenie LAN/VPN albo zewnętrzne proxy TLS. Panel nie robi TLS sam (serwer bez zależności).
 
 **Kroki ręczne (sesja automatu niczego nie publikuje):**
-1. `git push origin main` i `git tag v1.1.0 && git push origin v1.1.0` – uruchamia `release.yml`.
+1. `git push origin main` i `git tag v<wersja> && git push origin v<wersja>` – uruchamia `release.yml` (ostatnio: v1.2.0, 2026-11-07).
 2. Po pierwszej publikacji: pakiety `vizrs-live` i `vizrs-live-legacy` na GitHub ustawić jako publiczne (albo `docker login ghcr.io` na serwerze produkcyjnym).
 3. Produkcja: `.env` wg `.env.example` (nowe zmienne `LIVE_IMAGE`, `LIVE_LEGACY_IMAGE`), kopia `etv-config`, `docker compose pull && docker compose up -d` (RUNBOOK §2–4).
 
