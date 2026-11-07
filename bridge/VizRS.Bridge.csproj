@@ -11,7 +11,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>VizRS.Bridge</AssemblyName>
     <RootNamespace>VizRS.Bridge</RootNamespace>
-    <Version>1.2.0</Version>
+    <Version>1.2.1</Version>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <LegacyDir Condition="'$(LegacyDir)' == ''">../legacy-lib</LegacyDir>

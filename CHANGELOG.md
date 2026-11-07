@@ -2,9 +2,12 @@
 
 ## Niewydane
 
+## 1.2.1 – wydanie (2026-11-07)
+
+- Wersja panelu i mostu 1.2.1 (obrazy `ghcr.io/sdorpl/vizrs-live:1.2.1`, `ghcr.io/sdorpl/vizrs-live-legacy:1.2.1` – amd64 + arm64); pierwsze opublikowane wydanie po 1.1.0 – zawiera też całą sekcję 1.2.0 niżej.
 - **Akceleracja sprzętowa w wydaniu**: obraz legacy z mostem (amd64) zawiera akcelerację Intel VAAPI/QSV, AMD VAAPI i NVIDIA NVENC z oficjalnego obrazu upstream (sterowniki iHD, i965, radeonsi, libmfx, libva, kodery ffmpeg); nowe nakładki `compose.vaapi.yml` (przekazanie `/dev/dri/renderD128` dla Intela i AMD) oraz `compose.nvidia.yml` (karta przez CDI, `NVIDIA_DRIVER_CAPABILITIES`); nowy skrypt `tests/hwaccel.sh` sprawdza obecność akceleracji bez GPU i jest uruchamiany w bramce `ci.yml` oraz `release.yml` przed publikacją obrazów; nakładki dołączone do archiwów binarek wydania; opis wdrożenia i konfiguracji w profilach kodowania w RUNBOOK §2b.
 - **Poprawki po pierwszym przebiegu bramki w CI** (tag v1.2.0 bez publikacji – bramka nie przeszła): przejściowy błąd legacy (500) przy zapytaniach tylko do odczytu serwer panelu ponawia raz, treść błędu w dzienniku; „Zbudowany do” w Playoutach odpytuje legacy po kolei, nie naraz; Na antenie – audycje LIVE z CG Playout zawsze w „Najbliższych zdarzeniach” (wcześniej wypychały je bliskie pozycje ramówki); Logi – zmiana źródła czyści filtr tekstu.
-## 1.2.0 – wydanie (2026-11-07)
+## 1.2.0 – tag bez publikacji (2026-11-07; bramka w CI nie przeszła – poprawki w 1.2.1)
 
 - Wersja panelu i mostu 1.2.0 (obrazy `ghcr.io/sdorpl/vizrs-live:1.2.0`, `ghcr.io/sdorpl/vizrs-live-legacy:1.2.0` – amd64 + arm64, na najnowszym ErsatzTV legacy); panel na wzór makiety UI (PLAN-makieta M0–M9), limit logowań na adres klienta, poprawiona integracja z VizRS, legacy zawsze najnowsze, działające workflow wydań. Most bez zmian w działaniu.
 - **Limit logowań na adres klienta** (LUKI #4): limit 10 nieudanych logowań w oknie 60 s liczony osobno dla adresu IP klienta (po przekroczeniu 429 tylko dla tego adresu do końca okna, inne logują się dalej); bezpiecznik łączny 100 błędów na 60 s ze wszystkich adresów razem blokuje logowanie przy ataku rozproszonym; panel nie ufa nagłówkowi X-Forwarded-For (za proxy lub z userland-proxy Dockera wspólny IP działa jak limit łączny); pamięć do 4096 adresów z czyszczeniem wygasłych okien; w dzienniku panelu przy złym tokenie adres IP klienta (`login: zły token (<IP>)`).
