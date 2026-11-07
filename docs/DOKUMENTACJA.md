@@ -99,7 +99,7 @@ Biała lista: jedna nazwa komendy w wierszu, `#` – komentarz. Nazwy nieznane w
 | `GET /api/status` | wersje, adresy, stan mostu (`bridge`, `bridgeError`) |
 | `GET /api/exposure` | (R10) kody HTTP ścieżek `/`, `/channels`, `/vizrs-bridge/health`, `/iptv/channels.m3u` pod adresem dla widzów (`--stream-url`), sprawdzane z serwera panelu: `{"url","error","probes":[{"path","status"}]}` |
 | `GET /api/commands` | lista z mostu |
-| `POST /api/cmd/{Nazwa}` | komenda przez most (nazwa: litery i cyfry) |
+| `POST /api/cmd/{Nazwa}` | komenda przez most (nazwa: litery i cyfry); zapytanie tylko do odczytu (`Get…`, `Query…`, `Search…`, `Count…`), na które legacy odpowie wyjątkiem (500 – np. baza zajęta budową playoutu w tle), serwer ponawia raz po 250 ms; błąd 500 z treścią trafia do dziennika panelu |
 | `GET\|POST\|PUT\|DELETE /api/cg/…` | pośrednik do VizRS CG Playout (R9), biała lista niżej; odpowiedź `{"ok":true,"result":<JSON CG>}`, odrzucenie przez CG (4xx) = `{"ok":false,"error":"CG Playout odrzucił: …"}`, brak `--cg-url` = 409 |
 | `GET /api/stream/…` | **podgląd strumienia kanału** (HLS legacy przez serwer panelu); biała lista niżej; playlisty z przepisanymi adresami i nagłówkiem `X-VizRS-Now` (zegar serwera, ms) |
 | `POST /api/upload/{Logo\|Watermark}` | obraz do legacy przez most (`/vizrs-bridge/upload/…`); serwer sprawdza rodzaj, typ i sygnaturę pliku; limit treści 10 MB tylko dla tej ścieżki (pozostałe żądania: 1 MB) |

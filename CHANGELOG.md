@@ -2,6 +2,7 @@
 
 ## Niewydane
 
+- **Poprawki po pierwszym przebiegu bramki w CI** (tag v1.2.0 bez publikacji – bramka nie przeszła): przejściowy błąd legacy (500) przy zapytaniach tylko do odczytu serwer panelu ponawia raz, treść błędu w dzienniku; „Zbudowany do” w Playoutach odpytuje legacy po kolei, nie naraz; Na antenie – audycje LIVE z CG Playout zawsze w „Najbliższych zdarzeniach” (wcześniej wypychały je bliskie pozycje ramówki); Logi – zmiana źródła czyści filtr tekstu.
 ## 1.2.0 – wydanie (2026-11-07)
 
 - Wersja panelu i mostu 1.2.0 (obrazy `ghcr.io/sdorpl/vizrs-live:1.2.0`, `ghcr.io/sdorpl/vizrs-live-legacy:1.2.0` – amd64 + arm64, na najnowszym ErsatzTV legacy); panel na wzór makiety UI (PLAN-makieta M0–M9), limit logowań na adres klienta, poprawiona integracja z VizRS, legacy zawsze najnowsze, działające workflow wydań. Most bez zmian w działaniu.

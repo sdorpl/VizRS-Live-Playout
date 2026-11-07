@@ -210,7 +210,7 @@ async function cgLog(srcSel) {
 }
 
 VIEWS.logi = async () => {
-  const srcSel = h('select', { id: 'log-src', 'aria-label': 'Źródło logów', onchange: () => { LOG.src = srcSel.value; LOG.page = 0; route(true); } },
+  const srcSel = h('select', { id: 'log-src', 'aria-label': 'Źródło logów', onchange: () => { LOG.src = srcSel.value; LOG.page = 0; LOG.text = ''; route(true); } },
     h('option', { value: 'legacy' }, 'źródło: ErsatzTV legacy'), S.status.cg ? h('option', { value: 'cg' }, 'źródło: VizRS CG Playout') : null);
   if (!S.status.cg) LOG.src = 'legacy';
   srcSel.value = LOG.src;

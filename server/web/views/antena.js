@@ -124,7 +124,9 @@ function upcoming(d) {
     const nl = ch.next_live;
     if (nl && nl.start > now) out.push({ t: nl.start, ch: ch.name || ch.number, title: nl.title, live: true });
   }
-  return out.sort((a, b) => a.t - b.t).slice(0, 12);
+  // audycje LIVE zawsze na liście (najwyżej jedna na kanał), resztę miejsc biorą najbliższe pozycje ramówki
+  const live = out.filter((e) => e.live);
+  return [...out.filter((e) => !e.live).sort((a, b) => a.t - b.t).slice(0, Math.max(0, 12 - live.length)), ...live].sort((a, b) => a.t - b.t);
 }
 
 /** Uwagi dla operatora: [rodzaj pigułki, kto, tekst, odnośnik?] – tylko z danych, które panel ma. */

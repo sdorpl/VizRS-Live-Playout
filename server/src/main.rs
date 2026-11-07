@@ -516,6 +516,23 @@ fn authorized(app: &App, req: &Request) -> bool {
         .is_some_and(|t| eq_ct(t, token))
 }
 
+/// Zapytanie legacy tylko do odczytu (bezpieczne do ponowienia): `Get…`, `Query…`, `Search…`, `Count…`.
+pub fn read_only(name: &str) -> bool {
+    ["Get", "Query", "Search", "Count"].iter().any(|p| {
+        name.strip_prefix(p)
+            .is_some_and(|r| r.starts_with(|c: char| c.is_ascii_uppercase()))
+    })
+}
+
+/// Początek odpowiedzi do dziennika (jedna linia, najwyżej 300 znaków).
+fn log_snippet(body: &[u8]) -> String {
+    String::from_utf8_lossy(body)
+        .chars()
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .take(300)
+        .collect()
+}
+
 /// Nazwa komendy legacy: litera, potem litery i cyfry (np. `GetAllChannels`).
 pub fn valid_command(name: &str) -> bool {
     (1..=80).contains(&name.len())
@@ -582,12 +599,28 @@ fn route(app: &App, req: &Request) -> Response {
             if !valid_command(name) {
                 return Response::error(400, "zła nazwa komendy");
             }
-            let mut r = forward(
-                app.bridge.post(&format!("/command/{name}"), &req.body),
-                name,
-            );
+            let call = || {
+                forward(
+                    app.bridge.post(&format!("/command/{name}"), &req.body),
+                    name,
+                )
+            };
+            let mut r = call();
+            // zapytanie tylko do odczytu, a legacy rzucił wyjątkiem (np. baza zajęta budową playoutu w tle) – jedna ponowna próba
+            if r.status == 500 && read_only(name) {
+                eprintln!(
+                    "cmd {name} -> 500, ponawiam: {}",
+                    log_snippet(&mask_secrets(&r.body))
+                );
+                std::thread::sleep(std::time::Duration::from_millis(250));
+                r = call();
+            }
             r.body = mask_secrets(&r.body);
-            eprintln!("cmd {name} -> {}", r.status);
+            if r.status >= 500 {
+                eprintln!("cmd {name} -> {}: {}", r.status, log_snippet(&r.body));
+            } else {
+                eprintln!("cmd {name} -> {}", r.status);
+            }
             r
         }
         _ => Response::error(404, "nieznany adres API"),
@@ -1533,6 +1566,21 @@ mod tests {
             route(&app(None), &req("GET", "/api/commands", &[])).status,
             502,
             "bez tokenu panelu lokalnie wpuszcza"
+        );
+    }
+
+    #[test]
+    fn read_only_commands() {
+        assert!(
+            read_only("GetFuturePlayoutItemsById")
+                && read_only("QuerySearchIndexMovies")
+                && read_only("CountMediaItemsByLibrary")
+        );
+        assert!(
+            !read_only("BuildPlayout")
+                && !read_only("Getaway")
+                && !read_only("SearchX".trim_end_matches('X'))
+                && !read_only("UpdatePlayout")
         );
     }
 

@@ -85,14 +85,15 @@ VIEWS.playouty = crudView({
     const rows = (res?.Page || []).filter((p) => onChannel(p.ChannelNumber)).sort((a, b) => (parseFloat(a.ChannelNumber) || 0) - (parseFloat(b.ChannelNumber) || 0));
     channels.sort((a, b) => (parseFloat(a.Number) || 0) - (parseFloat(b.Number) || 0));
     schedules.sort((a, b) => a.Name.localeCompare(b.Name, 'pl'));
-    // „Zbudowany do” = koniec ostatniej przyszłej pozycji (TotalCount → ostatnia strona po 1 pozycji)
-    await Promise.all(rows.map(async (p) => {
+    // „Zbudowany do” = koniec ostatniej przyszłej pozycji (TotalCount → ostatnia strona po 1 pozycji);
+    // po kolei, nie naraz – mniej obciąża bazę legacy, gdy w tle buduje się playout
+    for (const p of rows) {
       try {
         const n = (await cmd('GetFuturePlayoutItemsById', { PlayoutId: p.PlayoutId, ShowFiller: true, PageNum: 0, PageSize: 1 }))?.TotalCount || 0;
         p._until = n ? (await cmd('GetFuturePlayoutItemsById', { PlayoutId: p.PlayoutId, ShowFiller: true, PageNum: n - 1, PageSize: 1 }))?.Page?.[0]?.Finish ?? null : null;
         p._count = n;
       } catch { p._until = undefined; }
-    }));
+    }
     return { rows, channels, schedules };
   },
   loadOne: async (p) => {
