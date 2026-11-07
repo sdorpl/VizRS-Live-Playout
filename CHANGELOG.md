@@ -5,6 +5,7 @@
 ## 1.0.0 – wydanie (2026-11-07)
 
 - **Edytor reguł grafiki** w Grafice kanału: reguły globalne (start pozycji, przed końcem audycji i ile sekund, przerwa reklamowa, rozpoznawanie reklam), reguły audycji i kanałów; zapis przez nowe API VizRS CG Playout `GET/PUT /api/live/graphics` (walidacja w CG, zmiana od następnej pozycji bez restartu). Pośrednik `/api/cg/live/graphics` (GET, PUT).
+- `tests/real.sh`: prawdziwe Jellyfin, Emby, Plex i VizRS CG Playout obok stosu testowego (Jellyfin i Emby konfigurowane automatycznie, `connect` łączy z nimi legacy) – ręczne sprawdzenie tego, co e2e testuje na atrapach.
 - e2e stabilniejsze: „+ Dodaj zamianę” (R8), wgrywanie obrazu znaku wodnego (R5) i usuwanie deco (R6) czekają na przerysowanie widoku.
 
 - **Dokumenty**: `docs/INSTRUKCJA.md` (operator: codzienna praca, przebudowa ramówki, awarie) i `docs/RUNBOOK.md` (wdrożenie, kopie `etv-config`, aktualizacja panelu i legacy, odtworzenie, awarie, wydanie).

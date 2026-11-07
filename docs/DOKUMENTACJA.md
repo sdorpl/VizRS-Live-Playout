@@ -204,6 +204,8 @@ Wczesne ostrzeżenie: CI `legacy-latest.yml` co tydzień robi kroki 1–3 na `gh
 | **bramka przed commitem** | `tests/gate.sh` – wszystko powyżej po kolei |
 | CI | `.github/workflows/ci.yml` (push, PR): serwer, obraz panelu, `tests/gate.sh` z Playwright 1.58.2; `legacy-latest.yml` (poniedziałek 04:17 UTC i ręcznie): stos na `ghcr.io/ersatztv/legacy:latest` + seed + e2e |
 
+**Prawdziwe usługi zamiast atrap (`tests/real.sh`, ręcznie, poza bramką).** e2e testuje Jellyfin i CG Playout na atrapach; `tests/real.sh up` stawia obok stosu testowego prawdziwe: **Jellyfin** (127.0.0.1:18196), **Emby** (18896), **Plex** (18324) – w sieci `vizrs-live-test-net`, z wideo testowym seeda pod `/media/info24` – oraz **VizRS CG Playout** z repozytorium obok (binarka, 127.0.0.1:18701, Live Panel na danych stosu) i drugi panel VizRS Live (**127.0.0.1:18091**) podłączony do niego (panel 18090 zostaje na atrapie e2e). Jellyfin i Emby konfiguruje sam (konto `vizrs`, biblioteka „Filmy E2E”, klucz API w `$VIZRS_LIVE_TEST_DIR/real/*.key`); `tests/real.sh connect` łączy z nimi legacy przez panel; `status`, `down`, `reset` (usuwa też dane usług). Plex: logowanie PIN przez plex.tv – ręcznie w panelu (Źródła zewnętrzne → Plex), opcjonalnie `PLEX_CLAIM`. Sprawdzone 2026-11-07: legacy ↔ Jellyfin 10.10.7 i Emby 4.8.11 (połączenie, klucz zamaskowany, biblioteki, zamiana ścieżki `/media/info24` → `/config/media/info24`, synchronizacja – film „Pogoda” w indeksie legacy); reguły grafiki na prawdziwym CG Playout (odczyt, błędny regex odrzucony, zapis `graphics.json`). Bez silnika VizRS (komendy grafiki idą w próżnię) i bez Plex z kontem.
+
 Plan rozbudowy realizuje automat `scripts/plan.sh` (opis w `docs/PLAN-rozbudowy.md`, „Jak pracować”).
 
 ## 8. Zamknięcie web GUI legacy (R10)
