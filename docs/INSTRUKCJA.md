@@ -25,7 +25,7 @@ Pasek górny: stan mostu do legacy (zielony = działa) i licznik playoutów z b�
 | ułożyć ramówkę blokową | **Bloki i szablony**, **Wystrój (deco)**, potem **Playouty** → kalendarz tygodnia | blok = treść na N minut; szablon dnia = bloki o godzinach; kalendarz = szablony na dni |
 | podpiąć ramówkę do kanału | **Playouty** → „+ Playout” | rodzaj, kanał (tylko bez playoutu), harmonogram; potem „Przebuduj” |
 | przerwy, wypełnienie | **Wypełniacze**, **Znaki wodne** | |
-| grafika i studio na żywo | **Grafika kanału**, **Sloty na żywo** | wymaga VizRS CG Playout; **ZDEJMIJ** zdejmuje studio z anteny (z potwierdzeniem), **WPUŚĆ** wpuszcza |
+| grafika i studio na żywo | **Grafika kanału**, **Sloty na żywo** | wymaga VizRS CG Playout; w Grafice kanału **Reguły grafiki** – która strona VizRS wchodzi na start pozycji, przed końcem audycji i na reklamy (zmiana od następnej pozycji); **ZDEJMIJ** zdejmuje studio z anteny (z potwierdzeniem), **WPUŚĆ** wpuszcza |
 
 ### Przebudowa ramówki
 

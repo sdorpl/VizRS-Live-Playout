@@ -67,14 +67,84 @@ VIEWS.grafika = async () => {
       h('div', { class: 'cols' },
         S.status.vizrsUrl
           ? panel('Podgląd anteny VizRS (/output)', null, h('div', { class: 'pad' }, h('iframe', { class: 'preview', src: S.status.vizrsUrl + '/output', title: 'Podgląd grafiki VizRS' })))
-          : h('div', { class: 'note' }, 'Podgląd /output: uruchom panel z --vizrs-url (VIZRS_LIVE_VIZRS_URL).'),
-        panel('Reguły grafiki', null, h('div', { class: 'pad' },
-          h('p', null, 'Kiedy która strona VizRS wchodzi na antenę (start pozycji, przed końcem audycji – on_end, przerwa reklamowa – on_ad, audycje – shows, ' +
-            'pola {title}, {next_title}, {next_start}…) – to konfiguracja VizRS CG Playout (config.json, sekcje on_clip, on_end, on_ad, shows, channels).'),
-          h('p', { class: 'dim' }, 'CG Playout nie ma jeszcze API do odczytu i zapisu tych reguł, więc panel ich nie zmienia (bez wspólnych plików – decyzja R9). ' +
-            'Edycja: plik konfiguracji CG Playout i restart usługi cg; po dodaniu API w CG Playout – edytor tutaj (DOKUMENTACJA §4).'))))),
+          : h('div', { class: 'note' }, 'Podgląd /output: uruchom panel z --vizrs-url (VIZRS_LIVE_VIZRS_URL).'))),
+    S.status.cg && !(health instanceof Error) ? await rulesPanel() : null,
   ];
 };
+
+// ---------- Reguły grafiki (CG Playout GET/PUT /api/live/graphics) ----------
+// Puste pole = dziedzicz (wartość globalna), „-” = wyłączone (pusty tekst w CG Playout).
+const toField = (v) => (v == null ? '' : v === '' ? '-' : String(v));
+const fromField = (v) => { const t = v.trim(); return t === '' ? null : t === '-' ? '' : t; };
+const numField = (v) => { const t = String(v).trim(); return t === '' ? null : Number(t); };
+
+async function rulesPanel() {
+  let doc;
+  try { doc = await cg('live/graphics'); } catch (e) {
+    return panel('Reguły grafiki', null, h('div', { class: 'pad' },
+      h('p', { class: 'dim' }, 'Ta wersja VizRS CG Playout nie ma API reguł grafiki (GET/PUT /api/live/graphics) – reguły zmienia się w jego config.json. Zaktualizuj CG Playout.'),
+      cgError(e)));
+  }
+  const r = doc.rules || {};
+  const input = (id, label, value, opts = {}) => {
+    const el = opts.area ? h('textarea', { id, rows: 2, class: 'mono', 'aria-label': label, placeholder: opts.placeholder || '' })
+      : h('input', { id, class: opts.num ? 'num' : 'mono', value: value ?? '', 'aria-label': label, placeholder: opts.placeholder || '' });
+    if (opts.area) el.value = value ?? '';
+    return el;
+  };
+  const g = {
+    on_clip: input('gr-on_clip', 'Na start pozycji (on_clip)', r.on_clip, { area: true, placeholder: 'TAKE 4001 headline={title}|sub=Potem: {next_title} o {next_start}' }),
+    on_end: input('gr-on_end', 'Przed końcem audycji (on_end)', r.on_end, { area: true, placeholder: 'TAKE 1405 next=Za chwilę|programs={next_title}' }),
+    end_seconds: input('gr-end_seconds', 'Sekund przed końcem', r.end_seconds ?? 60, { num: true }),
+    on_ad: input('gr-on_ad', 'Na przerwę reklamową (on_ad)', r.on_ad, { area: true, placeholder: 'puste = grafika schodzi na czas reklam' }),
+    ad_path: input('gr-ad_path', 'Reklama: ścieżka (regex)', r.ad_match?.path, { placeholder: '/reklamy/' }),
+    ad_title: input('gr-ad_title', 'Reklama: tytuł (regex)', r.ad_match?.title),
+  };
+  const shows = (r.shows || []).map((x) => ({ ...x }));
+  const channels = Object.entries(r.channels || {}).map(([channel, x]) => ({ channel, ...x }));
+  const showsBox = h('div', { 'data-rules-shows': '' });
+  const chBox = h('div', { 'data-rules-channels': '' });
+  const row = (list, i, fields, render) => h('div', { class: 'rule-row' },
+    ...fields.map(([key, label, num]) => h('input', {
+      value: num ? (list[i][key] ?? '') : (key === 'show_title' || key === 'channel' ? list[i][key] ?? '' : toField(list[i][key])),
+      class: num ? 'num' : 'mono', placeholder: label, 'aria-label': `${label} ${i + 1}`,
+      oninput: (e) => { list[i][key] = num ? numField(e.target.value) : key === 'show_title' || key === 'channel' ? e.target.value.trim() : fromField(e.target.value); },
+    })),
+    h('button', { type: 'button', class: 'danger', 'aria-label': `Usuń regułę ${i + 1}`, onclick: () => { list.splice(i, 1); render(); } }, '✕'));
+  const SHOW = [['show_title', 'Audycja (regex tytułu)'], ['on_clip', 'on_clip'], ['on_end', 'on_end'], ['end_seconds', 's przed końcem', true], ['on_ad', 'on_ad']];
+  const CH = [['channel', 'Kanał'], ['on_clip', 'on_clip'], ['on_end', 'on_end'], ['end_seconds', 's przed końcem', true], ['on_ad', 'on_ad']];
+  const renderShows = () => showsBox.replaceChildren(...(shows.length ? shows.map((_, i) => row(shows, i, SHOW, renderShows)) : [h('div', { class: 'empty' }, 'Brak reguł audycji.')]),
+    h('div', { class: 'bar' }, btn('+ Reguła audycji', () => { shows.push({ show_title: '' }); renderShows(); })));
+  const renderCh = () => chBox.replaceChildren(...(channels.length ? channels.map((_, i) => row(channels, i, CH, renderCh)) : [h('div', { class: 'empty' }, 'Wszystkie kanały na regułach globalnych.')]),
+    h('div', { class: 'bar' }, btn('+ Reguła kanału', () => { channels.push({ channel: '' }); renderCh(); })));
+  renderShows(); renderCh();
+
+  const save = async () => {
+    if (shows.some((x) => !x.show_title)) return toast('Reguła audycji wymaga wzorca tytułu.', 'bad');
+    if (channels.some((x) => !x.channel)) return toast('Reguła kanału wymaga numeru kanału.', 'bad');
+    const clean = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v != null && !(typeof v === 'number' && Number.isNaN(v))));
+    const body = {
+      on_clip: g.on_clip.value, on_end: g.on_end.value, on_ad: g.on_ad.value,
+      end_seconds: numField(g.end_seconds.value) ?? 60,
+      ad_match: { path: g.ad_path.value.trim(), title: g.ad_title.value.trim() },
+      shows: shows.map(clean),
+      channels: Object.fromEntries(channels.map(({ channel, ...x }) => [channel, clean(x)])),
+    };
+    try { await cg('live/graphics', 'PUT', body); toast('Reguły grafiki zapisane w CG Playout – działają od następnej pozycji'); route(true); } catch (e) { toast('CG Playout odrzucił reguły: ' + e.message, 'bad'); }
+  };
+  const lbl = (el, text) => [h('label', { for: el.id }, text), el];
+  return panel('Reguły grafiki', h('span', null, doc.source === 'file' ? pill('z panelu', 'ok') : pill('z config.json')),
+    h('div', { class: 'pad', 'data-rules': '' },
+      h('p', { class: 'dim' }, 'Komendy VizRS (TAKE, OUT…) z polami {title}, {next_title}, {next_start}, {show_title}… Kilka komend – w osobnych liniach. ' +
+        'W regułach audycji i kanałów puste pole = jak globalnie, „-” = wyłączone. Zmiana działa od następnej pozycji, bez restartu CG Playout.'),
+      h('div', { class: 'form' }, ...lbl(g.on_clip, 'Na start pozycji'), ...lbl(g.on_end, 'Przed końcem audycji'), ...lbl(g.end_seconds, 'Sekund przed końcem'),
+        ...lbl(g.on_ad, 'Na przerwę reklamową'), ...lbl(g.ad_path, 'Reklama – ścieżka (regex)'), ...lbl(g.ad_title, 'Reklama – tytuł (regex)')),
+      h('h3', null, 'Reguły audycji (pierwsza pasująca)'), showsBox,
+      h('h3', null, 'Reguły kanałów'), chBox,
+      doc.store ? null : h('div', { class: 'note' }, 'CG Playout nie ma etv_config – reguł nie zapisze.'),
+      h('div', { class: 'bar' }, btn('Zapisz reguły grafiki', save, 'acc'))),
+    cmdNote('CG Playout GET/PUT /api/live/graphics'));
+}
 
 // ---------- Sloty na żywo ----------
 function channelCard(c) {

@@ -4,6 +4,9 @@
 
 ## 1.0.0 – wydanie (2026-11-07)
 
+- **Edytor reguł grafiki** w Grafice kanału: reguły globalne (start pozycji, przed końcem audycji i ile sekund, przerwa reklamowa, rozpoznawanie reklam), reguły audycji i kanałów; zapis przez nowe API VizRS CG Playout `GET/PUT /api/live/graphics` (walidacja w CG, zmiana od następnej pozycji bez restartu). Pośrednik `/api/cg/live/graphics` (GET, PUT).
+- e2e stabilniejsze: „+ Dodaj zamianę” (R8), wgrywanie obrazu znaku wodnego (R5) i usuwanie deco (R6) czekają na przerysowanie widoku.
+
 - **Dokumenty**: `docs/INSTRUKCJA.md` (operator: codzienna praca, przebudowa ramówki, awarie) i `docs/RUNBOOK.md` (wdrożenie, kopie `etv-config`, aktualizacja panelu i legacy, odtworzenie, awarie, wydanie).
 - **Obrazy** `ghcr.io/sdorpl/vizrs-live:1.0.0` i `ghcr.io/sdorpl/vizrs-live-legacy:1.0.0-legacy26.12.0` (workflow `release.yml` po tagu `v*`; publikacja – krok ręczny, DOKUMENTACJA §9). `compose.yml` używa ich domyślnie (`docker compose pull`), budowa na miejscu dalej działa.
 - **Wersje przypięte**: `.env.example` – `LIVE_IMAGE`, `LIVE_LEGACY_IMAGE`, `LEGACY_IMAGE=ghcr.io/ersatztv/legacy:v26.12.0`, `PROXY_IMAGE=caddy:2.10.2-alpine`; domyślne legacy w `legacy-bridge.Dockerfile` też v26.12.0.

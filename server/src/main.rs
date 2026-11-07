@@ -631,6 +631,7 @@ pub fn cg_path(method: &str, rest: &str) -> Option<String> {
         ("GET", ["ingest", ch]) => format!("/ingest/state?channel={ch}"),
         ("GET", ["pages", ch]) => format!("/etv/pages?channel={ch}"),
         ("GET", ["live", "state"]) => "/api/live/state".into(),
+        ("GET" | "PUT", ["live", "graphics"]) => "/api/live/graphics".into(),
         ("GET", ["live", "shows"]) | ("POST", ["live", "shows"]) => "/api/live/shows".into(),
         ("POST", ["live", "shows", "scan"]) => "/api/live/shows/scan".into(),
         ("PUT" | "DELETE", ["live", "shows", id]) => format!("/api/live/shows/{id}"),
@@ -997,6 +998,11 @@ mod tests {
             cg_path("DELETE", "live/shows/24-wiadomosci").as_deref(),
             Some("/api/live/shows/24-wiadomosci")
         );
+        assert_eq!(
+            cg_path("PUT", "live/graphics").as_deref(),
+            Some("/api/live/graphics")
+        );
+        assert_eq!(cg_path("DELETE", "live/graphics"), None);
         assert_eq!(cg_path("PUT", "live/settings"), None);
         assert_eq!(cg_path("GET", "ingest/24&x=1"), None);
         assert_eq!(cg_path("GET", "pages/.."), None);

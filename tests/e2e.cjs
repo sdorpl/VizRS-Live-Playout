@@ -32,6 +32,7 @@ function check(cond, msg) {
   const cgSeen = [];
   const CG = {
     hold: false, anytime: true,
+    graphics: { rules: { on_clip: 'TAKE 4001 headline={title}', on_ad: '', ad_match: { path: '/reklamy/', title: '' }, on_end: '', end_seconds: 60, shows: [], channels: { 24: { on_end: '', shows: [{ show_title: 'x', on_clip: 'TAKE 9' }] } } }, source: 'config', store: true },
     shows: [{ id: '24-poranek-na-zywo', channel: '24', title: 'Poranek na żywo', duration: '01:00:00', plot: '', collection: true, collection_name: 'LIVE · Poranek na żywo', next: null }],
   };
   const cgServer = require('http').createServer((q, r) => {
@@ -63,6 +64,13 @@ function check(cond, msg) {
       if ((m = u.match(/^\/api\/live\/shows\/([\w.-]+)$/)) && q.method === 'DELETE') { CG.shows = CG.shows.filter((x) => x.id !== m[1]); return send(200, { ok: true }); }
       if ((m = u.match(/^\/api\/live\/channels\/24\/(hold|release)$/))) { CG.hold = m[1] === 'hold'; return send(200, { ok: true }); }
       if (u === '/api/live/channels/24' && q.method === 'PUT') { CG.anytime = body.anytime; return send(200, { ok: true }); }
+      if (u === '/api/live/graphics' && q.method === 'GET') return send(200, CG.graphics);
+      if (u === '/api/live/graphics' && q.method === 'PUT') {
+        // jak CG Playout: wyrażenie, które się nie kompiluje, = 400 i nic się nie zmienia
+        for (const x of body.shows || []) { try { new RegExp(x.show_title); } catch { return send(400, { error: `reguły grafiki: shows show_title "${x.show_title}" is not a valid regular expression` }); } }
+        CG.graphics = { rules: body, source: 'file', store: true };
+        return send(200, CG.graphics);
+      }
       send(404, { error: 'nie ma' });
     });
   });
@@ -410,7 +418,12 @@ function check(cond, msg) {
   await page.waitForSelector('main[data-view="znaki"]');
   await rerender(() => page.click('text=+ Nowy znak'));
   await page.fill('#f-Name', wmName);
-  await page.setInputFiles('#f-image', { name: 'logo.png', mimeType: 'image/png', buffer: PNG });
+  // formularz może się jeszcze przerysować po „+ Nowy znak” – wgrywanie ponawiane, aż legacy potwierdzi
+  for (let i = 0; i < 5 && !(await page.isVisible('#toast.ok:has-text("Obraz wgrany")')); i++) {
+    if (!(await page.inputValue('#f-Name').catch(() => ''))) await page.fill('#f-Name', wmName);
+    await page.setInputFiles('#f-image', { name: 'logo.png', mimeType: 'image/png', buffer: PNG }, { timeout: 5000 }).catch(() => {});
+    await page.waitForSelector('#toast.ok:has-text("Obraz wgrany")', { timeout: 5000 }).catch(() => {});
+  }
   await page.waitForSelector('#toast.ok:has-text("Obraz wgrany")');
   await page.click('button[aria-label="Położenie: lewy górny"]');
   await page.fill('#f-Width', '20');
@@ -824,7 +837,8 @@ function check(cond, msg) {
   await rerender(() => page.click(`td:text-is("${decoName}")`));
   await page.click('main .panel header button:has-text("Usuń")');
   await rerender(() => page.click('#dlg-buttons button:has-text("Usuń")'));
-  check(!(await page.$(`td:text-is("${decoName}")`)), 'deco usunięte');
+  // lista może się przerysować drugi raz (odświeżenie po usunięciu) – czekamy, aż wiersz zniknie
+  check(await page.waitForSelector(`td:text-is("${decoName}")`, { state: 'detached', timeout: 10000 }).then(() => true, () => false), 'deco usunięte');
   await page.click('button:has-text("Usuń grupę…")');
   await page.selectOption('#dg-del', { label: `${dgName} (0 deco)` });
   await rerender(() => page.click('#dlg-buttons button:has-text("Usuń")'));
@@ -965,7 +979,12 @@ function check(cond, msg) {
   await rerender(() => page.click('button:has-text("Zapisz wybór bibliotek")'));
   const jl = (await api('GetJellyfinLibrariesBySourceId', { JellyfinMediaSourceId: jsrc.Id })).result;
   check(jl.length === 1 && jl[0].ShouldSyncItems === true, 'źródła: biblioteka Jellyfin włączona do synchronizacji');
-  await page.click('button:has-text("+ Dodaj zamianę")');
+  // widok może się jeszcze przerysować po zapisie bibliotek – klik ponawiany, aż wiersz się pojawi
+  const addPath = `[data-source="Jellyfin-${jsrc.Id}"] button:has-text("+ Dodaj zamianę")`;
+  for (let i = 0; i < 10 && !(await page.isVisible('input[aria-label="Ścieżka w Jellyfin 1"]')); i++) {
+    await page.click(addPath, { timeout: 5000 }).catch(() => {});
+    await page.waitForSelector('input[aria-label="Ścieżka w Jellyfin 1"]', { timeout: 2000 }).catch(() => {});
+  }
   await page.fill('input[aria-label="Ścieżka w Jellyfin 1"]', '/media/filmy');
   await page.fill('input[aria-label="Ścieżka w legacy 1"]', '/config/media/filmy');
   await rerender(() => page.click('button:has-text("Zapisz zamiany ścieżek")'));
@@ -1003,6 +1022,24 @@ function check(cond, msg) {
   check(await page.isVisible('button:has-text("Wczytaj pliki elementów")'), 'grafika: przycisk RefreshGraphicsElements (komenda na liście mostu)');
   await rerender(() => page.click('button:has-text("Wczytaj pliki elementów")'));
   check(/wczytał/.test(await page.textContent('#toast')), 'grafika: RefreshGraphicsElements wykonane w legacy');
+  // reguły grafiki (CG Playout GET/PUT /api/live/graphics)
+  await page.waitForSelector('[data-rules] #gr-on_clip');
+  check(await page.inputValue('#gr-on_clip') === 'TAKE 4001 headline={title}' && await page.inputValue('input[aria-label="on_end 1"]') === '-', 'reguły grafiki: odczyt z CG Playout („-” = wyłączone)');
+  await page.fill('#gr-on_end', 'TAKE 1405 programs={next_title}');
+  await page.fill('#gr-end_seconds', '45');
+  await page.click('button:has-text("+ Reguła audycji")');
+  await page.fill('input[aria-label="Audycja (regex tytułu) 1"]', '(');
+  await page.click('button:has-text("Zapisz reguły grafiki")');
+  await page.waitForSelector('#toast.bad');
+  check(/odrzucił reguły.*regular expression/.test(await page.textContent('#toast')) && CG.graphics.source === 'config', 'reguły grafiki: błąd walidacji CG Playout pokazany, nic nie zapisane');
+  await page.fill('input[aria-label="Audycja (regex tytułu) 1"]', '^Wiadomo');
+  await page.fill('input[aria-label="on_clip 1"]', 'TAKE 1001 headline={title}');
+  await rerender(() => page.click('button:has-text("Zapisz reguły grafiki")'));
+  const gr = CG.graphics.rules;
+  check(gr.on_end === 'TAKE 1405 programs={next_title}' && gr.end_seconds === 45 && gr.shows.length === 1 && gr.shows[0].show_title === '^Wiadomo' && gr.shows[0].on_clip === 'TAKE 1001 headline={title}' && !('on_end' in gr.shows[0]),
+    'reguły grafiki: zapis globalnych i reguły audycji (puste = dziedzicz)');
+  check(gr.channels['24'].on_end === '' && gr.channels['24'].shows?.[0]?.on_clip === 'TAKE 9', 'reguły grafiki: reguła kanału zachowana („-”, reguły audycji kanału bez zmian)');
+  check(await page.isVisible('[data-rules] >> xpath=.. >> text=z panelu') || /z panelu/.test(await page.textContent('main')), 'reguły grafiki: źródło „z panelu” po zapisie');
   await shot('r9-grafika');
 
   await page.goto(`${BASE}/#live`);
