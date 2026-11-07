@@ -134,6 +134,16 @@ function check(cond, msg) {
   await page.waitForSelector('main[data-view="antena"]');
   await rerender(() => page.selectOption('#st-channel', ''));
   check((await cardTitles()).length >= 2, 'antena: „Wszystkie kanały” przywraca listę');
+  // M3: EPG – wszystkie kanały (też bez playoutu), okno po 4 h, krótkie pozycje w blokach
+  await page.goto(`${BASE}/#epg`);
+  await page.waitForSelector('main[data-view="epg"]');
+  check(/brak playoutu/.test(await page.textContent('[data-epg-channel="1"]')) && await page.$('[data-epg-channel="24"] .p.grp') !== null,
+    'epg: kanał bez playoutu w wierszu, krótkie pozycje sklejone w bloki');
+  check(await page.isDisabled('main .head button:has-text("← 4 h")'), 'epg: wstecz od „teraz” niedostępne');
+  const epgTitle = await page.textContent('main .panel header h2');
+  await rerender(() => page.click('main .head button:has-text("4 h →")'));
+  check(await page.textContent('main .panel header h2') !== epgTitle && await page.isEnabled('main .head button:has-text("← 4 h")'), 'epg: następne 4 h');
+  await rerender(() => page.click('main .head button:has-text("teraz")'));
 
   await page.goto(`${BASE}/#kanaly`);
   await page.waitForSelector('main[data-view="kanaly"]');

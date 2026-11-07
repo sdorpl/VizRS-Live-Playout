@@ -19,7 +19,7 @@ Jak w [PLAN-rozbudowy.md](PLAN-rozbudowy.md) („Jak pracować”): jeden punkt 
 | M0 | Okno (karta pozycji, potwierdzenia) zamyka się przy zmianie ekranu – zostawało nad nowym ekranem | – | zrobione (2026-11-07) |
 | M1 | Pasek górny i menu: liczniki w menu, wybór kanału w pasku | M0 | zrobione (2026-11-07) |
 | M2 | Na antenie: karta kanału z ramką VizRS, panel „Uwagi”, wspólna oś zdarzeń | M1 | zrobione (2026-11-07) |
-| M3 | Przewodnik EPG: wszystkie kanały, wybór okna czasu, sklejanie krótkich pozycji | M1 | do zrobienia |
+| M3 | Przewodnik EPG: wszystkie kanały, wybór okna czasu, sklejanie krótkich pozycji | M1 | zrobione (2026-11-07) |
 | M4 | Media: kafle w Przeglądarce, „Zapisz jako kolekcję inteligentną” | M0 | do zrobienia |
 | M5 | Kolekcje: jedna lista z pigułką rodzaju, podgląd zawartości w edytorze | M4 | do zrobienia |
 | M6 | Playouty: „Zbudowany do” i „Przebuduj” w wierszu, najbliższe pozycje z blokiem i LIVE | M0 | do zrobienia |

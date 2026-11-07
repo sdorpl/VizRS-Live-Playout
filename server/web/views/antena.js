@@ -155,33 +155,93 @@ function notes(d) {
   return out;
 }
 
+// Okno przewodnika: przesunięcie od „teraz” w krokach po 4 h (legacy podaje tylko przyszłe pozycje – wstecz się nie da).
+let epgStep = 0;
+const EPG_SPAN = 4 * 3600e3;
+const EPG_MIN = 0.015;     // pozycja węższa niż 1,5 % okna (3,6 min) idzie do bloku „pierwsza +N”
+const EPG_GROUP = 30 * 60e3; // blok krótkich pozycji najwyżej 30 min
+
+/** Pozycje w oknie [t0, t1) jako bloki do narysowania: długie osobno, krótkie sklejone (z listą w podpowiedzi). */
+function epgBlocks(list, t0, t1, liveAt) {
+  const out = [];
+  let grp = null;
+  const flush = () => {
+    if (!grp) return;
+    const one = grp.items.length === 1;
+    out.push({ s: grp.s, e: grp.e, label: one ? grp.items[0].Title : `${grp.items[0].Title} +${grp.items.length - 1}`, grp: !one,
+      title: `${hm(new Date(grp.s))}–${hm(new Date(grp.e))}\n` + grp.items.map((it) => `${hm(new Date(it.Start))} ${it.Title}`).join('\n'),
+      fill: grp.items.every(isFiller), live: grp.items.some((it) => liveAt(+new Date(it.Start))) });
+    grp = null;
+  };
+  for (const it of list) {
+    const s = +new Date(it.Start), e = +new Date(it.Finish);
+    if (e <= t0 || s >= t1) continue;
+    if (e - s < EPG_MIN * (t1 - t0)) {
+      if (grp && (s - grp.e > 60e3 || e - grp.s > EPG_GROUP)) flush();
+      if (!grp) grp = { s, e, items: [] };
+      grp.items.push(it);
+      grp.e = e;
+      continue;
+    }
+    flush();
+    out.push({ s, e, label: it.Title, title: `${hm(new Date(s))}–${hm(new Date(e))} ${it.Title}`, fill: isFiller(it), live: liveAt(s) });
+  }
+  flush();
+  return out;
+}
+
 VIEWS.epg = async () => {
-  const res = await cmd('GetPagedPlayouts', { Query: '', PageNum: 0, PageSize: 100 });
-  const rows = (res?.Page || []).filter((p) => onChannel(p.ChannelNumber)).sort((a, b) => (parseFloat(a.ChannelNumber) || 0) - (parseFloat(b.ChannelNumber) || 0));
-  const lists = await Promise.all(rows.map((p) => cmd('GetFuturePlayoutItemsById', { PlayoutId: p.PlayoutId, ShowFiller: true, PageNum: 0, PageSize: 80 }).then((r) => r?.Page || []).catch(() => [])));
-  const t0 = new Date(); t0.setMinutes(t0.getMinutes() < 30 ? 0 : 30, 0, 0);
-  const span = 4 * 3600e3, t1 = +t0 + span;
-  const x = (t) => ((t - t0) / span) * 100;
-  const ruler = h('div', { class: 'ruler' }, [0, 1, 2, 3].map((k) => { const s = h('span', null, hm(new Date(+t0 + k * 3600e3))); s.style.left = k * 25 + '%'; return s; }));
+  const t0d = new Date(); t0d.setMinutes(t0d.getMinutes() < 30 ? 0 : 30, 0, 0);
+  const t0 = +t0d + epgStep * EPG_SPAN, t1 = t0 + EPG_SPAN;
+  const [allChannels, res, cgState] = await Promise.all([
+    cmd('GetAllChannels', { ShowDisabled: false }),
+    cmd('GetPagedPlayouts', { Query: '', PageNum: 0, PageSize: 500 }),
+    S.status?.cg ? api('/api/cg/live/state').then((r) => r.result).catch(() => null) : null]);
+  const channels = allChannels.filter((c) => onChannel(c.Number)).sort((a, b) => (parseFloat(a.Number) || 0) - (parseFloat(b.Number) || 0));
+  const byNumber = new Map((res?.Page || []).map((p) => [p.ChannelNumber, p]));
+  // dość pozycji, żeby sięgnąć końca okna przy krótkich pozycjach (2 min → 120 na 4 h)
+  const pageSize = Math.min(1000, 160 * (epgStep + 1));
+  const lists = await Promise.all(channels.map((c) => {
+    const p = byNumber.get(c.Number);
+    return p ? cmd('GetFuturePlayoutItemsById', { PlayoutId: p.PlayoutId, ShowFiller: true, PageNum: 0, PageSize: pageSize }).then((r) => r?.Page || []).catch(() => []) : null;
+  }));
+  const x = (t) => ((t - t0) / EPG_SPAN) * 100;
+  const ruler = h('div', { class: 'ruler' }, [0, 1, 2, 3].map((k) => { const s = h('span', null, hm(new Date(t0 + k * 3600e3))); s.style.left = k * 25 + '%'; return s; }));
   const nowLine = () => { const l = h('div', { class: 'nowl' }); l.style.left = x(Date.now()) + '%'; return l; };
   const grid = h('div', { class: 'epg' }, h('div', { class: 'ch dim' }, 'kanał'), ruler);
-  rows.forEach((p, i) => {
-    grid.append(h('div', { class: 'ch' }, h('span', { class: 'num dim' }, p.ChannelNumber), p.ChannelName));
-    const row = h('div', { class: 'row' });
-    for (const it of lists[i]) {
-      const s = +new Date(it.Start), e = +new Date(it.Finish);
-      if (e <= +t0 || s >= t1) continue;
-      const el = h('div', { class: 'p' + (s <= Date.now() && Date.now() < e ? ' now' : '') + (isFiller(it) ? ' fill' : ''), title: `${hm(new Date(s))}–${hm(new Date(e))} ${it.Title}` }, it.Title);
-      el.style.left = Math.max(0, x(s)) + '%';
-      el.style.width = `calc(${Math.min(100, x(e)) - Math.max(0, x(s))}% - 2px)`;
+  channels.forEach((c, i) => {
+    grid.append(h('div', { class: 'ch' }, h('span', { class: 'num dim' }, c.Number), c.Name));
+    const row = h('div', { class: 'row', 'data-epg-channel': String(c.Number) });
+    if (!lists[i]) {
+      row.append(h('div', { class: 'none' }, 'brak playoutu – ', h('a', { href: '#playouty' }, 'załóż w Playoutach')));
+      grid.append(row);
+      return;
+    }
+    // audycje LIVE z ramówki CG Playout (guide) – ta sama godzina startu co pozycja legacy
+    const guide = (cgState?.guide?.[String(c.Number)] || []).filter((g) => g.live);
+    const liveAt = (s) => guide.some((g) => Math.abs(g.start - s) < 90e3);
+    const now = Date.now();
+    for (const b of epgBlocks(lists[i], t0, t1, liveAt)) {
+      const el = h('div', { class: 'p' + (b.s <= now && now < b.e ? ' now' : '') + (b.fill ? ' fill' : '') + (b.grp ? ' grp' : '') + (b.live ? ' lv' : ''), title: b.title },
+        b.live ? '● ' : '', b.label);
+      el.style.left = Math.max(0, x(b.s)) + '%';
+      el.style.width = `calc(${Math.min(100, x(b.e)) - Math.max(0, x(b.s))}% - 2px)`;
       row.append(el);
     }
-    row.append(nowLine());
+    if (now >= t0 && now < t1) row.append(nowLine());
     grid.append(row);
   });
+  const go = (d) => { epgStep = d === 0 ? 0 : Math.max(0, epgStep + d); route(true); };
+  const back = btn('← 4 h', () => go(-1));
+  back.disabled = !epgStep;  // legacy podaje tylko przyszłe pozycje
+  const day = new Date(t0).toLocaleDateString('pl-PL', { weekday: 'long', day: 'numeric', month: 'long' });
   return [
-    head('Przewodnik EPG', 'Ramówka kanałów na najbliższe 4 godziny, tak jak zobaczy ją widz.',
-      S.status.streamUrl ? h('a', { href: S.status.streamUrl + '/iptv/xmltv.xml', target: '_blank', rel: 'noopener' }, 'xmltv.xml ↗') : null),
-    panel('Dziś', null, rows.length ? h('div', { class: 'tw' }, grid) : h('div', { class: 'empty' }, 'Brak playoutów.'), cmdNote('GetPagedPlayouts', 'GetFuturePlayoutItemsById')),
+    head('Przewodnik EPG', 'Ramówka wszystkich kanałów na osi czasu, tak jak zobaczy ją widz. Krótkie pozycje są sklejone w bloki – lista w podpowiedzi.',
+      h('span', { class: 'bar' },
+        back, btn('teraz', () => go(0)), btn('4 h →', () => go(1)),
+        S.status.streamUrl ? h('a', { href: S.status.streamUrl + '/iptv/xmltv.xml', target: '_blank', rel: 'noopener' }, 'xmltv.xml ↗') : null)),
+    panel(`${day} · ${hm(new Date(t0))}–${hm(new Date(t1))}`, epgStep ? pill(`+${epgStep * 4} h`, 'info') : pill('teraz', 'on'),
+      channels.length ? h('div', { class: 'tw' }, grid) : h('div', { class: 'empty' }, 'Brak włączonych kanałów.'),
+      cmdNote('GetAllChannels', 'GetPagedPlayouts', 'GetFuturePlayoutItemsById', 'CG Playout GET /api/live/state (audycje LIVE)')),
   ];
 };
