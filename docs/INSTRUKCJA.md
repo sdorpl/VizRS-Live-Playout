@@ -27,6 +27,9 @@ Pasek górny: **wybór kanału** (obok nazwy panelu – Na antenie, EPG, Playout
 | podpiąć ramówkę do kanału | **Playouty** → „+ Playout” | rodzaj, kanał (tylko bez playoutu), harmonogram; potem „Przebuduj” |
 | przerwy, wypełnienie | **Wypełniacze**, **Znaki wodne** | |
 | grafika i studio na żywo | **Grafika kanału**, **Sloty na żywo** | wymaga VizRS CG Playout; ramka **Podgląd anteny VizRS** pokazuje grafikę na wybranym kanale, **Otwórz w Trio ↗** / **Trio ↗** na karcie kanału w Na antenie otwiera Trio na antenie tego kanału – przy pierwszym wejściu w tej przeglądarce (komunikat „wymagany token” albo „token wyjścia pozwala tylko na odczyt”) dopisz do adresu token operatora VizRS (`?token=…` albo `&token=…`), potem Trio go pamięta; w Grafice kanału tabela reguł **„Kiedy / Co / Ile”** obok edytora streszcza aktywne reguły (klik w wiersz przenosi do edycji); w Slotach na żywo tabela **Wejścia studia** podsumowuje stan i obraz wszystkich wejść RTMP/SRT; **ZDEJMIJ** zdejmuje studio z anteny (z potwierdzeniem), **WPUŚĆ** wpuszcza |
+| zmienić konfigurację systemu / legacy | **Ustawienia** | sekcje legacy (FFmpeg, playouty, XMLTV, skaner, logi, web GUI) oraz Panel i Most jako panele w siatce (zamiast zakładek); każdy ma własne „Zapisz” w nagłówku |
+| przejrzeć logi i zdarzenia | **Logi** | wybór źródła na pasku: „ErsatzTV legacy” (z progiem poziomu i stronicowaniem) albo „VizRS CG Playout” (dziennik zdarzeń: przejęcia, ZDEJMIJ/WPUŚĆ, ramówka); filtr tekstem |
+| sprawdzić stan stosu i kanałów | **Diagnostyka** | panel „Stan” na górze (tabela Stan / Składnik / Opis z pigułkami OK / UWAGA / BŁĄD / INFO dla legacy, mostu, kontroli, playoutów, CG Playout i VizRS; „Sprawdź ponownie”), kontrole legacy, wersje i sprzęt, test odtwarzania, konserwacja |
 
 ### Przebudowa ramówki
 
@@ -50,11 +53,11 @@ Czerwony komunikat „legacy odrzucił: …” to odmowa ErsatzTV legacy z jego 
 
 | Objaw | Co zrobić |
 |---|---|
-| pasek: most **czerwony**, ekrany puste | legacy nie działa albo się restartuje (start trwa do minuty). Odczekaj; dalej czerwony → **Diagnostyka** (komunikat błędu) i administrator (RUNBOOK „Awarie”) |
+| pasek: most **czerwony**, ekrany puste | legacy nie działa albo się restartuje (start trwa do minuty). Odczekaj; dalej czerwony → **Diagnostyka** (panel „Stan” na górze z komunikatem błędu) i administrator (RUNBOOK „Awarie”) |
 | licznik ostrzeżeń playoutów > 0 | **Playouty** – kanał z błędem budowy; zwykle pusta kolekcja albo brak treści w harmonogramie. Popraw, „Przebuduj” |
-| kanał nie gra / czarny obraz | **Podgląd** kanału albo **Diagnostyka** → test odtwarzania („Odtwórz w panelu”, odnośnik HLS/TS do VLC); **Logi** (próg Warning/Error); sprawdź, czy kanał ma playout i pozycje na **Na antenie** |
+| kanał nie gra / czarny obraz | **Podgląd** kanału albo **Diagnostyka** → panel „Stan” i test odtwarzania („Odtwórz w panelu”, odnośnik HLS/TS do VLC); **Logi** (wybór źródła: legacy z progiem Warning/Error lub zdarzenia CG Playout); sprawdź, czy kanał ma playout i pozycje na **Na antenie** |
 | brak nowych plików | **Biblioteki** → „Skanuj”; plik w katalogu, którego biblioteka nie obejmuje, nie pojawi się |
-| EPG puste u widzów | „Przebuduj”; XMLTV pokazuje tylko zbudowane dni (Ustawienia → przewodnik XMLTV) |
+| EPG puste u widzów | „Przebuduj”; XMLTV pokazuje tylko zbudowane dni (Ustawienia → panel Przewodnik XMLTV) |
 | „wymaga komendy X na białej liście mostu” | wersja mostu nie zna funkcji – administrator |
 | „za dużo nieudanych logowań” | odczekaj minutę, wpisz token ponownie |
 | studio nie wchodzi na antenę | **Sloty na żywo**: czy jest sygnał, czy kanał nie jest WSTRZYMANY (WPUŚĆ) |

@@ -25,7 +25,7 @@ Jak w [PLAN-rozbudowy.md](PLAN-rozbudowy.md) („Jak pracować”): jeden punkt 
 | M6 | Playouty: „Zbudowany do” i „Przebuduj” w wierszu, najbliższe pozycje z blokiem i LIVE | M0 | zrobione (2026-11-07; „Od nowa o” i „Budowa” wchłonięte przez „Zbudowany do”) |
 | M7 | Bloki: kalendarz tygodnia jako siatka godzin × dni | M6 | zrobione (2026-11-07) |
 | M8 | Grafika kanału i Sloty na żywo: reguły „Kiedy / Co / Ile”, tabela wejść ze stanem | M2 | zrobione (2026-11-07; audycje LIVE były już tabelą na ekranie Audycje LIVE; „Bez sygnału” (plansza) i bitrate wejścia – brak danych w CG Playout) |
-| M9 | Ustawienia i Diagnostyka: panele obok siebie, „Stan” stosu na górze, logi ze źródłem | M0 | do zrobienia |
+| M9 | Ustawienia i Diagnostyka: panele obok siebie, „Stan” stosu na górze, logi ze źródłem | M0 | zrobione (2026-11-07; logi CG Playout = dziennik zdarzeń z /api/live/state – CG nie wystawia log.jsonl przez API; VizRS bez sprawdzania łączności z serwera – adres i podgląd) |
 
 ## Punkty
 

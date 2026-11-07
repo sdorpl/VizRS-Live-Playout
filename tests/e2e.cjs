@@ -1000,15 +1000,17 @@ function check(cond, msg) {
     if (label) await rerender(() => page.click(`.page-tabs button:has-text("${label}")`));
   };
   const saveSettings = (title) => rerender(() => page.click(`.panel:has(h2:text-is("${title}")) header button:has-text("Zapisz")`));
-  await tab('ustawienia', 'Przewodnik XMLTV');
+  await tab('ustawienia');
+  // M9: sekcje ustawień jako panele obok siebie (bez zakładek)
+  check((await page.$$('main [data-set]')).length >= 6 && !(await page.$('main .page-tabs')), 'ustawienia: sekcje legacy jako panele obok siebie');
   const xmlDays = Number(await page.inputValue('#s-xmltv-DaysToBuild'));
   await page.fill('#s-xmltv-DaysToBuild', '0');
-  await page.click('.panel header button:has-text("Zapisz")');
+  await page.click('.panel:has(h2:text-is("Przewodnik XMLTV")) header button:has-text("Zapisz")');
   await page.waitForSelector('#toast.bad');
   check(/co najmniej 1/.test(await page.textContent('#toast')), 'ustawienia: 0 dni XMLTV odrzucone przez panel (legacy tego nie sprawdza)');
   const poDays = (await api('GetPlayoutSettings')).result.DaysToBuild;
   await page.fill('#s-xmltv-DaysToBuild', String(poDays + 1));
-  await page.click('.panel header button:has-text("Zapisz")');
+  await page.click('.panel:has(h2:text-is("Przewodnik XMLTV")) header button:has-text("Zapisz")');
   await page.waitForFunction(() => /cannot be greater/.test(document.querySelector('#toast.bad')?.textContent || ''));
   check(true, 'ustawienia: walidacja legacy (XMLTV dłuższy niż playout) pokazana operatorowi');
   const xmlNew = xmlDays > 1 ? xmlDays - 1 : xmlDays + 1;
@@ -1022,18 +1024,19 @@ function check(cond, msg) {
   xs = (await api('GetXmltvSettings')).result;
   check(xs.DaysToBuild === xmlDays && xs.TimeZone && xs.BlockBehavior, `ustawienia: dni XMLTV przywrócone (${xs.DaysToBuild})`);
   for (const [t, id] of [['FFmpeg i strumienie', '#s-ffmpeg-FFmpegPath'], ['Playouty', '#s-playout-DaysToBuild'], ['Skaner i HDHomeRun', '#s-skaner-TunerCount'], ['Web GUI legacy', '#s-gui-IsDarkMode']]) {
-    await rerender(() => page.click(`.page-tabs button:has-text("${t}")`));
     check(!!(await page.inputValue(id)), `ustawienia: sekcja „${t}” wczytana z legacy`);
   }
 
   // logi: poziom Debug z panelu → „Zwolnij pamięć” (Diagnostyka) → wpis w Logach
   const logStart = Date.now() - 2000;
-  await tab('ustawienia', 'Poziomy logów');
+  await tab('ustawienia');
   await page.selectOption('#s-logi-DefaultMinimumLogLevel', 'Debug');
   await saveSettings('Poziomy logów');
   check((await api('GetLoggingSettings')).result.DefaultMinimumLogLevel === 'Debug', 'ustawienia: domyślny poziom logów = Debug');
   await tab('diagnostyka');
   check(/v\d+\./.test(await page.textContent('.panel:has(h2:text-is("Wersje i sprzęt"))')), 'diagnostyka: wersja legacy i sprzęt');
+  const stack = await page.textContent('[data-stack]');
+  check(/OK\s*legacy/.test(stack) && /most/.test(stack) && /kontrole legacy/.test(stack) && /CG Playout/.test(stack), `diagnostyka: „Stan” stosu na górze (${stack.slice(0, 120)})`);
   const hls = await page.getAttribute('#pt-hls', 'href');
   check(/\/iptv\/channel\/[^/]+\.m3u8$/.test(hls || ''), `test odtwarzania: odnośnik do strumienia (${hls})`);
   await page.click('#maint button:has-text("Zwolnij pamięć")');
@@ -1054,7 +1057,7 @@ function check(cond, msg) {
   }
   check(found, 'logi: wpis po akcji z panelu (zwolnienie pamięci) widoczny w Logach');
   await shot('r7-logi');
-  await tab('ustawienia', 'Poziomy logów');
+  await tab('ustawienia');
   await page.selectOption('#s-logi-DefaultMinimumLogLevel', 'Information');
   await saveSettings('Poziomy logów');
   check((await api('GetLoggingSettings')).result.DefaultMinimumLogLevel === 'Information', 'ustawienia: poziom logów przywrócony');
@@ -1201,6 +1204,14 @@ function check(cond, msg) {
   const inTab = await page.textContent('[data-inputs-table]');
   check(inTab.includes('rtmp://tv.example.pl:1936/live') && /nadaje/.test(inTab) && /h264 · z dźwiękiem/.test(inTab) && !inTab.includes('studio-klucz') && !inTab.includes('tajne'),
     'sloty: tabela wejść – adres bez klucza i hasła, stan, obraz');
+  // M9: logi ze źródłem – zdarzenia VizRS CG Playout
+  await page.goto(`${BASE}/#logi`);
+  await page.waitForSelector('main[data-view="logi"] #log-src');
+  await rerender(() => page.selectOption('#log-src', 'cg'));
+  check(/nadawca połączony/.test(await page.textContent('main')) && /kanał 24/.test(await page.textContent('main')), 'logi: źródło VizRS CG Playout – zdarzenia z /api/live/state');
+  await rerender(() => page.selectOption('#log-src', 'legacy'));
+  await page.goto(`${BASE}/#live`);
+  await page.waitForSelector('main[data-view="live"] [data-live-channel="24"]');
   check(/LIVE/.test(await page.textContent('[data-guide="24"]')) && /Poranek na żywo/.test(await page.textContent('[data-guide="24"]')), 'sloty: ramówka EPG z audycją LIVE');
   check(/odbiór sygnałów: 1/.test(await page.textContent('[data-live-status]')) && /CG Playout 0\.9\.0-test/.test(await page.textContent('[data-live-status]')), 'sloty: lampki CG, ErsatzTV, odbioru');
   const since1 = await page.textContent('[data-live-channel="24"] [data-since]');

@@ -5,6 +5,7 @@ import { S, VIEWS, api, h, btn, pill, head, panel, cmdNote, table, cmd, pl, toas
 import { form } from '../form.js';
 import { contentPicker } from '../parts.js';
 import { openMonitor } from '../player.js';
+import { cg } from './grafika.js';
 
 // ---------- Ustawienia ----------
 
@@ -138,7 +139,6 @@ const SECTIONS = [
   },
 ];
 
-const SET = { tab: 'panel' };
 
 function panelSection() {
   const st = S.status;
@@ -170,30 +170,51 @@ async function legacySection(sec) {
     toast(`${sec.title}: zapisano w legacy.`, 'ok');
     route(true);
   };
-  return panel(sec.title, btn('Zapisz', save, 'acc'), h('p', { class: 'dim pad' }, sec.desc), f.el, cmdNote(...sec.note));
+  const p = panel(sec.title, btn('Zapisz', save, 'acc'), h('p', { class: 'dim pad' }, sec.desc), f.el, cmdNote(...sec.note));
+  p.dataset.set = sec.id;
+  return p;
 }
 
 VIEWS.ustawienia = async () => {
-  const tabs = [['panel', 'Panel i most'], ...SECTIONS.map((s) => [s.id, s.title])];
-  if (!tabs.some(([id]) => id === SET.tab)) SET.tab = 'panel';
-  const sec = SECTIONS.find((s) => s.id === SET.tab);
-  const body = sec ? await legacySection(sec) : panelSection();
+  // jak w makiecie: sekcje legacy jako panele obok siebie, każda z własnym „Zapisz”
+  const secs = await Promise.all(SECTIONS.map((sec) => legacySection(sec).catch((e) => panel(sec.title, null, h('div', { class: 'empty err' }, 'Legacy: ' + e.message)))));
   return [
-    head('Ustawienia', 'Ustawienia legacy w sekcjach jak w Settings legacy oraz konfiguracja panelu. Każda sekcja zapisuje się osobno.'),
-    h('div', { class: 'tabs page-tabs', role: 'tablist' }, tabs.map(([id, t]) =>
-      h('button', { type: 'button', role: 'tab', 'data-tab': id, class: id === SET.tab ? 'on' : null, 'aria-selected': String(id === SET.tab), onclick: () => { SET.tab = id; route(); } }, t))),
-    body,
+    head('Ustawienia', 'Ustawienia legacy w sekcjach jak w Settings legacy oraz konfiguracja panelu. Każda sekcja zapisuje się osobno („Zapisz” w jej nagłówku).'),
+    h('div', { class: 'cols' }, ...secs),
+    panelSection(),
   ];
 };
 
 // ---------- Logi ----------
 
-const LOG = { level: 'Information', text: '', page: 0, auto: false };
+const LOG = { level: 'Information', text: '', page: 0, auto: false, src: 'legacy' };
 const LOG_PAGE = 200;
 const logTime = (t) => { const d = new Date(t); return `${pad2(d.getDate())}.${pad2(d.getMonth() + 1)} ${hms(d)}`; };
 const levelKind = { Warning: 'warn', Error: 'bad', Fatal: 'bad', Information: 'info' };
 
+/** Zdarzenia VizRS CG Playout (dziennik operatora z /api/live/state) – CG nie wystawia pliku logu przez API. */
+async function cgLog(srcSel) {
+  const head_ = head('Logi', 'Dziennik zdarzeń VizRS CG Playout: przejęcia kanału, ZDEJMIJ / WPUŚĆ, przebudowy ramówki, audycje LIVE (od startu CG Playout).', btn('Odśwież', () => route(true)));
+  let st;
+  try { st = await cg('live/state'); } catch (e) { return [head_, h('div', { class: 'bar pad logbar' }, srcSel), h('div', { class: 'note err' }, 'VizRS CG Playout: ' + e.message)]; }
+  const q = h('input', { id: 'log-q', type: 'search', placeholder: 'szukaj w treści…', value: LOG.text });
+  q.addEventListener('keydown', (e) => { if (e.key === 'Enter') { LOG.text = q.value.trim(); route(); } });
+  const t = LOG.text.toLowerCase();
+  const rows = (st.events || []).filter((e) => !t || `${e.text} ${e.channel ?? ''}`.toLowerCase().includes(t));
+  return [head_, panel('Wpisy', null,
+    h('div', { class: 'bar pad logbar' }, srcSel, q, btn('Szukaj', () => { LOG.text = q.value.trim(); route(); })),
+    h('div', { class: 'pad dim', id: 'log-count' }, `Zdarzeń: ${rows.length}${t ? ` (z ${(st.events || []).length})` : ''}.`),
+    rows.length ? table(rows, [[(e) => logTime(e.at), 'Czas'], [(e) => (e.channel ? pill(`kanał ${e.channel}`) : '—'), 'Kanał'], [(e) => e.text, 'Wpis', { class: 'w log' }]])
+      : h('div', { class: 'empty' }, 'Brak zdarzeń.'),
+    cmdNote('CG Playout GET /api/live/state (events)'))];
+}
+
 VIEWS.logi = async () => {
+  const srcSel = h('select', { id: 'log-src', 'aria-label': 'Źródło logów', onchange: () => { LOG.src = srcSel.value; LOG.page = 0; route(true); } },
+    h('option', { value: 'legacy' }, 'źródło: ErsatzTV legacy'), S.status.cg ? h('option', { value: 'cg' }, 'źródło: VizRS CG Playout') : null);
+  if (!S.status.cg) LOG.src = 'legacy';
+  srcSel.value = LOG.src;
+  if (LOG.src === 'cg') return cgLog(srcSel);
   if (!has('GetRecentLogEntries')) return [head('Logi'), missingNote(['GetRecentLogEntries'])];
   const min = LEVELS.indexOf(LOG.level);
   // legacy filtruje tylko tekstem (poziom albo treść); próg poziomu panel nakłada na pobraną stronę
@@ -214,7 +235,7 @@ VIEWS.logi = async () => {
     head('Logi', 'Najnowsze wpisy logu legacy (od najnowszych). Poziomy zapisu: Ustawienia → Poziomy logów.',
       btn('Odśwież', () => route(true))),
     panel('Wpisy', null,
-    h('div', { class: 'bar pad logbar' }, lvl, q, btn('Szukaj', () => { LOG.text = q.value.trim(); LOG.page = 0; route(); }),
+    h('div', { class: 'bar pad logbar' }, srcSel, lvl, q, btn('Szukaj', () => { LOG.text = q.value.trim(); LOG.page = 0; route(); }),
       h('label', { class: 'chk' }, auto, 'odświeżaj co 5 s')),
     h('div', { class: 'pad dim', id: 'log-count' }, `Pasujących wpisów: ${d.TotalCount}; na tej stronie (${LOG_PAGE}) od poziomu „${LEVEL_PL[LOG.level]}”: ${rows.length}.`),
     rows.length ? table(rows, [[(e) => logTime(e.Timestamp), 'Czas'], [(e) => pill(LEVEL_PL[e.Level] || e.Level, levelKind[e.Level]), 'Poziom'], [(e) => e.Message.trim(), 'Wpis', { class: 'w log' }]])
@@ -317,11 +338,14 @@ function exposurePanel(x) {
 }
 
 VIEWS.diagnostyka = async () => {
-  const [health, info, channels, exposure] = await Promise.all([
+  const [health, info, channels, exposure, cgHealth, cgState, warnings] = await Promise.all([
     cmd('GetAllHealthCheckResults', { Refresh: !!S.healthRefresh }).catch((e) => ({ error: e.message })),
     has('GetTroubleshootingInfo') ? cmd('GetTroubleshootingInfo', { NextVersion: '' }).catch((e) => ({ error: e.message })) : null,
     cmd('GetAllChannels', { ShowDisabled: false }).catch(() => []),
     api('/api/exposure').then((r) => r.result).catch((e) => ({ error: e.message, probes: [] })),
+    S.status.cg ? cg('health').catch((e) => ({ error: e.message })) : null,
+    S.status.cg ? cg('live/state').catch(() => null) : null,
+    has('GetPlayoutWarningsCount') ? cmd('GetPlayoutWarningsCount').catch(() => null) : null,
   ]);
   S.healthRefresh = false;
   const kind = { Pass: 'ok', Warning: 'warn', Error: 'bad', Info: 'info' };
@@ -363,8 +387,30 @@ VIEWS.diagnostyka = async () => {
     try { await cmd('RefreshFFmpegCapabilities'); toast('Legacy sprawdzi ffmpeg i sprzęt w tle.', 'ok'); } catch (e) { toast(e.message, 'bad'); }
   }) : null;
 
+  const n = (k, one, few, many) => `${k} ${k === 1 ? one : [2, 3, 4].includes(k % 10) && ![12, 13, 14].includes(k % 100) ? few : many}`;
+  // „Stan” stosu (jak w makiecie): tylko z danych, które panel ma – bez zgadywania
+  const b = S.status.bridge?.result;
+  const hc = health.error ? null : { bad: health.filter((r) => r.Status === 'Error').length, warn: health.filter((r) => r.Status === 'Warning').length };
+  const stack = [
+    ['legacy', b ? ['OK', `ErsatzTV legacy ${b.legacy}`] : ['BŁĄD', S.status.bridgeError || 'most nieosiągalny']],
+    ['most', b ? (b.commandsMissing?.length ? ['UWAGA', `VizRS Bridge ${b.bridge} · z białej listy nieznane w tej wersji legacy: ${b.commandsMissing.join(', ')}`]
+      : ['OK', `VizRS Bridge ${b.bridge} · ${n(b.commandsAllowed, 'komenda', 'komendy', 'komend')} na białej liście`]) : ['BŁĄD', 'brak odpowiedzi']],
+    ['kontrole legacy', !hc ? ['BŁĄD', health.error] : hc.bad ? ['BŁĄD', `${n(hc.bad, 'błąd', 'błędy', 'błędów')}, ${n(hc.warn, 'ostrzeżenie', 'ostrzeżenia', 'ostrzeżeń')} – tabela „Kontrole legacy” niżej`]
+      : hc.warn ? ['UWAGA', `${n(hc.warn, 'ostrzeżenie', 'ostrzeżenia', 'ostrzeżeń')} – tabela „Kontrole legacy” niżej`] : ['OK', `${n(health.length, 'kontrola', 'kontrole', 'kontroli')} bez uwag`]],
+    ['playouty', warnings == null ? null : warnings > 0 ? ['UWAGA', `${n(warnings, 'playout', 'playouty', 'playoutów')} z błędem ostatniej budowy – ekran Playouty`] : ['OK', 'ostatnie budowy bez błędów']],
+    ['Next i ffmpeg', info && !info.error ? ['INFO', `Next ${info.NextVersion || '— (nie zgłoszony)'} · ffmpeg ${info.FFmpegVersion || '?'}`] : null],
+    ['CG Playout', !S.status.cg ? ['—', 'nie ustawiony (VIZRS_LIVE_CG_URL)'] : cgHealth?.error ? ['BŁĄD', cgHealth.error]
+      : ['OK', `połączony${cgState?.version ? ' · ' + cgState.version : ''} · kanałów: ${cgState?.channels?.length ?? '?'} · odbiór sygnałów ${cgState?.ingest ? 'włączony' : 'wyłączony'}`]],
+    ['VizRS', S.status.vizrsUrl ? ['INFO', `${S.status.vizrsUrl} – łączność widać w podglądzie /output (Grafika kanału)`] : ['—', 'nie ustawiony (VIZRS_LIVE_VIZRS_URL)']],
+  ].filter(([, v]) => v);
+  const stKind = { OK: 'ok', UWAGA: 'warn', BŁĄD: 'bad', INFO: 'info' };
+
   return [
-    head('Diagnostyka', 'Stan legacy i mostu, wersje i sprzęt, konserwacja, test odtwarzania oraz konsola komend z białej listy.'),
+    head('Diagnostyka', 'Stan całego stosu, kontrole legacy, wersje i sprzęt, konserwacja, test odtwarzania oraz konsola komend z białej listy.'),
+    panel('Stan', btn('Sprawdź ponownie', () => { S.healthRefresh = true; route(true); }),
+      h('div', { 'data-stack': '' }, table(stack.map(([k, [st, txt]]) => ({ k, st, txt })),
+        [[(r) => pill(r.st, stKind[r.st]), 'Stan'], ['k', 'Składnik'], ['txt', 'Opis', { class: 'w' }]])),
+      cmdNote('GET /api/status', 'GetAllHealthCheckResults', 'GetPlayoutWarningsCount', 'GetTroubleshootingInfo', 'CG Playout /health, /api/live/state')),
     h('div', { class: 'split' },
       panel('Kontrole legacy', btn('Sprawdź ponownie', () => { S.healthRefresh = true; route(true); }),
         health.error ? h('div', { class: 'empty err' }, health.error)
