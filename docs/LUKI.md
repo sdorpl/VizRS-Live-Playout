@@ -15,6 +15,7 @@ Ograniczenia samego legacy, których panel nie obejdzie bez zmiany legacy (np. j
 | 5 | Panel nie bierze blokady biblioteki legacy (`IEntityLocker`, poza MediatR) | drugie zlecenie synchronizacji tej samej biblioteki trafia do kolejki (DOKUMENTACJA §4, R8) |
 | 6 | CSP dopuszcza `img-src`/`frame-src` `http:`/`https:` | potrzebne podglądowi obrazów legacy spod `--stream-url` i `/output` VizRS; ryzyko przyjęte (DOKUMENTACJA §9) |
 | 7 | CI i publikacja obrazów nigdy nie uruchomione | wymaga push i tagu – kroki ręczne w STATUS |
+| 8 | Na antenie bez warstw grafiki VizRS (pigułki „W10 belka 101” z makiety) | CG Playout nie wystawia w `/api/live/state` stanu warstw ani stron na antenie; do dodania w API CG Playout, potem w karcie kanału (PLAN-makieta M2) |
 
 ## G2 – wierność wobec web GUI legacy
 

@@ -348,13 +348,17 @@ function check(cond, msg) {
   // Trio i podgląd VizRS na antenie kanału (panel z --vizrs-channels)
   check(await page.getAttribute(`.panel:has(h2:text-is("${chNum} · ${chName}")) a[data-trio]`, 'href') === `http://127.0.0.1:18700/trio?channel=${chNum}`,
     'antena: „Trio ↗” otwiera antenę kanału');
-  await page.selectOption('select[data-vizrs-channel]', String(chNum));
-  check(await page.getAttribute('iframe[data-vizrs-output]', 'src') === `http://127.0.0.1:18700/output?token=e2e-vizrs-output&bus=ch-${chNum}`,
-    'antena: podgląd VizRS idzie za wybraną anteną kanału');
-  await page.goto(`${BASE}/#epg`);
-  await page.goto(`${BASE}/#antena`);
-  await page.waitForSelector('iframe[data-vizrs-output]');
-  check(await page.inputValue('select[data-vizrs-channel]') === String(chNum), 'antena: wybór anteny VizRS przeżywa odświeżenie widoku');
+  // M2: przy antenach kanałów ramka VizRS w karcie kanału, „Odśwież” podmienia dane bez przebudowy kart
+  const cardFrame = `.panel:has(h2:text-is("${chNum} · ${chName}")) iframe[data-vizrs-output]`;
+  check(await page.getAttribute(cardFrame, 'src') === `http://127.0.0.1:18700/output?token=e2e-vizrs-output&bus=ch-${chNum}`,
+    'antena: ramka VizRS w karcie kanału na jego antenie');
+  check(!(await page.$('select[data-vizrs-channel]')), 'antena: przy antenach kanałów bez wspólnej ramki');
+  await page.$eval(cardFrame, (f) => { f.dataset.mark = '1'; });
+  await page.click('main .head button:has-text("Odśwież")');
+  await page.waitForTimeout(1500);
+  check(await page.$eval(cardFrame, (f) => f.dataset.mark) === '1', 'antena: odświeżenie nie przeładowuje ramki VizRS');
+  check(/nie ma playoutu/.test(await page.textContent('[data-notes]')), 'antena: uwaga – kanał bez playoutu');
+  check(/Poranek na żywo/.test(await page.textContent('main .panel:has(h2:text-is("Najbliższe zdarzenia"))')), 'antena: audycja LIVE z CG w najbliższych zdarzeniach');
 
   // harmonogram zastępczy na sobotę + codzienna przebudowa
   await page.goto(`${BASE}/#playouty`);

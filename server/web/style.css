@@ -107,6 +107,9 @@ pre.out { margin: 0; font: 12px/1.5 var(--mono); background: #0e0f12; border: 1p
 .prog { height: 5px; background: #2a2e35; border-radius: 3px; overflow: hidden; }
 .prog i { display: block; height: 100%; width: 0; background: var(--acc); }
 .preview { aspect-ratio: 16 / 9; width: 100%; border: 1px solid var(--line); border-radius: 4px; background: repeating-conic-gradient(#26282d 0 25%, #1c1e22 0 50%) 0 0 / 20px 20px; }
+.chan-dyn { display: grid; gap: 10px; }
+.alert { display: flex; gap: 8px; padding: 8px 10px; border-bottom: 1px solid #23262c; align-items: baseline; }
+.alert .pill { flex: none; }
 .tl .ev { display: grid; grid-template-columns: 52px 92px minmax(0, 1fr); gap: 8px; padding: 6px 10px; border-bottom: 1px solid #23262c; align-items: baseline; }
 
 /* EPG */

@@ -1,7 +1,7 @@
 // Widoki grupy „Antena”: Na antenie, Przewodnik EPG.
 
 import { openMonitor } from '../player.js';
-import { S, VIEWS, h, btn, pill, head, panel, cmdNote, toast, confirmDlg, cmd, route, pl, hm, dur, isFiller, trioLink, vizrsPreview, onChannel } from '../core.js';
+import { S, VIEWS, h, btn, pill, head, panel, cmdNote, toast, confirmDlg, cmd, api, route, pl, hm, dur, isFiller, trioLink, vizrsPreview, vizrsUrl, onChannel } from '../core.js';
 
 /** Przebudowa playoutu przez kolejkę legacy (też w widoku Playouty). */
 export async function build(p, mode) {
@@ -14,30 +14,51 @@ export async function build(p, mode) {
 }
 
 VIEWS.antena = async () => {
-  const [allChannels, playouts] = await Promise.all([cmd('GetAllChannels', { ShowDisabled: false }), cmd('GetPagedPlayouts', { Query: '', PageNum: 0, PageSize: 500 })]);
-  const channels = allChannels.filter((c) => onChannel(c.Number));
-  const byNumber = new Map((playouts?.Page || []).map((p) => [p.ChannelNumber, p]));
-  const items = await Promise.all(channels.map(async (c) => {
-    const p = byNumber.get(c.Number);
-    if (!p) return [];
-    try { return (await cmd('GetFuturePlayoutItemsById', { PlayoutId: p.PlayoutId, ShowFiller: true, PageNum: 0, PageSize: 8 }))?.Page || []; }
-    catch { return []; }
-  }));
+  // Ramka VizRS w karcie kanału tylko przy antenach kanałów (--vizrs-channels); inaczej jedna wspólna po prawej.
+  const multi = !!(S.status?.vizrsUrl && S.status.vizrsChannels);
+  const load = async () => {
+    const [allChannels, playouts, cgState] = await Promise.all([
+      cmd('GetAllChannels', { ShowDisabled: false }),
+      cmd('GetPagedPlayouts', { Query: '', PageNum: 0, PageSize: 500 }),
+      S.status?.cg ? api('/api/cg/live/state').then((r) => r.result).catch((e) => e) : null]);
+    const channels = allChannels.filter((c) => onChannel(c.Number));
+    const byNumber = new Map((playouts?.Page || []).map((p) => [p.ChannelNumber, p]));
+    const items = await Promise.all(channels.map(async (c) => {
+      const p = byNumber.get(c.Number);
+      if (!p) return [];
+      try { return (await cmd('GetFuturePlayoutItemsById', { PlayoutId: p.PlayoutId, ShowFiller: true, PageNum: 0, PageSize: 8 }))?.Page || []; }
+      catch { return []; }
+    }));
+    return { channels, byNumber, items, cgState };
+  };
+  let d = await load();
+  const key = (x) => x.channels.map((c) => c.Number).join(',');
 
-  const progressEls = [];
-  const cards = channels.map((c, i) => {
-    const p = byNumber.get(c.Number);
-    const list = items[i];
+  // karty: szkielet (z ramką VizRS) raz, treść podmieniana przy odświeżeniu
+  let progressEls = [];
+  const slots = d.channels.map((c) => {
+    const state = h('span');
+    const body = h('div', { class: 'chan-dyn' });
+    const frame = multi ? h('iframe', { class: 'preview', title: `Grafika VizRS kanału ${c.Number}`, 'data-vizrs-output': '', src: vizrsUrl('/output', c.Number) }) : null;
+    return { c, state, body, el: panel(`${c.Number} · ${c.Name}`, state, h('div', { class: 'chan' }, frame, body)) };
+  });
+  const eventsBox = h('div');
+  const notesBox = h('div');
+
+  const fill = () => {
     const now = Date.now();
-    const cur = list.find((it) => new Date(it.Start) <= now && now < new Date(it.Finish));
-    const next = list.filter((it) => new Date(it.Start) > now).slice(0, 3);
-    const bar = h('i');
-    const left = h('span', { class: 'num' });
-    if (cur) progressEls.push({ bar, left, start: +new Date(cur.Start), finish: +new Date(cur.Finish) });
-    const state = !p ? pill('brak playoutu', 'warn') : cur ? pill('W RAMÓWCE', 'on') : pill('przerwa w ramówce', 'warn');
-    const stream = S.status.streamUrl ? h('a', { href: `${S.status.streamUrl}/iptv/channel/${encodeURIComponent(c.Number)}.m3u8`, target: '_blank', rel: 'noopener' }, 'Strumień ↗') : null;
-    return panel(`${c.Number} · ${c.Name}`, state,
-      h('div', { class: 'chan' },
+    progressEls = [];
+    slots.forEach(({ c, state, body }, i) => {
+      const p = d.byNumber.get(c.Number);
+      const list = d.items[i];
+      const cur = list.find((it) => new Date(it.Start) <= now && now < new Date(it.Finish));
+      const next = list.filter((it) => new Date(it.Start) > now).slice(0, 3);
+      const bar = h('i');
+      const left = h('span', { class: 'num' });
+      if (cur) progressEls.push({ bar, left, start: +new Date(cur.Start), finish: +new Date(cur.Finish) });
+      state.replaceChildren(!p ? pill('brak playoutu', 'warn') : cur ? pill('W RAMÓWCE', 'on') : pill('przerwa w ramówce', 'warn'));
+      const stream = S.status.streamUrl ? h('a', { href: `${S.status.streamUrl}/iptv/channel/${encodeURIComponent(c.Number)}.m3u8`, target: '_blank', rel: 'noopener' }, 'Strumień ↗') : null;
+      body.replaceChildren(
         cur
           ? h('div', { class: 'np' },
             h('div', { class: 'now' }, h('b', null, cur.Title), h('span', { class: 'dim num' }, `${hm(new Date(cur.Start))}–${hm(new Date(cur.Finish))}`), h('span', { class: 'grow' }), left),
@@ -49,12 +70,19 @@ VIEWS.antena = async () => {
           p ? btn('Przebuduj', () => build(p, 'Refresh')) : null,
           p ? btn('Od nowa', () => build(p, 'Reset'), 'danger') : null,
           stream,
-          trioLink(c.Number))));
-  });
-
-  const events = channels.flatMap((c, i) => items[i].filter((it) => new Date(it.Start) > Date.now()).map((it) => ({ c, it })))
-    .sort((a, b) => new Date(a.it.Start) - new Date(b.it.Start)).slice(0, 12);
-
+          trioLink(c.Number)));
+    });
+    const ev = upcoming(d);
+    eventsBox.replaceChildren(ev.length
+      ? h('div', { class: 'tl' }, ev.map((e) => h('div', { class: 'ev' }, h('span', { class: 'num' }, hm(new Date(e.t))), pill(e.ch),
+        h('span', null, e.live ? [pill('LIVE', 'on'), ' '] : null, e.title, e.filler ? h('span', { class: 'dim' }, ' (wypełniacz)') : null))))
+      : h('div', { class: 'empty' }, 'Brak zaplanowanych pozycji.'));
+    const ns = notes(d);
+    notesBox.replaceChildren(ns.length
+      ? h('div', { 'data-notes': '' }, ns.map(([kind, who, text, link]) => h('div', { class: 'alert' }, pill(who, kind), h('span', { class: 'w' }, text, link ? [' ', link] : null))))
+      : h('div', { class: 'empty', 'data-notes': '' }, 'Bez uwag – wszystkie kanały mają ramówkę.'));
+    tick();
+  };
   const tick = () => {
     const now = Date.now();
     for (const e of progressEls) {
@@ -62,23 +90,70 @@ VIEWS.antena = async () => {
       e.left.textContent = '−' + dur(e.finish - now);
     }
   };
-  tick();
-  S.timers.push(setInterval(tick, 1000), setInterval(() => route(true), 30000));
+  const refresh = async () => {
+    if (!slots.length && !d.channels.length) return route(true);
+    let nd;
+    try { nd = await load(); } catch (e) { return toast('Odświeżenie: ' + e.message, 'bad'); }
+    if (key(nd) !== key(d)) return route(true);  // inne kanały – nowe karty
+    d = nd;
+    fill();
+  };
+  fill();
+  S.timers.push(setInterval(tick, 1000), setInterval(refresh, 30000));
 
   return [
-    head('Na antenie', 'Co teraz idzie w ramówce każdego kanału i co następne. Dane z playoutów legacy, odświeżane co 30 s.',
-      btn('Odśwież', () => route(true))),
+    head('Na antenie', 'Co teraz idzie w ramówce każdego kanału, co następne i na co uważać. Dane z playoutów legacy i VizRS CG Playout, odświeżane co 30 s.',
+      btn('Odśwież', () => refresh())),
     h('div', { class: 'split wide' },
-      h('div', { class: 'cols' }, cards.length ? cards : h('div', { class: 'note' }, 'Brak włączonych kanałów. Dodaj kanał w widoku Kanały.')),
+      h('div', { class: 'cols' }, slots.length ? slots.map((x) => x.el) : h('div', { class: 'note' }, 'Brak włączonych kanałów. Dodaj kanał w widoku Kanały.')),
       h('div', { class: 'cols' },
-        vizrsPreview('Grafika VizRS (/output)', channels.map((c) => [String(c.Number), `${c.Number} · ${c.Name}`])),
-        panel('Najbliższe pozycje', null,
-          events.length
-            ? h('div', { class: 'tl' }, events.map(({ c, it }) => h('div', { class: 'ev' }, h('span', { class: 'num' }, hm(new Date(it.Start))), pill(c.Name), h('span', null, it.Title, isFiller(it) ? h('span', { class: 'dim' }, ' (wypełniacz)') : null))))
-            : h('div', { class: 'empty' }, 'Brak zaplanowanych pozycji.')))),
-    panel('Most', null, cmdNote('GetAllChannels', 'GetPagedPlayouts', 'GetFuturePlayoutItemsById', 'BuildPlayout')),
+        multi ? null : vizrsPreview('Grafika VizRS (/output)', d.channels.map((c) => [String(c.Number), `${c.Number} · ${c.Name}`])),
+        panel('Najbliższe zdarzenia', null, eventsBox),
+        panel('Uwagi', null, notesBox))),
+    panel('Most', null, cmdNote('GetAllChannels', 'GetPagedPlayouts', 'GetFuturePlayoutItemsById', 'BuildPlayout', 'CG Playout GET /api/live/state')),
   ];
 };
+
+/** Najbliższe zdarzenia: pozycje ramówki legacy wszystkich kanałów + najbliższe audycje LIVE z CG Playout. */
+function upcoming(d) {
+  const now = Date.now();
+  const out = d.channels.flatMap((c, i) => d.items[i].filter((it) => new Date(it.Start) > now)
+    .map((it) => ({ t: +new Date(it.Start), ch: c.Name, title: it.Title, filler: isFiller(it) })));
+  const cg = d.cgState instanceof Error ? null : d.cgState;
+  for (const ch of (cg?.channels || []).filter((x) => onChannel(x.number))) {
+    const nl = ch.next_live;
+    if (nl && nl.start > now) out.push({ t: nl.start, ch: ch.name || ch.number, title: nl.title, live: true });
+  }
+  return out.sort((a, b) => a.t - b.t).slice(0, 12);
+}
+
+/** Uwagi dla operatora: [rodzaj pigułki, kto, tekst, odnośnik?] – tylko z danych, które panel ma. */
+function notes(d) {
+  const now = Date.now();
+  const link = (href, text) => h('a', { href }, text);
+  const out = [];
+  d.channels.forEach((c, i) => {
+    const p = d.byNumber.get(c.Number);
+    const b = p?.BuildStatus;
+    if (!p) out.push(['warn', c.Name, 'kanał nie ma playoutu – nic nie nadaje z ramówki.', link('#playouty', 'Załóż playout')]);
+    else if (b && !b.Success) out.push(['bad', c.Name, `legacy nie zbudował playoutu${b.Message ? ': ' + b.Message : '.'}`, link('#playouty', 'Playouty')]);
+    else if (!d.items[i].some((it) => new Date(it.Start) <= now && now < new Date(it.Finish))) {
+      out.push(['warn', c.Name, 'przerwa w ramówce – leci wypełniacz zapasowy kanału.', link('#playouty', 'Przebuduj w Playoutach')]);
+    }
+  });
+  if (d.cgState instanceof Error) out.push(['bad', 'CG Playout', 'nie odpowiada: ' + d.cgState.message, null]);
+  else {
+    for (const ch of (d.cgState?.channels || []).filter((x) => onChannel(x.number))) {
+      const who = ch.name || `kanał ${ch.number}`;
+      const nl = ch.next_live;
+      if (ch.hold) out.push(['warn', who, 'studio wstrzymane (ZDEJMIJ) – kanał idzie z ramówki.', link('#live', 'Sloty na żywo')]);
+      if (nl && nl.start > now && nl.start - now < 3600e3 && !ch.source?.live) {
+        out.push(['info', who, `slot na żywo „${nl.title}” o ${hm(new Date(nl.start))} – studio jeszcze nie nadaje.`, link('#live', 'Sloty na żywo')]);
+      }
+    }
+  }
+  return out;
+}
 
 VIEWS.epg = async () => {
   const res = await cmd('GetPagedPlayouts', { Query: '', PageNum: 0, PageSize: 100 });
