@@ -2,6 +2,7 @@
 
 ## Niewydane
 
+- Diagnostyka → „Stan”: wiersz „strefy grafiki” – strefy przebiegów nakładki CG Playout przy `VIZRS_AREA=auto` (PLAN-strefy S5 w CG Playout), % ekranu, grafika poza strefami jako UWAGA.
 - CI i publikacja działają (LUKI #7 zamknięta): `ci.yml` zielone od 2026-11-07, wydanie v1.2.1 opublikowane, pakiety ghcr publiczne.
 ## 1.2.1 – wydanie (2026-11-07)
 

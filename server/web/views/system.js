@@ -401,6 +401,12 @@ VIEWS.diagnostyka = async () => {
     ['Next i ffmpeg', info && !info.error ? ['INFO', `Next ${info.NextVersion || '— (nie zgłoszony)'} · ffmpeg ${info.FFmpegVersion || '?'}`] : null],
     ['CG Playout', !S.status.cg ? ['—', 'nie ustawiony (VIZRS_LIVE_CG_URL)'] : cgHealth?.error ? ['BŁĄD', cgHealth.error]
       : ['OK', `połączony${cgState?.version ? ' · ' + cgState.version : ''} · kanałów: ${cgState?.channels?.length ?? '?'} · odbiór sygnałów ${cgState?.ingest ? 'włączony' : 'wyłączony'}`]],
+    ['strefy grafiki', !cgHealth || cgHealth.error || !cgHealth.zones ? null
+      : (() => {
+        const runs = cgHealth.zones.runs || [];
+        const txt = runs.length ? runs.map((r) => `kanał ${r.channel}: ${r.zones ? `${r.zones} (${r.share_percent}% ekranu)` : 'cały ekran'}${r.outside ? ` · grafika poza strefami: ${r.outside}` : ''}`).join('; ') : 'brak przebiegów nakładki';
+        return [runs.some((r) => r.outside) ? 'UWAGA' : 'INFO', `auto (ślady stron: ${cgHealth.zones.pages}) · ${txt}`];
+      })()],
     ['VizRS', S.status.vizrsUrl ? ['INFO', `${S.status.vizrsUrl} – łączność widać w podglądzie /output (Grafika kanału)`] : ['—', 'nie ustawiony (VIZRS_LIVE_VIZRS_URL)']],
   ].filter(([, v]) => v);
   const stKind = { OK: 'ok', UWAGA: 'warn', BŁĄD: 'bad', INFO: 'info' };
