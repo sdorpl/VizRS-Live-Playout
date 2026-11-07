@@ -89,6 +89,7 @@ Nowa funkcja = nowe przypadki w `tests/e2e.cjs` (i w razie potrzeby dane w `test
 | `server/web/views/*.js` | ekrany (po jednym pliku na grupę menu albo duży ekran; spis: DOKUMENTACJA §3 „UI”) |
 | `docker/` | `legacy-bridge.Dockerfile` (oficjalny legacy + DLL + `commands.txt`), `live.Dockerfile` (`scratch`, musl), `proxy.Caddyfile` |
 | `compose.yml`, `.env.example` | wdrożenie: `live`, `ersatztv` (tylko `expose`), `proxy`; wersje przypięte |
+| `compose.cg-playout.yml` | nakładka: VizRS Live w stosie VizRS CG Playout (RUNBOOK §2a) |
 | `tests/` | `stack.sh` (stos testowy, smoke, seed), `e2e.cjs` (Playwright + atrapy), `gate.sh` (bramka), `real.sh` (prawdziwe usługi) |
 | `scripts/plan.sh` | automat planu: jeden punkt = jedna świeża sesja `claude -p`; dzienniki w `.plan-logs/` (poza repo) |
 | `.github/workflows/` | `ci.yml` (bramka), `legacy-latest.yml` (co tydzień najnowsze legacy), `release.yml` (obrazy ghcr po tagu `v*`) |

@@ -36,7 +36,7 @@ Sesje automatu niczego nie publikują i nie ruszają produkcji; to zostało do z
 
 - `git push origin main`, potem `git tag v1.0.0 && git push origin v1.0.0` – uruchamia `release.yml` (DOKUMENTACJA §9); po pierwszej publikacji pakiety ghcr ustawić jako publiczne.
 - CI (`ci.yml`, `legacy-latest.yml`) zacznie działać po wypchnięciu `.github/workflows/` i włączeniu Actions w repozytorium (DOKUMENTACJA §8).
-- Produkcja: przejście na `compose.yml` z proxy (legacy traci port 8409 na rzecz proxy), sprawdzenie `curl -I` ścieżek używanych przez tunery i odtwarzacze (DOKUMENTACJA §8, RUNBOOK §2–4).
+- Lokalna produkcja (stos `virtrs` CG Playout) przełączona 2026-11-07 na VizRS Live nakładką `compose.cg-playout.yml` (RUNBOOK §2a): legacy v26.11.6 → v26.12.0 z mostem (migracja bazy; kopia w `~/vizrs-kopie/`), proxy na 8409, panel na 8090, CG Playout z live API. Do sprawdzenia: tunery i odtwarzacze, które korzystały z innych ścieżek niż `/iptv/*` (`curl -I`, DOKUMENTACJA §8).
 - Przed wdrożeniem z grafiką: `panel_token` w CG Playout, `VIZRS_LIVE_CG_URL`/`VIZRS_LIVE_CG_TOKEN` w panelu, Sloty na żywo z prawdziwym sygnałem z OBS (LUKI #3).
 
 ## Blokery / uwagi

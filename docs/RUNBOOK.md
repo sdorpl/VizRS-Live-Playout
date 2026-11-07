@@ -24,6 +24,17 @@ Dane: `ETV_CONFIG` (domyślnie `./etv-config`, cała baza i stan legacy) i `MEDI
 
 **CG Playout (opcjonalnie).** `VIZRS_LIVE_CG_URL=http://cg:7700` (sieć wewnętrzna) i `VIZRS_LIVE_CG_TOKEN` = `panel_token` CG Playout.
 
+### 2a. Razem ze stosem VizRS CG Playout (jeden projekt compose)
+
+Gdy ErsatzTV legacy działa już w stosie CG Playout (`../VirtRS CG Playout/docker-compose.yml`: `vizrs`, `cg`, `ersatztv`, `ingest`), VizRS Live wpina się w ten sam projekt nakładką `compose.cg-playout.yml` zamiast osobnego `compose.yml`: `ersatztv` dostaje obraz legacy z mostem i traci port na zewnątrz, dochodzą `proxy` (port 8409 dla widzów) i `live` (8090, CG Playout przez `http://cg:7700`). Wolumen `ersatztv-config` i reszta stosu bez zmian.
+
+1. Obrazy z repozytorium (albo gotowe z ghcr): `VIZRS_BRIDGE_TOKEN=x… VIZRS_LIVE_TOKEN=x… LIVE_IMAGE=vizrs-live:local LIVE_LEGACY_IMAGE=vizrs-live-legacy:local-26.12.0 docker compose build` w VizRS Live; w CG Playout `docker compose build cg`.
+2. Kopia `ersatztv-config` (§3; wolumen: `docker run --rm -v <projekt>_ersatztv-config:/c -v "$PWD":/k alpine tar -C /c -czf /k/etv-config-$(date +%F).tgz .` przy zatrzymanym `ersatztv`) – legacy v26.12.0 migruje bazę starszej wersji.
+3. W `.env` CG Playout (poza gitem): `COMPOSE_FILE=docker-compose.yml:docker-compose.nvidia.yml:<ścieżka VizRS Live>/compose.cg-playout.yml` (bez nakładki NVIDIA – bez niej), `VIZRS_LIVE_DIR=<ścieżka VizRS Live>` (dla `docker/proxy.Caddyfile`), `VIZRS_BRIDGE_TOKEN`, `VIZRS_LIVE_TOKEN` (dwa różne, §2), `LIVE_IMAGE`, `LIVE_LEGACY_IMAGE`, `VIZRS_LIVE_STREAM_URL=http://<serwer>:8409`; token CG dla panelu to `VIZRS_PANEL_TOKEN`, który już tam jest.
+4. `docker compose up -d` w katalogu CG Playout; sprawdzenie jak w §2 pkt 4 (most zielony, `curl -I :8409/` → 403, `:8409/iptv/channels.m3u` → 200) i w panelu Sloty na żywo (CG Playout połączony).
+
+Cofnięcie: przywróć poprzedni `.env` CG Playout i kopię `ersatztv-config` (§5), `docker compose up -d --remove-orphans`.
+
 ## 3. Kopie zapasowe `etv-config`
 
 Baza to SQLite w trybie WAL (`ersatztv.sqlite3`, `-wal`, `-shm`) – kopia na działającym legacy może być niespójna.

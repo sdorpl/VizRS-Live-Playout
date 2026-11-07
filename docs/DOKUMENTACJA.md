@@ -26,6 +26,7 @@ Instrukcja operatora: [INSTRUKCJA.md](INSTRUKCJA.md). Wdrożenie, kopie, aktuali
 | obraz legacy z mostem | `docker/legacy-bridge.Dockerfile` | `FROM ghcr.io/ersatztv/legacy` + `VizRS.Bridge.dll` + `commands.txt` + 2 zmienne środowiskowe |
 | obraz panelu | `docker/live.Dockerfile` | statyczna binarka musl w `scratch` |
 | proxy dla widzów | `docker/proxy.Caddyfile` (obraz `caddy`, usługa `proxy` w `compose.yml`) | na zewnątrz tylko strumienie, M3U/XMLTV, obrazy i HDHomeRun; web GUI legacy i most – 403 (§8) |
+| wpięcie w stos CG Playout | `compose.cg-playout.yml` | nakładka na `docker-compose.yml` VizRS CG Playout: `ersatztv` → legacy z mostem bez portu, `proxy`, `live` z `http://cg:7700` (RUNBOOK §2a) |
 | CI | `.github/workflows/ci.yml`, `legacy-latest.yml`, `release.yml` | bramka na GitHub Actions; co tydzień najnowsze legacy (§7); wydanie obrazów po tagu `v*` (§9) |
 
 ## 2. Most (VizRS Bridge)
