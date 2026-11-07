@@ -59,7 +59,8 @@ VIEWS.grafika = async () => {
   ];
 
   return [
-    head('Grafika kanału', 'Grafika VizRS na kanałach: stan VizRS CG Playout, strony VizRS, podgląd anteny i elementy graficzne legacy.', refresh),
+    head('Grafika kanału', 'Kiedy jaka strona VizRS wchodzi na antenę (reguły CG Playout), stan VizRS CG Playout, strony VizRS, podgląd anteny i elementy graficzne legacy.', refresh),
+    S.status.cg && !(health instanceof Error) ? await rulesPanel() : null,
     h('div', { class: 'split wide' },
       h('div', { class: 'cols' }, cgPanel,
         panel('Elementy graficzne legacy', null,
@@ -69,7 +70,6 @@ VIEWS.grafika = async () => {
       h('div', { class: 'cols' },
         vizrsPreview('Podgląd anteny VizRS (/output)', [], channels.length ? pick : null)
           || h('div', { class: 'note' }, 'Podgląd /output i Trio: uruchom panel z --vizrs-url (VIZRS_LIVE_VIZRS_URL), VizRS z tokenem – także z --vizrs-output-token.'))),
-    S.status.cg && !(health instanceof Error) ? await rulesPanel() : null,
   ];
 };
 
@@ -78,6 +78,51 @@ VIEWS.grafika = async () => {
 const toField = (v) => (v == null ? '' : v === '' ? '-' : String(v));
 const fromField = (v) => { const t = v.trim(); return t === '' ? null : t === '-' ? '' : t; };
 const numField = (v) => { const t = String(v).trim(); return t === '' ? null : Number(t); };
+
+const firstLine = (t) => { const l = String(t).split('\n').map((x) => x.trim()).filter(Boolean); return l.length > 1 ? `${l[0]}  (+${l.length - 1})` : l[0] || ''; };
+/** Wiersze streszczenia „Kiedy / Co / Ile” z reguł CG Playout (stan zapisany). focus = selektor pola w edytorze obok. */
+function ruleRows(r) {
+  const rows = [];
+  const end = (x) => x.end_seconds ?? r.end_seconds ?? 60;
+  const what = (v) => (v == null ? null : v === '' || v === '-' ? '-' : v); // brak = jak globalnie, '' = wyłączone
+  const add = (scope, x, focus, global) => {
+    const ad = [r.ad_match?.path && `ścieżka ~ ${r.ad_match.path}`, r.ad_match?.title && `tytuł ~ ${r.ad_match.title}`].filter(Boolean).join(', ');
+    const list = [
+      ['on_clip', 'start pozycji', 'wg strony VizRS'],
+      ['on_end', `${end(x)} s przed końcem audycji`, `ostatnie ${end(x)} s`],
+      ['on_ad', 'przerwa reklamowa' + (global && ad ? ` (${ad})` : ''), 'na czas przerwy'],
+    ];
+    for (const [key, when, len] of list) {
+      const v = what(x[key]);
+      if (v == null) continue;
+      rows.push({ scope, when, key, cmd: v, len, focus: focus(key) });
+    }
+  };
+  add('wszystkie kanały', r, (k) => `#gr-${k}`, true);
+  (r.shows || []).forEach((x, i) => add(`audycja ~ ${x.show_title}`, x, (k) => `[data-rules-shows] input[aria-label="${k} ${i + 1}"]`));
+  Object.entries(r.channels || {}).filter(([n]) => onChannel(n)).forEach(([n, x], i) => {
+    add(`kanał ${n}`, x, (k) => `[data-rules-channels] input[aria-label="${k} ${i + 1}"]`);
+    (x.shows || []).forEach((y) => add(`kanał ${n}, audycja ~ ${y.show_title}`, y, () => null));
+  });
+  return rows;
+}
+
+function rulesSummary(r) {
+  const rows = ruleRows(r);
+  const go = (row) => {
+    const el = row.focus && document.querySelector(row.focus);
+    if (!el) return toast('Ta reguła (audycja w regule kanału) jest tylko w config.json CG Playout – panel jej nie edytuje.');
+    el.scrollIntoView({ block: 'center' }); el.focus();
+  };
+  return panel(S.channel ? `Reguły · kanał ${S.channel}` : 'Reguły · wszystkie kanały', h('span', { class: 'dim' }, 'kliknij wiersz, by edytować'),
+    h('div', { class: 'tw', 'data-rules-summary': '' }, table(rows, [
+      [(x) => h('span', null, x.when, h('br'), h('span', { class: 'dim' }, x.scope)), 'Kiedy', { class: 'w' }],
+      [(x) => (x.cmd === '-' ? (x.key === 'on_ad' ? pill('OUT – grafika schodzi') : pill('wyłączone')) : h('span', { class: 'mono', title: x.cmd }, firstLine(x.cmd))), 'Co', { class: 'w' }],
+      [(x) => (x.cmd === '-' && x.key !== 'on_ad' ? '—' : x.len), 'Ile'],
+    ], { onRow: go, empty: 'Brak reguł – grafika nie zmienia się sama.' })),
+    h('div', { class: 'hint pad' }, 'Stan zapisany w CG Playout. Reguła audycji (pierwsza pasująca wg tytułu) i reguła kanału zastępują regułę globalną; „wyłączone” – w tym zakresie nic nie wchodzi.'),
+    cmdNote('CG Playout GET /api/live/graphics'));
+}
 
 async function rulesPanel() {
   let doc;
@@ -134,7 +179,7 @@ async function rulesPanel() {
     try { await cg('live/graphics', 'PUT', body); toast('Reguły grafiki zapisane w CG Playout – działają od następnej pozycji'); route(true); } catch (e) { toast('CG Playout odrzucił reguły: ' + e.message, 'bad'); }
   };
   const lbl = (el, text) => [h('label', { for: el.id }, text), el];
-  return panel('Reguły grafiki', h('span', null, doc.source === 'file' ? pill('z panelu', 'ok') : pill('z config.json')),
+  return h('div', { class: 'split' }, rulesSummary(r), panel('Edytor reguł', h('span', null, doc.source === 'file' ? pill('z panelu', 'ok') : pill('z config.json')),
     h('div', { class: 'pad', 'data-rules': '' },
       h('p', { class: 'dim' }, 'Komendy VizRS (TAKE, OUT…) z polami {title}, {next_title}, {next_start}, {show_title}… Kilka komend – w osobnych liniach. ' +
         'W regułach audycji i kanałów puste pole = jak globalnie, „-” = wyłączone. Zmiana działa od następnej pozycji, bez restartu CG Playout.'),
@@ -144,5 +189,5 @@ async function rulesPanel() {
       h('h3', null, 'Reguły kanałów'), chBox,
       doc.store ? null : h('div', { class: 'note' }, 'CG Playout nie ma etv_config – reguł nie zapisze.'),
       h('div', { class: 'bar' }, btn('Zapisz reguły grafiki', save, 'acc'))),
-    cmdNote('CG Playout GET/PUT /api/live/graphics'));
+    cmdNote('CG Playout GET/PUT /api/live/graphics')));
 }

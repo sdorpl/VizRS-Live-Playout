@@ -155,6 +155,24 @@ function channelCard(c, receivedAt) {
     how);
 }
 
+// ---------- Sloty na żywo: tabela wejść (jak w makiecie) ----------
+/** Adres wejścia bez sekretów (klucz RTMP i hasło SRT są tylko w „Jak nadawać na ten kanał”). */
+function inputAddr(i) {
+  const host = i.host || location.hostname;
+  if (i.kind === 'rtmp') return [`rtmp://${host}:${i.port}${i.app || ''}`, i.key ? ' + klucz' : ''];
+  return [`srt://${host}:${i.port}` + (i.streamid ? `?streamid=${encodeURIComponent(i.streamid)}` : ''), i.passphrase ? ' + hasło' : ''];
+}
+function inputsTable(list) {
+  const rows = list.flatMap((c) => (c.inputs || []).map((i, n) => ({ c, i, n })));
+  return table(rows, [
+    [({ c }) => h('span', null, h('span', { class: 'num' }, c.number), ' ', c.name || ''), 'Kanał'],
+    [({ i }) => (i.kind === 'rtmp' ? 'RTMP' : 'SRT'), 'Wejście'],
+    [({ i }) => { const [a, extra] = inputAddr(i); return h('span', null, h('span', { class: 'mono' }, a), h('span', { class: 'dim' }, extra)); }, 'Adres'],
+    [({ c }) => (c.hold ? pill('wstrzymany', 'warn') : c.source?.live ? pill(c.on_air ? 'nadaje · na antenie' : 'nadaje', c.on_air ? 'on' : 'ok') : pill('czeka')), 'Stan'],
+    [({ c }) => (c.source?.live ? `${c.source.video || '?'} · ${c.source.audio ? 'z dźwiękiem' : 'bez dźwięku'}` : h('span', { class: 'dim' }, 'brak sygnału')), 'Obraz'],
+  ], { empty: 'Żaden kanał nie ma wejścia studia (VIZRS_INGEST w VizRS CG Playout).' });
+}
+
 // ---------- Sloty na żywo: ramówka i zdarzenia ----------
 const GUIDE_KEY = 'vizrs-live-guide';
 
@@ -213,6 +231,7 @@ function repaint(initial) {
   const list = (state.channels || []).filter((c) => onChannel(c.number));
   view.status.replaceChildren(statusBar(state));
   view.cards.replaceChildren(...(list.length ? list.map((c) => channelCard(c, receivedAt)) : [h('div', { class: 'note' }, 'CG Playout nie zna jeszcze kanałów (synchronizacja z legacy co 30 s), a żaden nadawca nie nadaje.')]));
+  view.inputs.replaceChildren(inputsTable(list));
   view.guide.replaceChildren(...guideBox(state));
   view.events.replaceChildren(eventsBox(state));
   tick();
@@ -240,7 +259,7 @@ VIEWS.live = async () => {
   try { state = await cg('live/state'); } catch (e) { return [head(title, desc), cgError(e)]; }
   skew = (t0 + Date.now()) / 2 - state.now;
   const root = h('div', { class: 'split wide' });
-  view = { root, state, sig: signature(state), receivedAt: cgNow(), status: h('div'), cards: h('div', { class: 'live-grid' }), guide: h('div'), events: h('div') };
+  view = { root, state, sig: signature(state), receivedAt: cgNow(), status: h('div'), cards: h('div', { class: 'live-grid' }), guide: h('div'), events: h('div'), inputs: h('div', { class: 'tw', 'data-inputs-table': '' }) };
   root.append(
     h('div', null, view.cards),
     h('div', { class: 'cols' },
@@ -255,6 +274,7 @@ VIEWS.live = async () => {
       'Gdy sygnał dojdzie, kanał przechodzi na studio od pierwszej klatki kluczowej: zawsze („studio także poza audycjami”) albo tylko w czasie audycji LIVE z ramówki. ' +
       'Grafika VizRS zostaje na wierzchu. Koniec nadawania = powrót do ramówki. ZDEJMIJ (dwa kliknięcia) odcina studio mimo sygnału, aż do WPUŚĆ.'),
     root,
+    panel('Wejścia studia', h('span', { class: 'dim' }, 'stan sygnału; klucze i hasła – „Jak nadawać na ten kanał” w karcie kanału'), view.inputs, cmdNote('CG Playout /api/live/state (inputs, source)')),
   ];
 };
 

@@ -1165,6 +1165,12 @@ function check(cond, msg) {
   // reguły grafiki (CG Playout GET/PUT /api/live/graphics)
   await page.waitForSelector('[data-rules] #gr-on_clip');
   check(await page.inputValue('#gr-on_clip') === 'TAKE 4001 headline={title}' && await page.inputValue('input[aria-label="on_end 1"]') === '-', 'reguły grafiki: odczyt z CG Playout („-” = wyłączone)');
+  // M8: streszczenie „Kiedy / Co / Ile” – globalne, reklama wyłączona = OUT, reguła kanału 24 („-”); klik w wiersz → pole edytora
+  const sum = await page.textContent('[data-rules-summary]');
+  check(/start pozycji/.test(sum) && sum.includes('TAKE 4001 headline={title}') && /OUT – grafika schodzi/.test(sum) && /kanał 24/.test(sum) && /wyłączone/.test(sum),
+    'reguły grafiki: tabela Kiedy / Co / Ile z regułą globalną, reklamą i regułą kanału');
+  await page.click('[data-rules-summary] tr:has-text("TAKE 4001")');
+  check(await page.evaluate(() => document.activeElement?.id) === 'gr-on_clip', 'reguły grafiki: klik w wiersz streszczenia przenosi do pola edytora');
   await page.fill('#gr-on_end', 'TAKE 1405 programs={next_title}');
   await page.fill('#gr-end_seconds', '45');
   await page.click('button:has-text("+ Reguła audycji")');
@@ -1192,6 +1198,9 @@ function check(cond, msg) {
   check(await page.getAttribute('input[aria-label="Klucz RTMP 24-1"]', 'type') === 'text', 'sloty: „Pokaż” odsłania klucz');
   check(await page.inputValue('input[aria-label="Adres SRT 24-2"]') === 'srt://127.0.0.1:9000?mode=caller&passphrase=tajne%20haslo', 'sloty: adres SRT z hasłem (host z panelu)');
   check(/NA ANTENIE/.test(await page.textContent('main')), 'sloty: kanał 24 z sygnałem studia NA ANTENIE');
+  const inTab = await page.textContent('[data-inputs-table]');
+  check(inTab.includes('rtmp://tv.example.pl:1936/live') && /nadaje/.test(inTab) && /h264 · z dźwiękiem/.test(inTab) && !inTab.includes('studio-klucz') && !inTab.includes('tajne'),
+    'sloty: tabela wejść – adres bez klucza i hasła, stan, obraz');
   check(/LIVE/.test(await page.textContent('[data-guide="24"]')) && /Poranek na żywo/.test(await page.textContent('[data-guide="24"]')), 'sloty: ramówka EPG z audycją LIVE');
   check(/odbiór sygnałów: 1/.test(await page.textContent('[data-live-status]')) && /CG Playout 0\.9\.0-test/.test(await page.textContent('[data-live-status]')), 'sloty: lampki CG, ErsatzTV, odbioru');
   const since1 = await page.textContent('[data-live-channel="24"] [data-since]');
