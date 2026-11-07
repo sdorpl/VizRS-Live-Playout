@@ -4,10 +4,10 @@ Wdrożenie, kopie, aktualizacja legacy, odtworzenie. Praca operatora: [INSTRUKCJ
 
 ## 1. Składniki i porty
 
-| Usługa (`compose.yml`) | Obraz (wydanie 1.0.0) | Port na zewnątrz |
+| Usługa (`compose.yml`) | Obraz (wydanie 1.1.0) | Port na zewnątrz |
 |---|---|---|
-| `live` – panel | `ghcr.io/sdorpl/vizrs-live:1.0.0` | 8090 – operatorzy |
-| `ersatztv` – legacy z mostem | `ghcr.io/sdorpl/vizrs-live-legacy:1.0.0-legacy26.12.0` (ErsatzTV legacy v26.12.0 + VizRS Bridge) | brak (`expose`) |
+| `live` – panel | `ghcr.io/sdorpl/vizrs-live:1.1.0` | 8090 – operatorzy |
+| `ersatztv` – legacy z mostem | `ghcr.io/sdorpl/vizrs-live-legacy:1.1.0-legacy26.12.0` (ErsatzTV legacy v26.12.0 + VizRS Bridge) | brak (`expose`) |
 | `proxy` – Caddy | `caddy:2.10.2-alpine` | 8409 – widzowie: strumienie, M3U, XMLTV, HDHomeRun |
 
 Dane: `ETV_CONFIG` (domyślnie `./etv-config`, cała baza i stan legacy) i `MEDIA_DIR` (media, tylko do odczytu). Panel nie trzyma żadnych danych.

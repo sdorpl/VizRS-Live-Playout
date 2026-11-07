@@ -6,7 +6,7 @@
 
 ## Bieżący etap
 
-**Wydanie 1.0.0** (2026-11-07) z ErsatzTV legacy **v26.12.0** (sprawdzone też z v26.11.6). Plan rozbudowy R0–R12 zrobiony w całości; zawartość wydań: [CHANGELOG.md](../CHANGELOG.md). Po wydaniu (sekcja „Niewydane”): VizRS Live Panel z CG Playout `/live` wchłonięty, a w CG Playout usunięty (zostaje tylko API `/api/live/*`) – Sloty na żywo jako stanowisko MCR, Audycje LIVE, studio i nazwa stanowiska w pasku górnym (R12). Podgląd strumienia kanału w panelu (okno podglądu, własny odtwarzacz MSE równany do zegara anteny, pośrednik `/api/stream/…`).
+**Wydanie 1.1.0** (2026-11-07) z ErsatzTV legacy **v26.12.0** (sprawdzone też z v26.11.6). Plan rozbudowy R0–R12 zrobiony w całości; zawartość wydań: [CHANGELOG.md](../CHANGELOG.md). W 1.1.0 względem 1.0.0: VizRS Live Panel z CG Playout `/live` wchłonięty, a w CG Playout usunięty (zostaje tylko API `/api/live/*`) – Sloty na żywo jako stanowisko MCR, Audycje LIVE, studio i nazwa stanowiska w pasku górnym (R12). Podgląd strumienia kanału w panelu (okno podglądu, własny odtwarzacz MSE równany do zegara anteny, pośrednik `/api/stream/…`).
 
 **Grafika i sloty na żywo** – przez **VizRS CG Playout** (`../VizRS CG Playout`): reguły grafiki (`/api/live/graphics`), stan wejść, przejęcie kanału, audycje LIVE. Logika zostaje w CG Playout; panel woła jego API przez pośrednika `/api/cg/…`.
 
@@ -34,7 +34,7 @@ Wybierz z [LUKI.md](LUKI.md) pozycję o najwyższym priorytecie (G1 → G2 → G
 
 Sesje automatu niczego nie publikują i nie ruszają produkcji; to zostało do zrobienia ręcznie:
 
-- `git push origin main`, potem `git tag v1.0.0 && git push origin v1.0.0` – uruchamia `release.yml` (DOKUMENTACJA §9); po pierwszej publikacji pakiety ghcr ustawić jako publiczne.
+- `git push origin main`, potem `git tag v1.1.0 && git push origin v1.1.0` (tag v1.0.0 nie był wypchnięty – wystarczy v1.1.0) – uruchamia `release.yml` (DOKUMENTACJA §9); po pierwszej publikacji pakiety ghcr ustawić jako publiczne.
 - CI (`ci.yml`, `legacy-latest.yml`) zacznie działać po wypchnięciu `.github/workflows/` i włączeniu Actions w repozytorium (DOKUMENTACJA §8).
 - Lokalna produkcja (stos `virtrs` CG Playout) przełączona 2026-11-07 na VizRS Live nakładką `compose.cg-playout.yml` (RUNBOOK §2a): legacy v26.11.6 → v26.12.0 z mostem (migracja bazy; kopia w `~/vizrs-kopie/`), proxy na 8409, panel na 8090, CG Playout z live API. Do sprawdzenia: tunery i odtwarzacze, które korzystały z innych ścieżek niż `/iptv/*` (`curl -I`, DOKUMENTACJA §8).
 - Przed wdrożeniem z grafiką: `panel_token` w CG Playout, `VIZRS_LIVE_CG_URL`/`VIZRS_LIVE_CG_TOKEN` w panelu, Sloty na żywo z prawdziwym sygnałem z OBS (LUKI #3).

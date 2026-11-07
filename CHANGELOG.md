@@ -2,6 +2,9 @@
 
 ## Niewydane
 
+## 1.1.0 – wydanie (2026-11-07)
+
+- Wersja panelu i mostu 1.1.0 (obrazy `ghcr.io/sdorpl/vizrs-live:1.1.0`, `ghcr.io/sdorpl/vizrs-live-legacy:1.1.0-legacy26.12.0`); most bez zmian w działaniu.
 - **Podgląd strumienia kanału w panelu**: okno podglądu (przycisk „Podgląd” w pasku górnym, „Podgląd ▶” na kartach Na antenie, „Odtwórz w panelu” w Diagnostyce), które zostaje przy zmianie ekranów. Własny lekki odtwarzacz bez bibliotek (`player.js`, `mux.js`: MPEG-TS → fragmenty MP4 dla MSE, bez kodowania) na tej samej sesji HLS legacy, co widzowie – bez dodatkowego obciążenia serwera; obraz równany do zegara anteny (`PROGRAM-DATE-TIME`), czyli opóźnienie ≈ 0 względem ramówki. Nowy pośrednik `GET /api/stream/…` (biała lista, bez tokenu mostu, przepisane adresy playlist), CSP `media-src 'self' blob:`. HEVC/AV1 – natywny HLS przeglądarki.
 - **Stos testowy oszczędniejszy w RAM**: dane domyślnie w `~/.cache/vizrs-live-test` zamiast `/tmp` (tmpfs), legacy z workstation GC i limitem `VIZRS_LIVE_TEST_MEM` (1536m – e2e ogląda kanał w podglądzie), proxy 128 MB, Jellyfin/Emby/Plex w `tests/real.sh` po `VIZRS_LIVE_REAL_MEM` (1g); `tests/gate.sh` po zielonym przebiegu zatrzymuje stos, który sam uruchomił (`GATE_KEEP_STACK=1`); `tests/stack.sh mem` pokazuje zużycie. Legacy w stosie: ok. 850 → 450 MB.
 - **Dokumentacja na wzór VizRS CG System**: nowe `docs/STATUS.md` (etap, następne zadanie, kroki ręczne), `docs/LUKI.md` (znane braki G1 → G2 → G3), `docs/README.md` (spis), `docs/plany/` (plan rozbudowy przeniesiony do `docs/plany/PLAN-rozbudowy.md`, `scripts/plan.sh` za nim); `CLAUDE.md` przebudowany (start sesji, niepodważalne zasady, porty stosu testowego, struktura, commity), nowy `GEMINI.md` dla Gemini CLI (wczytuje `CLAUDE.md`); spis treści w DOKUMENTACJA, tabela dokumentów w README.

@@ -12,7 +12,7 @@ services:
       dockerfile: docker/legacy-bridge.Dockerfile
       args:
         LEGACY_IMAGE: ${LEGACY_IMAGE:-ghcr.io/ersatztv/legacy:v26.12.0}
-    image: ${LIVE_LEGACY_IMAGE:-ghcr.io/sdorpl/vizrs-live-legacy:1.0.0-legacy26.12.0}
+    image: ${LIVE_LEGACY_IMAGE:-ghcr.io/sdorpl/vizrs-live-legacy:1.1.0-legacy26.12.0}
     restart: unless-stopped
     environment:
       VIZRS_BRIDGE_TOKEN: ${VIZRS_BRIDGE_TOKEN:?ustaw VIZRS_BRIDGE_TOKEN w .env}
@@ -39,7 +39,7 @@ services:
     build:
       context: .
       dockerfile: docker/live.Dockerfile
-    image: ${LIVE_IMAGE:-ghcr.io/sdorpl/vizrs-live:1.0.0}
+    image: ${LIVE_IMAGE:-ghcr.io/sdorpl/vizrs-live:1.1.0}
     restart: unless-stopped
     depends_on: [ersatztv]
     environment:

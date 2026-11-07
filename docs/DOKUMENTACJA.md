@@ -1,6 +1,6 @@
 # VizRS Live – dokumentacja
 
-Wersja 1.0.0, sprawdzona z ErsatzTV legacy **v26.11.6** i **v26.12.0** (obraz `ghcr.io/ersatztv/legacy`, silnik Next; wydanie przypięte do **v26.12.0**; aktualizacja – §6).
+Wersja 1.1.0, sprawdzona z ErsatzTV legacy **v26.11.6** i **v26.12.0** (obraz `ghcr.io/ersatztv/legacy`, silnik Next; wydanie przypięte do **v26.12.0**; aktualizacja – §6).
 
 Instrukcja operatora: [INSTRUKCJA.md](INSTRUKCJA.md). Wdrożenie, kopie, aktualizacja, odtworzenie: [RUNBOOK.md](RUNBOOK.md). Znane braki panelu: [LUKI.md](LUKI.md); stan prac: [STATUS.md](STATUS.md); spis dokumentów: [README.md](README.md).
 
@@ -285,8 +285,8 @@ Operatorzy pracują wyłącznie w panelu. Legacy nie ma portu na zewnątrz (`exp
 
 | Obraz | Tag | Z czego |
 |---|---|---|
-| `ghcr.io/sdorpl/vizrs-live` | `1.0.0` | `docker/live.Dockerfile` |
-| `ghcr.io/sdorpl/vizrs-live-legacy` | `1.0.0-legacy26.12.0` | `docker/legacy-bridge.Dockerfile` na `ghcr.io/ersatztv/legacy:v26.12.0` |
+| `ghcr.io/sdorpl/vizrs-live` | `1.1.0` | `docker/live.Dockerfile` |
+| `ghcr.io/sdorpl/vizrs-live-legacy` | `1.1.0-legacy26.12.0` | `docker/legacy-bridge.Dockerfile` na `ghcr.io/ersatztv/legacy:v26.12.0` |
 | `caddy` (proxy) | `2.10.2-alpine` | obraz oficjalny |
 
 Wszystkie przypięte w `.env.example` (`LIVE_IMAGE`, `LIVE_LEGACY_IMAGE`, `LEGACY_IMAGE`, `PROXY_IMAGE`) i jako domyślne w `compose.yml`; domyślny `LEGACY_IMAGE` w `docker/legacy-bridge.Dockerfile` też `v26.12.0` (stos testowy buduje się więc na wersji wydania; inna: `LEGACY_IMAGE=… tests/stack.sh up`). Publikację robi `.github/workflows/release.yml` po tagu `v<wersja>` (sprawdza zgodność tagu z `Cargo.toml`, przechodzi `tests/gate.sh`, buduje i wypycha oba obrazy z `GITHUB_TOKEN`).
@@ -297,7 +297,7 @@ Wszystkie przypięte w `.env.example` (`LIVE_IMAGE`, `LIVE_LEGACY_IMAGE`, `LEGAC
 - TLS: panel i proxy zostają na HTTP (decyzja R10 podtrzymana); w RUNBOOK zalecenie LAN/VPN albo zewnętrzne proxy TLS. Panel nie robi TLS sam (serwer bez zależności).
 
 **Kroki ręczne (sesja automatu niczego nie publikuje):**
-1. `git push origin main` i `git tag v1.0.0 && git push origin v1.0.0` – uruchamia `release.yml`.
+1. `git push origin main` i `git tag v1.1.0 && git push origin v1.1.0` – uruchamia `release.yml`.
 2. Po pierwszej publikacji: pakiety `vizrs-live` i `vizrs-live-legacy` na GitHub ustawić jako publiczne (albo `docker login ghcr.io` na serwerze produkcyjnym).
 3. Produkcja: `.env` wg `.env.example` (nowe zmienne `LIVE_IMAGE`, `LIVE_LEGACY_IMAGE`), kopia `etv-config`, `docker compose pull && docker compose up -d` (RUNBOOK §2–4).
 
