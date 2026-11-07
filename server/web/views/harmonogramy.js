@@ -4,9 +4,9 @@
 // Pola pozycji (ReplaceProgramScheduleItem) są typem zagnieżdżonym – most nie podaje ich wyliczeń, więc listy
 // wyboru są tutaj, z tymi samymi ograniczeniami co w ScheduleItemsEditor.razor.
 
-import { VIEWS, h, panel, cmd, pl, cmdNote } from '../core.js';
+import { VIEWS, h, panel, cmd, pl, pill, cmdNote } from '../core.js';
 import { form } from '../form.js';
-import { crudView, itemsEditor, contentPicker, emptyContent } from '../parts.js';
+import { crudView, itemsEditor, contentPicker, emptyContent, dayBar, minutesOf, hhmm } from '../parts.js';
 
 // ---------- etykiety pól pozycji ----------
 const L = {
@@ -80,7 +80,53 @@ function toReplace(it, index) {
 }
 
 // ---------- opis pozycji w tabeli ----------
-const startText = (it) => (it.StartType === 'Fixed' ? (it.StartTime || '').slice(0, 5) || '?' : 'dynamicznie');
+const BEHAVIOR = { Strict: 'ściśle', Flexible: 'elastycznie' };
+/** „06:00 stała” (z nadpisaniem zachowania: „06:00 ściśle”) albo „po poprzedniej” – jak w makiecie UI. */
+const startText = (it) => (it.StartType === 'Fixed'
+  ? `${(it.StartTime || '').slice(0, 5) || '?'} ${BEHAVIOR[it.FixedStartTimeBehavior] || 'stała'}` : 'po poprzedniej');
+
+/** Wypełniacze pozycji w skrócie: „przed: Reklamy · po: Zapowiedzi”. */
+const FILLER_SLOTS = [['PreRollFillerId', 'przed'], ['MidRollFillerId', 'w trakcie'], ['PostRollFillerId', 'po'], ['TailFillerId', 'ogon'], ['FallbackFillerId', 'zapas']];
+function fillerText(it, fillers) {
+  const name = (id) => fillers.find((x) => x.Id === id)?.Name || `#${id}`;
+  return FILLER_SLOTS.filter(([k]) => it[k] != null).map(([k, t]) => `${t}: ${name(it[k])}`).join(' · ');
+}
+
+/** Znaki wodne i elementy graficzne pozycji jako etykiety (puste = „—”). */
+function graphicsCell(it, ctx) {
+  const byId = (list, id) => list.find((x) => x.Id === id)?.Name || `#${id}`;
+  const tags = [
+    ...(it.WatermarkIds || []).map((id) => pill('znak: ' + byId(ctx.watermarks, id))),
+    ...(it.GraphicsElementIds || []).map((id) => pill(byId(ctx.graphics, id), 'info')),
+  ];
+  return tags.length ? h('span', { class: 'bar' }, tags) : null;
+}
+
+/**
+ * Podgląd 24 h: szkielet doby z pozycji o stałej godzinie – każda trwa do następnej stałej godziny, razem z pozycjami
+ * „po poprzedniej” za nią. Dokładne godziny liczy legacy przy budowie playoutu (długości plików), panel ich nie zna.
+ */
+function dayPreview(items) {
+  const fixed = items.map((it, i) => ({ it, i })).filter(({ it }) => it.StartType === 'Fixed' && it.StartTime);
+  if (!fixed.length) {
+    return h('p', { class: 'pad dim' }, items.length
+      ? 'Brak pozycji o stałej godzinie – legacy układa pozycje po kolei, w pętli, bez punktów zaczepienia w dobie.'
+      : 'Podgląd pojawi się po dodaniu pozycji.');
+  }
+  const sorted = [...fixed].sort((a, b) => minutesOf(a.it.StartTime) - minutesOf(b.it.StartTime));
+  const segs = sorted.map(({ it, i }, n) => {
+    const start = minutesOf(it.StartTime);
+    let end = n + 1 < sorted.length ? minutesOf(sorted[n + 1].it.StartTime) : minutesOf(sorted[0].it.StartTime) + 1440;
+    if (end <= start) end += 1440;
+    // pozycje „po poprzedniej” idą za tą stałą pozycją aż do następnej stałej (w kolejności z tabeli, z zawinięciem)
+    const tail = [];
+    for (let j = (i + 1) % items.length; j !== i && items[j].StartType !== 'Fixed'; j = (j + 1) % items.length) tail.push(items[j]);
+    const label = it._name.replace(/^[^:]*: /, '') + (tail.length ? ` +${tail.length}` : '');
+    const title = `${hhmm(start)}–${hhmm(end % 1440)} ${[it, ...tail].map((x) => x._name).join(' → ')}`;
+    return { start, end, label, title };
+  });
+  return dayBar(segs, { label: 'Podgląd doby: pozycje o stałej godzinie' });
+}
 function modeText(it) {
   switch (it.PlayoutMode) {
     case 'Multiple': return it.MultipleMode === 'Count' ? `kilka (${it.MultipleCount})` : `kilka: ${L[it.MultipleMode]}`;
@@ -219,15 +265,21 @@ VIEWS.harmonogramy = crudView({
     ctx.itemsEd = itemsEditor({
       items: ctx.items,
       copy: true,
-      cols: [[startText, 'Start', { class: 'num' }], [(it) => it._name, 'Treść', { class: 'w' }], [modeText, 'Tryb'], [(it) => L[it.PlaybackOrder] || pl(it.PlaybackOrder), 'Kolejność']],
+      cols: [[startText, 'Start', { class: 'num' }], [(it) => it._name, 'Treść', { class: 'w' }], [modeText, 'Tryb'], [(it) => L[it.PlaybackOrder] || pl(it.PlaybackOrder), 'Kolejność'],
+        [(it) => fillerText(it, ctx.fillers), 'Wypełniacze', { class: 'w' }], [(it) => graphicsCell(it, ctx), 'Znaki i grafika']],
       newItem,
       edit: (it) => itemEditor(it, ctx, !!f.peek().ShuffleScheduleItems),
       empty: 'Harmonogram nie ma pozycji. Dodaj pierwszą – bez pozycji playout nic nie zbuduje.',
+      onChange: (items) => ctx.day?.replaceChildren(dayPreview(items)),
     });
+    ctx.day = h('div', { class: 'day-preview' }, dayPreview(ctx.items));
     return f;
   },
-  below: (s, ctx) => panel(`Pozycje harmonogramu${s ? ' · ' + s.Name : ''}`, h('span', { class: 'dim' }, 'zapis razem z ustawieniami („Zapisz”)'),
-    ctx.itemsEd.el, cmdNote('GetProgramScheduleItems', 'ReplaceProgramScheduleItems')),
+  below: (s, ctx) => [
+    panel(`Pozycje harmonogramu${s ? ' · ' + s.Name : ''}`, h('span', { class: 'dim' }, 'zapis razem z ustawieniami („Zapisz”)'),
+      ctx.itemsEd.el, cmdNote('GetProgramScheduleItems', 'ReplaceProgramScheduleItems')),
+    panel('Podgląd 24 h', h('span', { class: 'dim' }, 'szkielet z godzin stałych; dokładne godziny liczy legacy przy budowie playoutu'), ctx.day),
+  ],
   footer: (s, ctx) => {
     const used = s ? usedBy(s, ctx.playouts) : [];
     return used.length ? h('div', { class: 'note' }, 'Używają go playouty kanałów: ', used.map((p) => `${p.ChannelNumber} · ${p.ChannelName}`).join(', '),

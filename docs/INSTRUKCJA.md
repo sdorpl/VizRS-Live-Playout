@@ -22,7 +22,7 @@ Pasek górny: stan mostu do legacy (zielony = działa) i licznik playoutów z b�
 | dodać / zmienić kanał | **Kanały** | „+ Nowy kanał”, formularz, „Załóż kanał”; zmiana → „Zapisz”; logo: wgraj obraz albo podaj adres |
 | dodać nowe pliki | **Biblioteki** → „Skanuj” | pliki muszą leżeć w katalogu mediów serwera; po skanie widać je w **Przeglądarce** |
 | zgrupować treść | **Kolekcje** (zwykłe, inteligentne, wielo-, powtórki), **Playlisty** | treść dobiera się „wyborem treści” z wyszukiwaniem |
-| ułożyć ramówkę klasyczną | **Harmonogramy** | pozycje: start stały (godzina) albo dynamiczny, tryb (jedna, kilka, czas, do pełna), treść; „Zapisz” zapisuje całą listę |
+| ułożyć ramówkę klasyczną | **Harmonogramy** | pozycje: start stały (godzina) albo dynamiczny, tryb (jedna, kilka, czas, do pełna), treść; „Podgląd 24 h” pokazuje szkielet doby z godzin stałych; „Zapisz” zapisuje całą listę |
 | ułożyć ramówkę blokową | **Bloki i szablony**, **Wystrój (deco)**, potem **Playouty** → kalendarz tygodnia | blok = treść na N minut; szablon dnia = bloki o godzinach; kalendarz = szablony na dni |
 | podpiąć ramówkę do kanału | **Playouty** → „+ Playout” | rodzaj, kanał (tylko bez playoutu), harmonogram; potem „Przebuduj” |
 | przerwy, wypełnienie | **Wypełniacze**, **Znaki wodne** | |

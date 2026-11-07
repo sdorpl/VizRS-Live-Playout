@@ -2,6 +2,8 @@
 
 ## Niewydane
 
+- **Harmonogramy wg makiety UI**: tabela pozycji ze startem „06:00 stała” / „po poprzedniej”, kolumnami wypełniaczy oraz znaków wodnych i elementów graficznych; nowy panel „Podgląd 24 h” – szkielet doby z godzin stałych (dokładne godziny liczy legacy przy budowie playoutu).
+
 ## 1.1.0 – wydanie (2026-11-07)
 
 - Wersja panelu i mostu 1.1.0 (obrazy `ghcr.io/sdorpl/vizrs-live:1.1.0`, `ghcr.io/sdorpl/vizrs-live-legacy:1.1.0-legacy26.12.0`); most bez zmian w działaniu.

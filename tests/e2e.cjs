@@ -221,8 +221,11 @@ function check(cond, msg) {
   await rerender(() => page.click('button:has-text("Załóż harmonogram")'));
   await page.waitForSelector(`td:has-text("${sched}")`);
   let rows = await itemRows();
-  check(rows.length === 2 && /dynamicznie \| wyszukiwanie: Wszystko \| kilka \(2\)/.test(rows[0]) && /06:00 \| kolekcja inteligentna: Archiwum INFO24 \| wypełnij/.test(rows[1]),
+  check(rows.length === 2 && /po poprzedniej \| wyszukiwanie: Wszystko \| kilka \(2\)/.test(rows[0]) && /06:00 stała \| kolekcja inteligentna: Archiwum INFO24 \| wypełnij/.test(rows[1]),
     `harmonogram: założony z pozycjami w nowej kolejności (${rows.join(' / ')})`);
+  const daySegs = await page.$$eval('.day-preview .daybar .seg', (xs) => xs.map((x) => x.textContent));
+  check(daySegs.length >= 1 && daySegs.every((t) => t === 'Archiwum INFO24 +1'), `harmonogram: podgląd 24 h – stała 06:00 z pozycją „po poprzedniej” (${daySegs.join(' / ')})`);
+  if (process.env.E2E_SHOTS) await page.screenshot({ path: `${process.env.E2E_SHOTS}/r1-harmonogram.png`, fullPage: true });
   await page.click('.items tbody tr:nth-child(2) td:nth-child(3)');
   check((await page.inputValue('#si-StartTime')) === '06:00:00' && (await page.inputValue('#si-PlayoutMode')) === 'Flood'
     && /Archiwum INFO24/.test(await page.textContent('.items-side .picked')), 'harmonogram: ponowne otwarcie – te same wartości pozycji');
