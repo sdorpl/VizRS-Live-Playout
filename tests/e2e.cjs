@@ -30,6 +30,7 @@ function check(cond, msg) {
   // Stan jak w CG Playout: kanały z sygnałem studia, wstrzymanie, audycje LIVE; sprawdza token panelu CG i brak Origin.
   const CG_TOKEN = 'test-cg-token-0123456789';
   const cgSeen = [];
+  const vizrsSeen = [];
   const T0 = Date.now(); // ramówka atrapy stała w czasie, jak EPG prawdziwego CG Playout
   const CG = {
     hold: false, anytime: true, library: null, operators: [],
@@ -41,6 +42,14 @@ function check(cond, msg) {
     q.on('data', (d) => (raw += d));
     q.on('end', () => {
       const send = (code, b) => { r.writeHead(code, { 'Content-Type': 'application/json' }); r.end(JSON.stringify(b)); };
+      // atrapa VizRS CG System na tym samym porcie (panel: --vizrs-url :18700): /output z tokenem wyjścia jak w VizRS
+      const vu = new URL(q.url, 'http://x');
+      if (vu.pathname === '/output' || vu.pathname === '/trio') {
+        vizrsSeen.push(q.url);
+        if (vu.pathname === '/trio' || vu.searchParams.get('token') !== 'e2e-vizrs-output') return send(401, { error: 'wymagany token' });
+        r.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        return r.end(`<!doctype html><title>VizRS output</title><body data-bus="${vu.searchParams.get('bus') || 'program'}">VizRS</body>`);
+      }
       if (q.headers['x-operator']) CG.operators.push(Buffer.from(q.headers['x-operator'], 'latin1').toString('utf8')); // jak CG Playout: nagłówek w UTF-8
       cgSeen.push(`${q.method} ${q.url} ${q.headers.authorization === 'Bearer ' + CG_TOKEN ? 'token' : 'BEZ TOKENU'}${q.headers.origin ? ' origin' : ''}`);
       if (q.headers.authorization !== 'Bearer ' + CG_TOKEN) return send(401, { error: 'zły token panelu' });
@@ -311,6 +320,16 @@ function check(cond, msg) {
     if (!onAir) await page.waitForTimeout(2000);
   }
   check(onAir, 'playout: pozycje kanału widoczne w „Na antenie”');
+  // Trio i podgląd VizRS na antenie kanału (panel z --vizrs-channels)
+  check(await page.getAttribute(`.panel:has(h2:text-is("${chNum} · ${chName}")) a[data-trio]`, 'href') === `http://127.0.0.1:18700/trio?channel=${chNum}`,
+    'antena: „Trio ↗” otwiera antenę kanału');
+  await page.selectOption('select[data-vizrs-channel]', String(chNum));
+  check(await page.getAttribute('iframe[data-vizrs-output]', 'src') === `http://127.0.0.1:18700/output?token=e2e-vizrs-output&bus=ch-${chNum}`,
+    'antena: podgląd VizRS idzie za wybraną anteną kanału');
+  await page.goto(`${BASE}/#epg`);
+  await page.goto(`${BASE}/#antena`);
+  await page.waitForSelector('iframe[data-vizrs-output]');
+  check(await page.inputValue('select[data-vizrs-channel]') === String(chNum), 'antena: wybór anteny VizRS przeżywa odświeżenie widoku');
 
   // harmonogram zastępczy na sobotę + codzienna przebudowa
   await page.goto(`${BASE}/#playouty`);
@@ -1030,6 +1049,16 @@ function check(cond, msg) {
   check(await page.textContent('[data-cg-sessions]') === '1', 'grafika: stan CG Playout (sesje elementu VizRS)');
   await page.waitForSelector('[data-cg-pages] td:has-text("Belka tytułowa")');
   check(true, 'grafika: strony VizRS kanału 24 z /etv/pages');
+  // VizRS CG System: podgląd /output z tokenem wyjścia i anteną kanału (bus=ch-N), Trio z ?channel=N
+  const vizrsBus = async () => {
+    const f = await (await page.waitForSelector('iframe[data-vizrs-output]')).contentFrame();
+    return (await f.waitForSelector('body[data-bus]')).getAttribute('data-bus');
+  };
+  const vsrc = await page.getAttribute('iframe[data-vizrs-output]', 'src');
+  check(vsrc === 'http://127.0.0.1:18700/output?token=e2e-vizrs-output&bus=ch-24' && await vizrsBus() === 'ch-24',
+    `grafika: podgląd VizRS – host panelu, token wyjścia, antena kanału 24 (${vsrc})`);
+  check(await page.getAttribute('main .panel a[data-trio]', 'href') === 'http://127.0.0.1:18700/trio?channel=24', 'grafika: odnośnik do Trio na antenę kanału');
+  check(!vizrsSeen.some((u) => /\/trio/.test(u)) && !(await page.content()).includes(CG_TOKEN), 'grafika: Trio bez tokenu operatora, token CG nie trafia do strony');
   check(await page.isVisible('button:has-text("Wczytaj pliki elementów")'), 'grafika: przycisk RefreshGraphicsElements (komenda na liście mostu)');
   await rerender(() => page.click('button:has-text("Wczytaj pliki elementów")'));
   check(/wczytał/.test(await page.textContent('#toast')), 'grafika: RefreshGraphicsElements wykonane w legacy');

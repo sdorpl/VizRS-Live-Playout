@@ -1,7 +1,7 @@
 # VizRS Live: ErsatzTV legacy z mostem + panel.
 #   cp .env.example .env   # ustaw tokeny
-#   docker compose pull && docker compose up -d     # gotowe obrazy ghcr.io/sdorpl/… (wydanie 1.0)
-#   docker compose up -d --build                    # albo budowa na miejscu (np. inna wersja LEGACY_IMAGE)
+#   docker compose up -d     # panel z ghcr.io/sdorpl/…; legacy z mostem budowany na miejscu
+#                            # na najnowszym ghcr.io/ersatztv/legacy (przy każdym up sprawdza nowszy)
 # Wdrożenie, kopie, aktualizacja, odtworzenie: docs/RUNBOOK.md
 # Panel: http://<serwer>:8090/  (token panelu: VIZRS_LIVE_TOKEN)
 # Strumienie dla widzów: http://<serwer>:8409/iptv/channels.m3u (przez proxy; web GUI legacy zamknięte – R10)
@@ -11,8 +11,10 @@ services:
       context: .
       dockerfile: docker/legacy-bridge.Dockerfile
       args:
-        LEGACY_IMAGE: ${LEGACY_IMAGE:-ghcr.io/ersatztv/legacy:v26.12.0}
-    image: ${LIVE_LEGACY_IMAGE:-ghcr.io/sdorpl/vizrs-live-legacy:1.1.0-legacy26.12.0}
+        LEGACY_IMAGE: ${LEGACY_IMAGE:-ghcr.io/ersatztv/legacy:latest}
+      pull: true               # zawsze najnowsze legacy
+    pull_policy: build         # obraz z mostem budowany przy każdym up (warstwy z pamięci podręcznej)
+    image: ${LIVE_LEGACY_IMAGE:-vizrs-live-legacy:local}
     restart: unless-stopped
     environment:
       VIZRS_BRIDGE_TOKEN: ${VIZRS_BRIDGE_TOKEN:?ustaw VIZRS_BRIDGE_TOKEN w .env}
@@ -48,6 +50,8 @@ services:
       VIZRS_LIVE_TOKEN: ${VIZRS_LIVE_TOKEN:?ustaw VIZRS_LIVE_TOKEN w .env}
       VIZRS_LIVE_STREAM_URL: ${VIZRS_LIVE_STREAM_URL:-}
       VIZRS_LIVE_VIZRS_URL: ${VIZRS_LIVE_VIZRS_URL:-}
+      VIZRS_LIVE_VIZRS_OUTPUT_TOKEN: ${VIZRS_LIVE_VIZRS_OUTPUT_TOKEN:-}
+      VIZRS_LIVE_VIZRS_CHANNELS: ${VIZRS_LIVE_VIZRS_CHANNELS:-0}
       VIZRS_LIVE_CG_URL: ${VIZRS_LIVE_CG_URL:-}
       VIZRS_LIVE_CG_TOKEN: ${VIZRS_LIVE_CG_TOKEN:-}
     ports:

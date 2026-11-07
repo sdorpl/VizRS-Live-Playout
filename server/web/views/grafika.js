@@ -1,7 +1,7 @@
 // Widok „Grafika kanału” (R9); Sloty na żywo i Audycje LIVE – views/live.js.
 // Dane VizRS CG Playout przez pośrednika serwera /api/cg/… (token CG zostaje w serwerze).
 
-import { VIEWS, S, h, head, panel, pill, btn, table, toast, api, cmd, cmdNote, confirmDlg, dialog, has, route, dateTime } from '../core.js';
+import { VIEWS, S, h, head, panel, pill, btn, table, toast, api, cmd, cmdNote, confirmDlg, dialog, has, route, dateTime, vizrsPreview } from '../core.js';
 
 /** Zapytanie do CG Playout przez serwer panelu; zwraca `result` albo rzuca ApiError. */
 export async function cg(path, method = 'GET', body) {
@@ -65,9 +65,8 @@ VIEWS.grafika = async () => {
             { empty: 'Brak elementów. Element VizRS (vizrs.yml) zakłada CG Playout przy synchronizacji z legacy.' }),
           cmdNote('GetAllGraphicsElements', 'RefreshGraphicsElements'))),
       h('div', { class: 'cols' },
-        S.status.vizrsUrl
-          ? panel('Podgląd anteny VizRS (/output)', null, h('div', { class: 'pad' }, h('iframe', { class: 'preview', src: S.status.vizrsUrl + '/output', title: 'Podgląd grafiki VizRS' })))
-          : h('div', { class: 'note' }, 'Podgląd /output: uruchom panel z --vizrs-url (VIZRS_LIVE_VIZRS_URL).'))),
+        vizrsPreview('Podgląd anteny VizRS (/output)', [], channels.length ? pick : null)
+          || h('div', { class: 'note' }, 'Podgląd /output i Trio: uruchom panel z --vizrs-url (VIZRS_LIVE_VIZRS_URL), VizRS z tokenem – także z --vizrs-output-token.'))),
     S.status.cg && !(health instanceof Error) ? await rulesPanel() : null,
   ];
 };

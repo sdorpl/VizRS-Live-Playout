@@ -1,25 +1,67 @@
-# Wydanie (R11): po tagu v* buduje i publikuje obrazy na ghcr.io/sdorpl/…
-#   ghcr.io/sdorpl/vizrs-live:<wersja>                         – panel
-#   ghcr.io/sdorpl/vizrs-live-legacy:<wersja>-legacy<legacy>   – ErsatzTV legacy z mostem
-# Wersja legacy = LEGACY_IMAGE z .env.example (przypięta). Przed publikacją: tests/gate.sh na tej wersji.
-# Uruchamia się dopiero po wypchnięciu tagu (krok ręczny, docs/RUNBOOK.md „Wydanie”).
 name: Release
-
+# Wydanie (wzór: VizRS CG System, VizRS CG Playout) po wypchnięciu znacznika v* (np. v1.2.0)
+# albo ręcznie (Actions → Release → Run workflow) – wtedy szkic wydania, bez przesuwania :latest.
+#   bramka tests/gate.sh na LEGACY_IMAGE z .env.example – przed jakąkolwiek publikacją
+#   binarka panelu vizrs-live (statyczna musl, UI w środku): Linux x86_64 i arm64 (.tar.gz)
+#   obrazy (amd64 + arm64) ghcr.io/<właściciel>/vizrs-live:<wersja> i :latest
+#                          ghcr.io/<właściciel>/vizrs-live-legacy:<wersja>[-legacy<legacy>] i :latest
+#     (-legacy<wersja> tylko przy legacy przypiętym w .env.example, np. ghcr.io/ersatztv/legacy:v26.12.0)
+#   wydanie na GitHubie z sumami SHA256SUMS.txt
+# Wersja = server/Cargo.toml (znacznik musi się zgadzać). Z łącznikiem (v1.2.0-rc1) = wydanie wstępne, bez :latest.
+# Kroki opiekuna: docs/RUNBOOK.md §7.
 on:
   push:
-    tags: ["v*"]
+    tags: ['v*']
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Wersja (np. 1.2.0, ta sama co w server/Cargo.toml) – powstaje szkic wydania'
+        required: true
 
 permissions:
-  contents: read
+  contents: write
   packages: write
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
-  obrazy:
+  wersja:
+    runs-on: ubuntu-24.04
+    outputs:
+      v: ${{ steps.w.outputs.v }}
+      tag: ${{ steps.w.outputs.tag }}
+      lv: ${{ steps.w.outputs.lv }}
+      legacy: ${{ steps.w.outputs.legacy }}
+      owner: ${{ steps.w.outputs.owner }}
+      latest: ${{ steps.w.outputs.latest }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Wersje
+        id: w
+        env:
+          INPUT: ${{ inputs.version }}
+        run: |
+          C=$(sed -n 's/^version = "\(.*\)"/\1/p' server/Cargo.toml | head -1)
+          if [ "$GITHUB_EVENT_NAME" = push ]; then R=$GITHUB_REF_NAME; else R=$INPUT; fi
+          V=${R#v}
+          [ "$V" = "$C" ] || { echo "wersja $R ≠ $C z server/Cargo.toml"; exit 1; }
+          L=$(sed -n 's#^LEGACY_IMAGE=##p' .env.example)
+          case "$L" in *:v*) LV="-legacy${L##*:v}";; *) LV="";; esac
+          latest=false
+          [ "$GITHUB_EVENT_NAME" = push ] && case "$V" in *-*) ;; *) latest=true;; esac
+          {
+            echo "v=$V"; echo "tag=v$V"; echo "lv=$LV"; echo "legacy=$L"
+            echo "owner=$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')"; echo "latest=$latest"
+          } | tee -a "$GITHUB_OUTPUT"
+
+  bramka:
+    needs: wersja
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
-      PLAYWRIGHT_DIR: ${{ runner.temp }}/pw
+      LEGACY_IMAGE: ${{ needs.wersja.outputs.legacy }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -28,26 +70,116 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: wersje
-        run: |
-          V=$(sed -n 's/^version = "\(.*\)"/\1/p' server/Cargo.toml | head -1)
-          L=$(sed -n 's#^LEGACY_IMAGE=##p' .env.example)
-          test "${GITHUB_REF_TYPE}" != tag || test "${GITHUB_REF_NAME}" = "v$V" || { echo "tag $GITHUB_REF_NAME ≠ v$V z Cargo.toml"; exit 1; }
-          echo "V=$V" >> "$GITHUB_ENV"; echo "LEGACY_IMAGE=$L" >> "$GITHUB_ENV"; echo "LV=${L##*:v}" >> "$GITHUB_ENV"
       - name: Playwright (Chromium)
         run: |
+          # katalog poza repo; kontekst runner niedostępny w env joba – przez GITHUB_ENV dla kolejnych kroków
+          PLAYWRIGHT_DIR=$RUNNER_TEMP/pw; echo "PLAYWRIGHT_DIR=$PLAYWRIGHT_DIR" >> "$GITHUB_ENV"
           mkdir -p "$PLAYWRIGHT_DIR" && cd "$PLAYWRIGHT_DIR"
           npm init -y >/dev/null
           npm install --no-audit --no-fund playwright@1.58.2
           npx playwright install --with-deps chromium
-      - name: bramka na przypiętej wersji legacy
+      - name: bramka na wersji legacy z .env.example
         run: tests/gate.sh
-      - name: budowa obrazów
+      - name: dziennik przy błędzie
+        if: failure()
         run: |
-          docker build -f docker/live.Dockerfile -t ghcr.io/sdorpl/vizrs-live:$V .
-          docker build -f docker/legacy-bridge.Dockerfile --build-arg LEGACY_IMAGE=$LEGACY_IMAGE -t ghcr.io/sdorpl/vizrs-live-legacy:$V-legacy$LV .
-      - name: publikacja
+          docker logs vizrs-live-test-legacy 2>&1 | tail -200 || true
+          cat "${VIZRS_LIVE_TEST_DIR:-$HOME/.cache/vizrs-live-test}/panel.log" || true
+
+  bin:
+    needs: wersja
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-22.04, name: linux-x86_64, musl: x86_64-unknown-linux-musl }
+          - { os: ubuntu-22.04-arm, name: linux-arm64, musl: aarch64-unknown-linux-musl }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.musl }}
+      - run: cargo build --release --locked --target ${{ matrix.musl }}
+        working-directory: server
+      - name: Paczka
+        env:
+          V: ${{ needs.wersja.outputs.v }}
         run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
-          docker push ghcr.io/sdorpl/vizrs-live:$V
-          docker push ghcr.io/sdorpl/vizrs-live-legacy:$V-legacy$LV
+          b=server/target/${{ matrix.musl }}/release/vizrs-live
+          "$b" --version
+          d=VizRS-Live-$V-${{ matrix.name }}; mkdir -p "dist/$d"
+          cp "$b" README.md CHANGELOG.md .env.example compose.yml "dist/$d/"
+          cd dist && tar czf "$d.tar.gz" "$d" && rm -rf "$d" && ls -la
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bin-${{ matrix.name }}
+          path: dist/*
+
+  docker:
+    needs: [wersja, bramka]
+    runs-on: ubuntu-24.04
+    env:
+      # bez artefaktu „*.dockerbuild” (zapis budowy) – download-artifact w jobie release nie umiał go pobrać
+      DOCKER_BUILD_RECORD_UPLOAD: false
+      IMG: ghcr.io/${{ needs.wersja.outputs.owner }}
+      V: ${{ needs.wersja.outputs.v }}
+      LV: ${{ needs.wersja.outputs.lv }}
+      LATEST: ${{ needs.wersja.outputs.latest }}
+    steps:
+      - uses: actions/checkout@v4
+      # Bez QEMU: panel kompiluje się krzyżowo, DLL mostu to IL – oba Dockerfile budują na platformie budującej.
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/live.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          cache-from: type=gha,scope=live
+          cache-to: type=gha,mode=max,scope=live
+          tags: |
+            ${{ env.IMG }}/vizrs-live:${{ env.V }}
+            ${{ env.LATEST == 'true' && format('{0}/vizrs-live:latest', env.IMG) || '' }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/legacy-bridge.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          pull: true
+          push: true
+          build-args: LEGACY_IMAGE=${{ needs.wersja.outputs.legacy }}
+          tags: |
+            ${{ env.IMG }}/vizrs-live-legacy:${{ env.V }}${{ env.LV }}
+            ${{ env.LATEST == 'true' && format('{0}/vizrs-live-legacy:latest', env.IMG) || '' }}
+
+  release:
+    needs: [wersja, bin, docker]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: 'bin-*'
+          merge-multiple: true
+      - name: Sumy kontrolne
+        run: cd dist && sha256sum -- * > SHA256SUMS.txt && cat SHA256SUMS.txt
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.wersja.outputs.tag }}
+          # znacznik tworzony przy publikacji szkicu wskazuje zbudowany commit, nie gałąź domyślną
+          target_commitish: ${{ github.sha }}
+          draft: ${{ github.event_name == 'workflow_dispatch' }}
+          prerelease: ${{ contains(needs.wersja.outputs.v, '-') }}
+          make_latest: ${{ needs.wersja.outputs.latest }}
+          generate_release_notes: true
+          files: dist/*
+          body: |
+            **Docker (amd64 / arm64):** `ghcr.io/${{ needs.wersja.outputs.owner }}/vizrs-live:${{ needs.wersja.outputs.v }}` (panel) i `ghcr.io/${{ needs.wersja.outputs.owner }}/vizrs-live-legacy:${{ needs.wersja.outputs.v }}${{ needs.wersja.outputs.lv }}` (ErsatzTV legacy `${{ needs.wersja.outputs.legacy }}` z mostem) – wdrożenie: `cp .env.example .env && docker compose up -d` (docs/RUNBOOK.md §2), w stosie VizRS CG Playout: `compose.cg-playout.yml` (RUNBOOK §2a).
+            **Linux x86_64 / arm64:** archiwum z panelem `vizrs-live` (statyczny, UI w binarce) – wymaga ErsatzTV legacy z mostem: `vizrs-live --bridge http://<legacy>:8409 --bridge-token …`.
+            Zmiany: CHANGELOG.md.

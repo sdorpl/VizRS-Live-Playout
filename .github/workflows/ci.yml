@@ -1,5 +1,6 @@
 # CI VizRS Live (R10): serwer (fmt, clippy, testy), oba obrazy, stos testowy z proxy, e2e z Playwright.
-# Te same kroki co tests/gate.sh. Niczego nie publikuje (obrazy tylko lokalnie na maszynie CI).
+# Te same kroki co tests/gate.sh. Niczego nie publikuje (obrazy tylko lokalnie na maszynie CI), binarka panelu jako artefakt.
+# Obrazy na ghcr i wydanie: release.yml (znacznik v* albo ręcznie).
 name: CI
 
 on:
@@ -23,19 +24,30 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - name: cargo fmt / clippy / test
+      - name: cargo fmt / clippy / test / build
         working-directory: server
         run: |
           cargo fmt --check
-          cargo clippy --all-targets -- -D warnings
-          cargo test
+          cargo clippy --locked --all-targets -- -D warnings
+          cargo test --locked
+          cargo build --release --locked
+          ./target/release/vizrs-live --version
+          sha256sum target/release/vizrs-live
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vizrs-live-linux-x86_64
+          path: server/target/release/vizrs-live
+      # release.yml buduje obrazy na amd64 i arm64 – tu kontrola, że oba Dockerfile budują się krzyżowo (bez publikacji)
+      - uses: docker/setup-buildx-action@v3
+      - name: obrazy arm64 (budowa krzyżowa)
+        run: |
+          docker buildx build --platform linux/arm64 -f docker/live.Dockerfile .
+          docker buildx build --platform linux/arm64 -f docker/legacy-bridge.Dockerfile --build-arg LEGACY_IMAGE="$(sed -n 's#^LEGACY_IMAGE=##p' .env.example)" .
 
   obrazy-i-e2e:
     needs: serwer
     runs-on: ubuntu-24.04
     timeout-minutes: 60
-    env:
-      PLAYWRIGHT_DIR: ${{ runner.temp }}/pw
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -44,6 +56,8 @@ jobs:
           node-version: 22
       - name: Playwright (Chromium)
         run: |
+          # katalog poza repo; kontekst runner niedostępny w env joba – przez GITHUB_ENV dla kolejnych kroków
+          PLAYWRIGHT_DIR=$RUNNER_TEMP/pw; echo "PLAYWRIGHT_DIR=$PLAYWRIGHT_DIR" >> "$GITHUB_ENV"
           mkdir -p "$PLAYWRIGHT_DIR" && cd "$PLAYWRIGHT_DIR"
           npm init -y >/dev/null
           npm install --no-audit --no-fund playwright@1.58.2

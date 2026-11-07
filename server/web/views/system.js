@@ -146,7 +146,9 @@ function panelSection() {
   return h('div', { class: 'cols' },
     panel('Panel', null, table([
       { k: 'Wersja panelu', v: st.panel }, { k: 'Most (legacy)', v: st.bridgeUrl }, { k: 'Strumienie dla widzów', v: st.streamUrl || '— (VIZRS_LIVE_STREAM_URL)' },
-      { k: 'VizRS CG System', v: st.vizrsUrl || '— (VIZRS_LIVE_VIZRS_URL)' }, { k: 'Token panelu', v: st.auth ? 'tak' : 'nie (tylko lokalnie)' },
+      { k: 'VizRS CG System', v: st.vizrsUrl || '— (VIZRS_LIVE_VIZRS_URL)' },
+      { k: 'VizRS: token wyjścia do podglądu', v: st.vizrsOutputToken ? 'tak' : 'nie (VIZRS_LIVE_VIZRS_OUTPUT_TOKEN)' },
+      { k: 'VizRS: anteny kanałów', v: st.vizrsChannels ? 'tak (bus=ch-N, Trio ?channel=N)' : 'nie (VIZRS_LIVE_VIZRS_CHANNELS)' }, { k: 'Token panelu', v: st.auth ? 'tak' : 'nie (tylko lokalnie)' },
     ], [['k', 'Ustawienie'], ['v', 'Wartość', { class: 'w' }]]),
     h('div', { class: 'cmd' }, 'Opcje panelu ustawia się przy starcie (opcje wiersza poleceń albo zmienne VIZRS_LIVE_*), nie tutaj.')),
     panel('Most', null, b ? table([

@@ -21,7 +21,6 @@ jobs:
     timeout-minutes: 60
     env:
       LEGACY_IMAGE: ${{ inputs.legacy_image || 'ghcr.io/ersatztv/legacy:latest' }}
-      PLAYWRIGHT_DIR: ${{ runner.temp }}/pw
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -30,6 +29,8 @@ jobs:
           node-version: 22
       - name: Playwright (Chromium)
         run: |
+          # katalog poza repo; kontekst runner niedostępny w env joba – przez GITHUB_ENV dla kolejnych kroków
+          PLAYWRIGHT_DIR=$RUNNER_TEMP/pw; echo "PLAYWRIGHT_DIR=$PLAYWRIGHT_DIR" >> "$GITHUB_ENV"
           mkdir -p "$PLAYWRIGHT_DIR" && cd "$PLAYWRIGHT_DIR"
           npm init -y >/dev/null
           npm install --no-audit --no-fund playwright@1.58.2

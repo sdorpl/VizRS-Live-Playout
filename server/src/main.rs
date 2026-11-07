@@ -160,6 +160,10 @@ pub struct Config {
     pub token: Option<String>,
     pub stream_url: String,
     pub vizrs_url: String,
+    /// token wyjścia VizRS (tylko odczyt, jak w OBS) – trafia do przeglądarki w adresie podglądu /output
+    pub vizrs_output_token: String,
+    /// VizRS z antenami kanałów (CG Playout `channel_buses`): podgląd `bus=ch-N`, Trio `?channel=N`
+    pub vizrs_channels: bool,
     pub cg_url: String,
     pub cg_token: String,
     pub web: Option<PathBuf>,
@@ -175,7 +179,10 @@ Użycie: vizrs-live [opcje]
   --bridge-token T      token mostu, = VIZRS_BRIDGE_TOKEN w legacy (VIZRS_LIVE_BRIDGE_TOKEN, wymagany)
   --token T             token panelu dla operatorów (VIZRS_LIVE_TOKEN; wymagany poza 127.0.0.1)
   --stream-url URL      publiczny adres strumieni legacy do odnośników (VIZRS_LIVE_STREAM_URL)
-  --vizrs-url URL       VizRS CG System do podglądu grafiki i odnośnika do Trio (VIZRS_LIVE_VIZRS_URL)
+  --vizrs-url URL       VizRS CG System widziany z przeglądarki: podgląd /output i odnośnik do Trio;
+                        sam port (:8788) = ten sam host co panel (VIZRS_LIVE_VIZRS_URL)
+  --vizrs-output-token T  token wyjścia VizRS (tylko odczyt) do podglądu /output (VIZRS_LIVE_VIZRS_OUTPUT_TOKEN)
+  --vizrs-channels      VizRS z antenami kanałów, jak channel_buses w CG Playout (VIZRS_LIVE_VIZRS_CHANNELS=1)
   --cg-url URL          VizRS CG Playout (sidecar, np. http://cg:7700) – grafika i sloty na żywo (VIZRS_LIVE_CG_URL)
   --cg-token T          token panelu CG Playout, = panel_token / VIZRS_PANEL_TOKEN tam (VIZRS_LIVE_CG_TOKEN)
   --web KATALOG         UI z dysku zamiast wbudowanego (praca nad UI)
@@ -199,6 +206,11 @@ pub fn parse_config(
         token: env("VIZRS_LIVE_TOKEN").filter(|t| !t.is_empty()),
         stream_url: env("VIZRS_LIVE_STREAM_URL").unwrap_or_default(),
         vizrs_url: env("VIZRS_LIVE_VIZRS_URL").unwrap_or_default(),
+        vizrs_output_token: env("VIZRS_LIVE_VIZRS_OUTPUT_TOKEN").unwrap_or_default(),
+        vizrs_channels: matches!(
+            env("VIZRS_LIVE_VIZRS_CHANNELS").as_deref(),
+            Some("1" | "true" | "yes")
+        ),
         cg_url: env("VIZRS_LIVE_CG_URL").unwrap_or_default(),
         cg_token: env("VIZRS_LIVE_CG_TOKEN").unwrap_or_default(),
         web: None,
@@ -222,6 +234,8 @@ pub fn parse_config(
             "--token" => c.token = Some(val()?).filter(|t| !t.is_empty()),
             "--stream-url" => c.stream_url = val()?,
             "--vizrs-url" => c.vizrs_url = val()?,
+            "--vizrs-output-token" => c.vizrs_output_token = val()?,
+            "--vizrs-channels" => c.vizrs_channels = true,
             "--cg-url" => c.cg_url = val()?,
             "--cg-token" => c.cg_token = val()?,
             "--web" => c.web = Some(PathBuf::from(val()?)),
@@ -265,7 +279,38 @@ pub fn parse_config(
             u.pop();
         }
     }
+    check_vizrs(&c)?;
     Ok(c)
+}
+
+/// Adres VizRS trafia do przeglądarki (ramka, odnośnik): tylko `http(s)://…` albo sam port `:N`;
+/// token wyjścia – znaki tokenu VizRS (bezpieczne w adresie).
+fn check_vizrs(c: &Config) -> Result<(), String> {
+    let u = &c.vizrs_url;
+    let port_only = u
+        .strip_prefix(':')
+        .is_some_and(|p| p.parse::<u16>().is_ok_and(|n| n > 0));
+    let absolute = (u.starts_with("http://") || u.starts_with("https://"))
+        && !u
+            .chars()
+            .any(|ch| ch.is_whitespace() || "\"'<>?#".contains(ch));
+    if !(u.is_empty() || port_only || absolute) {
+        return Err(format!(
+            "--vizrs-url: oczekiwany http(s)://host:port albo sam port (:8788), jest {u}"
+        ));
+    }
+    let t = &c.vizrs_output_token;
+    if t.len() > 128
+        || !t
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || "-_.".contains(ch))
+    {
+        return Err("--vizrs-output-token: tylko litery, cyfry i -_. (jak token VizRS)".into());
+    }
+    if u.is_empty() && (!t.is_empty() || c.vizrs_channels) {
+        return Err("--vizrs-output-token i --vizrs-channels wymagają --vizrs-url".into());
+    }
+    Ok(())
 }
 
 struct App {
@@ -899,11 +944,13 @@ fn status(app: &App) -> Response {
     Response::json(
         200,
         format!(
-            "{{\"ok\":true,\"result\":{{\"panel\":{},\"bridgeUrl\":{},\"streamUrl\":{},\"vizrsUrl\":{},\"cg\":{},\"auth\":{},\"bridge\":{bridge},\"bridgeError\":{err}}}}}",
+            "{{\"ok\":true,\"result\":{{\"panel\":{},\"bridgeUrl\":{},\"streamUrl\":{},\"vizrsUrl\":{},\"vizrsOutputToken\":{},\"vizrsChannels\":{},\"cg\":{},\"auth\":{},\"bridge\":{bridge},\"bridgeError\":{err}}}}}",
             json_str(VERSION),
             json_str(&app.cfg.bridge_url),
             json_str(&app.cfg.stream_url),
             json_str(&app.cfg.vizrs_url),
+            json_str(&app.cfg.vizrs_output_token),
+            app.cfg.vizrs_channels,
             app.cg.is_some(),
             app.cfg.token.is_some()
         ),
@@ -1023,6 +1070,65 @@ mod tests {
         .unwrap();
         assert_eq!(c.port, 9000);
         assert_eq!(c.vizrs_url, "http://v:8088");
+        assert!(!c.vizrs_channels && c.vizrs_output_token.is_empty());
+    }
+
+    #[test]
+    fn config_vizrs() {
+        let c = cfg(
+            &["--vizrs-url", ":8789", "--vizrs-channels"],
+            &[
+                ("VIZRS_LIVE_BRIDGE_TOKEN", T),
+                ("VIZRS_LIVE_VIZRS_OUTPUT_TOKEN", "out-Tok.1_x"),
+            ],
+        )
+        .unwrap();
+        assert_eq!(
+            (
+                c.vizrs_url.as_str(),
+                c.vizrs_output_token.as_str(),
+                c.vizrs_channels
+            ),
+            (":8789", "out-Tok.1_x", true)
+        );
+        let env = [
+            ("VIZRS_LIVE_BRIDGE_TOKEN", T),
+            ("VIZRS_LIVE_VIZRS_CHANNELS", "1"),
+        ];
+        assert!(
+            cfg(&["--vizrs-url", "http://v:8088"], &env)
+                .unwrap()
+                .vizrs_channels
+        );
+        for bad in [
+            "v:8088",
+            ":0",
+            ":x",
+            "javascript:alert(1)",
+            "http://v/\"x",
+            "http://v/?token=a",
+        ] {
+            assert!(
+                cfg(&["--bridge-token", T, "--vizrs-url", bad], &[]).is_err(),
+                "{bad}"
+            );
+        }
+        let url = [
+            "--bridge-token",
+            T,
+            "--vizrs-url",
+            ":8788",
+            "--vizrs-output-token",
+        ];
+        assert!(cfg(&[&url[..], &["a&b=c"]].concat(), &[]).is_err());
+        assert!(
+            cfg(&["--bridge-token", T, "--vizrs-output-token", "abc"], &[]).is_err(),
+            "bez adresu"
+        );
+        assert!(
+            cfg(&["--bridge-token", T, "--vizrs-channels"], &[]).is_err(),
+            "bez adresu"
+        );
     }
 
     #[test]

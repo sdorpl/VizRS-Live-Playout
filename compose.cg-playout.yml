@@ -3,11 +3,19 @@
 #   COMPOSE_FILE=docker-compose.yml:docker-compose.nvidia.yml:../VizRS Live/compose.cg-playout.yml
 # W .env CG Playout: VIZRS_LIVE_DIR (ścieżka tego repozytorium), VIZRS_BRIDGE_TOKEN, VIZRS_LIVE_TOKEN;
 # token CG dla panelu = VIZRS_PANEL_TOKEN CG Playout.
-# Obrazy budowane z tego repozytorium (docker compose build w VizRS Live) albo z ghcr – LIVE_IMAGE, LIVE_LEGACY_IMAGE.
+# Panel: LIVE_IMAGE (ghcr albo docker compose build w VizRS Live). Legacy z mostem budowany przy każdym up
+# na najnowszym ghcr.io/ersatztv/legacy (tak jak ingest CG Playout).
 services:
   ersatztv:
-    # oficjalne legacy + VizRS Bridge (wersja przypięta, nie :latest)
-    image: ${LIVE_LEGACY_IMAGE:-ghcr.io/sdorpl/vizrs-live-legacy:1.1.0-legacy26.12.0}
+    # oficjalne legacy (zawsze najnowsze) + VizRS Bridge
+    build:
+      context: ${VIZRS_LIVE_DIR:?ustaw VIZRS_LIVE_DIR w .env}
+      dockerfile: docker/legacy-bridge.Dockerfile
+      args:
+        LEGACY_IMAGE: ${LEGACY_IMAGE:-ghcr.io/ersatztv/legacy:latest}
+      pull: true
+    pull_policy: build
+    image: ${LIVE_LEGACY_IMAGE:-vizrs-live-legacy:local}
     environment:
       VIZRS_BRIDGE_TOKEN: ${VIZRS_BRIDGE_TOKEN:?ustaw VIZRS_BRIDGE_TOKEN w .env}
     # web GUI legacy i most tylko w sieci wewnętrznej; widzowie – przez proxy
@@ -38,7 +46,11 @@ services:
       VIZRS_LIVE_BRIDGE_TOKEN: ${VIZRS_BRIDGE_TOKEN}
       VIZRS_LIVE_TOKEN: ${VIZRS_LIVE_TOKEN:?ustaw VIZRS_LIVE_TOKEN w .env}
       VIZRS_LIVE_STREAM_URL: ${VIZRS_LIVE_STREAM_URL:-}
-      VIZRS_LIVE_VIZRS_URL: ${VIZRS_LIVE_VIZRS_URL:-}
+      # VizRS tego stosu widziany z przeglądarki: domyślnie sam port = host, pod którym otwarto panel
+      VIZRS_LIVE_VIZRS_URL: ${VIZRS_LIVE_VIZRS_URL:-:${VIZRS_PORT:-8788}}
+      # token wyjścia VizRS (tylko odczyt) do podglądu /output; anteny kanałów jak w CG Playout
+      VIZRS_LIVE_VIZRS_OUTPUT_TOKEN: ${VIZRS_OUTPUT_TOKEN:-vizrs-output-change-me}
+      VIZRS_LIVE_VIZRS_CHANNELS: ${VIZRS_CHANNEL_BUSES:-0}
       VIZRS_LIVE_CG_URL: http://cg:7700
       VIZRS_LIVE_CG_TOKEN: ${VIZRS_PANEL_TOKEN:?ustaw VIZRS_PANEL_TOKEN w .env (token live API CG Playout)}
     ports:

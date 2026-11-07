@@ -8,7 +8,7 @@
 #   tests/stack.sh down    # zatrzymuje (dane zostają)
 #   tests/stack.sh reset   # zatrzymuje i usuwa dane testowe ($VIZRS_LIVE_TEST_DIR)
 #   tests/stack.sh mem     # ile RAM zajmuje stos testowy (kontenery, panele, Chromium, dane w tmpfs)
-# Inna wersja legacy (aktualizacja, DOKUMENTACJA §6): LEGACY_IMAGE=ghcr.io/ersatztv/legacy:<wersja> tests/stack.sh up
+# Domyślnie najnowsze ghcr.io/ersatztv/legacy (up pobiera nowsze). Inna wersja: LEGACY_IMAGE=ghcr.io/ersatztv/legacy:<wersja> tests/stack.sh up
 #   (najlepiej z osobnym VIZRS_LIVE_TEST_DIR – nowsze legacy migruje bazę i starsze już jej nie otworzy)
 # Pełna bramka przed commitem: tests/gate.sh
 # Pamięć: dane na dysku, nie w /tmp (często tmpfs = RAM); legacy z workstation GC i limitem VIZRS_LIVE_TEST_MEM (domyślnie 1536m – e2e ogląda kanał,
@@ -59,7 +59,7 @@ expect() { # expect OPIS KOD_HTTP polecenie...
 case "${1:-}" in
   up)
     mkdir -p "$DIR/config"
-    docker build -q -f docker/legacy-bridge.Dockerfile ${LEGACY_IMAGE:+--build-arg LEGACY_IMAGE="$LEGACY_IMAGE"} -t vizrs-live-legacy:dev . >/dev/null
+    docker build -q --pull -f docker/legacy-bridge.Dockerfile ${LEGACY_IMAGE:+--build-arg LEGACY_IMAGE="$LEGACY_IMAGE"} -t vizrs-live-legacy:dev . >/dev/null
     (cd server && cargo build --release -q)
     docker rm -f "$NAME" "$PROXY_NAME" >/dev/null 2>&1 || true
     docker network inspect "$NET" >/dev/null 2>&1 || docker network create "$NET" >/dev/null
@@ -73,7 +73,8 @@ case "${1:-}" in
     wait_bridge
     pkill -f "[v]izrs-live --port 18090" 2>/dev/null || true
     nohup server/target/release/vizrs-live --port 18090 --bridge http://127.0.0.1:18409 --bridge-token "$TOKEN" \
-      --stream-url "$PROXY" --cg-url http://127.0.0.1:18700 --cg-token "$CG_TOKEN" >"$DIR/panel.log" 2>&1 &
+      --stream-url "$PROXY" --cg-url http://127.0.0.1:18700 --cg-token "$CG_TOKEN" \
+      --vizrs-url :18700 --vizrs-output-token e2e-vizrs-output --vizrs-channels >"$DIR/panel.log" 2>&1 &
     sleep 1
     # smoke: most i jego zabezpieczenia
     expect "most: zdrowie" 200 curl -s -H "X-VizRS-Token: $TOKEN" "$BRIDGE/health"

@@ -37,6 +37,8 @@ Sesje automatu niczego nie publikują i nie ruszają produkcji; to zostało do z
 - `git push origin main`, potem `git tag v1.1.0 && git push origin v1.1.0` (tag v1.0.0 nie był wypchnięty – wystarczy v1.1.0) – uruchamia `release.yml` (DOKUMENTACJA §9); po pierwszej publikacji pakiety ghcr ustawić jako publiczne.
 - CI (`ci.yml`, `legacy-latest.yml`) zacznie działać po wypchnięciu `.github/workflows/` i włączeniu Actions w repozytorium (DOKUMENTACJA §8).
 - Lokalna produkcja (stos `virtrs` CG Playout) przełączona 2026-11-07 na VizRS Live nakładką `compose.cg-playout.yml` (RUNBOOK §2a): legacy v26.11.6 → v26.12.0 z mostem (migracja bazy; kopia w `~/vizrs-kopie/`), proxy na 8409, panel na 8090, CG Playout z live API. Do sprawdzenia: tunery i odtwarzacze, które korzystały z innych ścieżek niż `/iptv/*` (`curl -I`, DOKUMENTACJA §8).
+- Produkcja (stos `virtrs`) po poprawce integracji z VizRS (Trio, podgląd `/output`): przebudować obraz panelu (`vizrs-live:local`), w `.env` CG Playout usunąć `VIZRS_LIVE_VIZRS_URL=http://127.0.0.1:8789` (nakładka ustawi `:8789` = host panelu, token wyjścia i anteny kanałów), `docker compose up -d live`; sprawdzić ramkę w Grafice kanału i „Trio ↗”.
+- Produkcja (stos `virtrs`) – legacy zawsze najnowsze: kopia `ersatztv-config` (RUNBOOK §2a pkt 2), w `.env` CG Playout usunąć `LIVE_LEGACY_IMAGE=vizrs-live-legacy:local-26.12.0` (nakładka zbuduje `vizrs-live-legacy:local` na `ghcr.io/ersatztv/legacy:latest`), `docker compose up -d ersatztv`; Diagnostyka: wersja legacy, `commandsMissing = []`.
 - Przed wdrożeniem z grafiką: `panel_token` w CG Playout, `VIZRS_LIVE_CG_URL`/`VIZRS_LIVE_CG_TOKEN` w panelu, Sloty na żywo z prawdziwym sygnałem z OBS (LUKI #3).
 
 ## Blokery / uwagi

@@ -8,6 +8,7 @@ export const S = {
   status: null,      // /api/status
   meta: new Map(),   // nazwa komendy -> {name, kind, parameters}
   timers: [],
+  vizrsAnt: null,    // wybrana antena kanału w podglądzie VizRS
 };
 
 // ---------- narzędzia DOM ----------
@@ -157,6 +158,62 @@ export function legacyUrl(path) {
   if (!path) return null;
   if (/^https?:\/\//.test(path)) return path;
   return S.status?.streamUrl ? S.status.streamUrl + '/' + path.replace(/^\//, '') : null;
+}
+
+// ---------- VizRS CG System (--vizrs-url): podgląd /output i Trio ----------
+const vizrsCh = (channel) => (S.status?.vizrsChannels && channel != null && channel !== '' ? String(channel) : '');
+/**
+ * Adres VizRS dla przeglądarki albo null. Sam port w --vizrs-url (:8788) = host, pod którym operator
+ * otworzył panel (ciasteczko VizRS działa tylko w tej samej witrynie). `/output` dostaje token wyjścia
+ * (tylko odczyt) i antenę kanału `bus=ch-N`, Trio – `?channel=N` (przy --vizrs-channels).
+ */
+export function vizrsUrl(path, channel) {
+  const base = S.status?.vizrsUrl;
+  if (!base) return null;
+  const root = base.startsWith(':') ? `${location.protocol}//${location.hostname}${base}` : base;
+  const q = new URLSearchParams();
+  const ch = vizrsCh(channel);
+  if (path === '/output') {
+    if (S.status.vizrsOutputToken) q.set('token', S.status.vizrsOutputToken);
+    if (ch) q.set('bus', 'ch-' + ch);
+  } else if (ch) q.set('channel', ch);
+  const qs = q.toString();
+  return root + path + (qs ? '?' + qs : '');
+}
+export const TRIO_HINT = 'Pierwsze wejście do Trio w tej przeglądarce: dopisz do adresu token operatora VizRS (?token=… albo &token=…); potem VizRS pamięta go w ciasteczku.';
+/** Odnośnik „Trio ↗” (antena kanału przy --vizrs-channels) albo null. */
+export function trioLink(channel, text = 'Trio ↗') {
+  const href = vizrsUrl('/trio', channel);
+  return href ? h('a', { href, target: '_blank', rel: 'noopener', title: TRIO_HINT, 'data-trio': '' }, text) : null;
+}
+/**
+ * Panel podglądu anteny VizRS (/output) albo null bez --vizrs-url. Przy antenach kanałów ramka idzie za
+ * wyborem kanału: własną listą z `choices` ([wartość, etykieta]) albo podanym `select` widoku.
+ */
+export function vizrsPreview(title, choices = [], select = null) {
+  if (!S.status?.vizrsUrl) return null;
+  const multi = !!S.status.vizrsChannels;
+  const sel = multi && !select && choices.length
+    ? h('select', { 'aria-label': 'Antena kanału VizRS', 'data-vizrs-channel': '' }, choices.map(([v, l]) => h('option', { value: v }, l)))
+    : null;
+  const src = select || sel;
+  const frame = h('iframe', { class: 'preview', title: 'Podgląd grafiki VizRS', 'data-vizrs-output': '' });
+  const trio = h('a', { target: '_blank', rel: 'noopener', title: TRIO_HINT, 'data-trio': '' }, 'Otwórz w Trio ↗');
+  const which = h('span', { class: 'dim' });
+  const set = () => {
+    const ch = multi ? src?.value : '';
+    frame.src = vizrsUrl('/output', ch);
+    trio.href = vizrsUrl('/trio', ch);
+    which.textContent = vizrsCh(ch) ? `Antena kanału ${ch} (bus=ch-${ch}). ` : multi ? 'Antena główna – przy antenach kanałów nie idzie na emisję. ' : 'Antena główna VizRS. ';
+  };
+  // wybór anteny przeżywa odświeżenie widoku (Antena przerysowuje się co 30 s)
+  if (sel && choices.some(([v]) => v === S.vizrsAnt)) sel.value = S.vizrsAnt;
+  src?.addEventListener('change', () => { S.vizrsAnt = src.value; set(); });
+  set();
+  return panel(title, sel, h('div', { class: 'pad' }, frame,
+    h('div', { class: 'dim' }, which, trio),
+    S.status.vizrsOutputToken ? null
+      : h('div', { class: 'dim' }, 'VizRS z tokenem pokaże tu „wymagany token”: ustaw w panelu --vizrs-output-token (VIZRS_LIVE_VIZRS_OUTPUT_TOKEN = VIZRS_OUTPUT_TOKEN w VizRS) albo zaloguj tę przeglądarkę w Trio.')));
 }
 
 /** Tylko pola, które komenda przyjmuje (wg /vizrs-bridge/commands). */

@@ -1,7 +1,7 @@
 // Widoki grupy „Antena”: Na antenie, Przewodnik EPG.
 
 import { openMonitor } from '../player.js';
-import { S, VIEWS, h, btn, pill, head, panel, cmdNote, toast, confirmDlg, cmd, route, pl, hm, dur, isFiller } from '../core.js';
+import { S, VIEWS, h, btn, pill, head, panel, cmdNote, toast, confirmDlg, cmd, route, pl, hm, dur, isFiller, trioLink, vizrsPreview } from '../core.js';
 
 /** Przebudowa playoutu przez kolejkę legacy (też w widoku Playouty). */
 export async function build(p, mode) {
@@ -48,7 +48,7 @@ VIEWS.antena = async () => {
           p ? btn('Przebuduj', () => build(p, 'Refresh')) : null,
           p ? btn('Od nowa', () => build(p, 'Reset'), 'danger') : null,
           stream,
-          S.status.vizrsUrl ? h('a', { href: S.status.vizrsUrl + '/trio', target: '_blank', rel: 'noopener' }, 'Trio ↗') : null)));
+          trioLink(c.Number))));
   });
 
   const events = channels.flatMap((c, i) => items[i].filter((it) => new Date(it.Start) > Date.now()).map((it) => ({ c, it })))
@@ -70,7 +70,7 @@ VIEWS.antena = async () => {
     h('div', { class: 'split wide' },
       h('div', { class: 'cols' }, cards.length ? cards : h('div', { class: 'note' }, 'Brak włączonych kanałów. Dodaj kanał w widoku Kanały.')),
       h('div', { class: 'cols' },
-        S.status.vizrsUrl ? panel('Grafika VizRS (/output)', null, h('div', { class: 'pad' }, h('iframe', { class: 'preview', src: S.status.vizrsUrl + '/output', title: 'Podgląd grafiki VizRS' }))) : null,
+        vizrsPreview('Grafika VizRS (/output)', channels.map((c) => [String(c.Number), `${c.Number} · ${c.Name}`])),
         panel('Najbliższe pozycje', null,
           events.length
             ? h('div', { class: 'tl' }, events.map(({ c, it }) => h('div', { class: 'ev' }, h('span', { class: 'num' }, hm(new Date(it.Start))), pill(c.Name), h('span', null, it.Title, isFiller(it) ? h('span', { class: 'dim' }, ' (wypełniacz)') : null))))
