@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Automat planu rozbudowy (docs/plany/PLAN-rozbudowy.md): jeden punkt = jedna świeża sesja Claude Code bez operatora.
+# Automat planu (PLAN_FILE, domyślnie docs/plany/PLAN-rozbudowy.md; punkty R0, M1… – litera i numer):
+# jeden punkt = jedna świeża sesja Claude Code bez operatora.
 #
 #   scripts/plan.sh status                 # tabela planu i następny punkt
 #   scripts/plan.sh next                   # tylko identyfikator następnego punktu (pusty, gdy nie ma)
@@ -9,7 +10,9 @@
 #        --dry-run  pokaż punkt i polecenie sesji, nic nie uruchamiaj
 #
 # Każdy punkt: czyste drzewo git → `claude -p` w nowej sesji (realizacja wg CLAUDE.md, lokalny commit, bez push)
-# → niezależna kontrola: Stan w tabeli = „zrobione”, nowy commit, czyste drzewo, tests/gate.sh zielony.
+# → niezależna kontrola: Stan w tabeli = „zrobione”, nowy commit, czyste drzewo, PLAN_CHECK zielony
+#   (domyślnie tests/deploy.sh – szybkie testy, wdrożenie panelu na lokalny stos, przejście tylko do odczytu;
+#   PLAN_CHECK=tests/gate.sh – pełna bramka ze stosem testowym i e2e, jak w CI).
 # Dziennik sesji: .plan-logs/<punkt>-<czas>.log
 #
 # Zmienne: PLAN_PERMISSION_MODE (domyślnie auto), PLAN_MODEL, PLAN_BUDGET_USD (limit kosztu sesji),
@@ -18,6 +21,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 PLAN=${PLAN_FILE:-docs/plany/PLAN-rozbudowy.md}
 LOGS=.plan-logs
+CHECK=${PLAN_CHECK:-tests/deploy.sh}
 
 # Wiersze tabeli: punkt<TAB>wymaga(rozwinięte, spacjami)<TAB>stan<TAB>zakres
 table() {
@@ -25,16 +29,16 @@ table() {
 import re, sys
 rows = []
 for line in open(sys.argv[1], encoding='utf-8'):
-    m = re.match(r'^\|\s*(R\d+)\s*\|(.*?)\|(.*?)\|(.*?)\|\s*$', line)
+    m = re.match(r'^\|\s*([A-Z]\d+)\s*\|(.*?)\|(.*?)\|(.*?)\|\s*$', line)
     if not m:
         continue
     pid, scope, req, state = (x.strip() for x in m.groups())
     deps = []
     for part in re.split(r'[,\s]+', req):
-        r = re.match(r'^R(\d+)[–-]R(\d+)$', part)
+        r = re.match(r'^([A-Z])(\d+)[–-]\1(\d+)$', part)
         if r:
-            deps += [f'R{i}' for i in range(int(r[1]), int(r[2]) + 1)]
-        elif re.match(r'^R\d+$', part):
+            deps += [f'{r[1]}{i}' for i in range(int(r[2]), int(r[3]) + 1)]
+        elif re.match(r'^[A-Z]\d+$', part):
             deps.append(part)
     print(f"{pid}\t{' '.join(deps)}\t{state}\t{scope}")
 PY
@@ -59,13 +63,13 @@ prompt_for() {
 Zrealizuj punkt $1 planu docs/plany/PLAN-rozbudowy.md – cały i tylko ten punkt.
 
 Działasz bez operatora (automat scripts/plan.sh). Zasady tej sesji:
-- Postępuj wg CLAUDE.md i sekcji „Jak pracować z tym planem”: przeczytaj CLAUDE.md, plan (tabelę i punkt $1), docs/DOKUMENTACJA.md, git log -5; uruchom tests/stack.sh up && tests/stack.sh seed.
+- Postępuj wg CLAUDE.md i sekcji „Jak pracować z tym planem”: przeczytaj CLAUDE.md, plan (tabelę i punkt $1), docs/DOKUMENTACJA.md, git log -5. Testy: $CHECK (tests/deploy.sh = szybkie testy + wdrożenie panelu na lokalny stos + przejście po ekranach tylko do odczytu; stosu testowego nie stawiaj, chyba że to tests/gate.sh).
 - Nie zadawaj pytań – nikt nie odpowie. Decyzje „do sprawdzenia” podejmij sam, zachowawczo, i zapisz je z uzasadnieniem w docs/DOKUMENTACJA.md (i krótko pod punktem w planie).
-- Legacy bez zmian, C# tylko w moście, serwer bez zależności, UI bez bibliotek i bez inline (CSP), stos testowy tylko na portach 18409/18090 – produkcyjnego ErsatzTV (virtrs-*, port 8409) nie dotykaj.
+- Legacy bez zmian, C# tylko w moście, serwer bez zależności, UI bez bibliotek i bez inline (CSP), lokalny stos (virtrs-*) zmieniaj tylko przez tests/deploy.sh (podmienia sam panel) – bez zapisów do legacy i CG Playout, bez restartu innych usług.
 - Nie zmieniaj innych repozytoriów, nie publikuj niczego (bez git push, bez wypychania obrazów, bez zakładania issue/PR). Czego punkt wymaga poza tym repozytorium, opisz w docs/DOKUMENTACJA.md jako krok ręczny.
-- Gotowe = warunki „gotowe” punktu, nowe przypadki e2e w tests/e2e.cjs, zrzuty nowych widoków obejrzane (PNG poza repo), docs/DOKUMENTACJA.md, CHANGELOG.md (Niewydane), w tabeli planu Stan punktu $1 = „zrobione (RRRR-MM-DD)”, a bramka tests/gate.sh zielona.
+- Gotowe = warunki „gotowe” punktu, nowe przypadki e2e w tests/e2e.cjs (uruchamia je CI), zrzuty nowych widoków obejrzane (DEPLOY_SHOTS=<katalog poza repo> tests/deploy.sh), docs/DOKUMENTACJA.md, CHANGELOG.md (Niewydane), w tabeli planu Stan punktu $1 = „zrobione (RRRR-MM-DD)”, a $CHECK zielony.
 - Na koniec zrób lokalny commit (ten automat to prośba użytkownika o commit): pliki dodawaj jawnie, wiadomość zaczynaj od „$1:”. Po commicie drzewo ma być czyste. Bez push.
-- Jeśli punktu nie da się dokończyć: przywróć działający stan (bramka zielona), w tabeli ustaw Stan = „przerwane: <krótki powód>”, opisz szczegóły pod punktem w planie, zrób commit „$1: przerwane – …” i zakończ.
+- Jeśli punktu nie da się dokończyć: przywróć działający stan ($CHECK zielony), w tabeli ustaw Stan = „przerwane: <krótki powód>”, opisz szczegóły pod punktem w planie, zrób commit „$1: przerwane – …” i zakończ.
 - Nie zaczynaj kolejnego punktu.
 P
 }
@@ -112,7 +116,7 @@ run_point() {
     return 1
   fi
   [[ "$st" == zrobione* ]] || { echo "BŁĄD Stan $p = „$st”, a powinien być „zrobione”" >&2; fail=1; }
-  if ! tests/gate.sh >>"$log" 2>&1; then echo "BŁĄD bramka tests/gate.sh czerwona – $log" >&2; fail=1; fi
+  if ! $CHECK >>"$log" 2>&1; then echo "BŁĄD $CHECK czerwony – $log" >&2; fail=1; fi
   [ $fail = 0 ] || return 1
   echo "$p: zrobiony i sprawdzony ($(git log -1 --format='%h %s'))"
 }

@@ -10,7 +10,7 @@ Zrobione wcześniej (poza planem): **Harmonogramy** – start „06:00 stała / 
 
 ## Jak pracować z tym planem
 
-Jak w [PLAN-rozbudowy.md](PLAN-rozbudowy.md) („Jak pracować”): jeden punkt = jedna sesja, kolejność od góry, warunki „gotowe” (bramka, e2e, **zrzut obejrzany obok sekcji makiety**, DOKUMENTACJA §4, CHANGELOG, kolumna Stan, commit). Automat: `PLAN_FILE=docs/plany/PLAN-makieta.md scripts/plan.sh run` (wymaga czystego drzewa). Na początku sesji przeczytaj sekcję makiety swojego ekranu i zrób zrzut obecnego ekranu – porównanie obu to punkt wyjścia.
+Jak w [PLAN-rozbudowy.md](PLAN-rozbudowy.md) („Jak pracować”): jeden punkt = jedna sesja, kolejność od góry, warunki „gotowe”. **Testy bez stosu testowego:** `DEPLOY_SHOTS=<katalog poza repo> tests/deploy.sh` (szybkie testy, wdrożenie panelu na lokalny stos, przejście po ekranach tylko do odczytu) zielony, **zrzut obejrzany obok sekcji makiety**, nowe przypadki w `tests/e2e.cjs` (uruchamia CI), DOKUMENTACJA §4, CHANGELOG, kolumna Stan, commit. Automat: `PLAN_FILE=docs/plany/PLAN-makieta.md scripts/plan.sh run` (wymaga czystego drzewa; kontrola po sesji: `tests/deploy.sh`). Na początku sesji przeczytaj sekcję makiety swojego ekranu i zrób zrzut obecnego ekranu – porównanie obu to punkt wyjścia.
 
 ## Tabela
 

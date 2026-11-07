@@ -11,7 +11,7 @@ Język pracy z użytkownikiem, dokumentacji, komentarzy, komunikatów i UI: **po
 2. Przeczytaj [docs/LUKI.md](docs/LUKI.md): znane braki, uszeregowane G1 (niezawodność i bezpieczeństwo) → G2 (wierność wobec legacy) → G3 (funkcje).
 3. Przy zmianie zachowania przeczytaj właściwą sekcję [docs/DOKUMENTACJA.md](docs/DOKUMENTACJA.md) (§2 most, §3 panel, §4 ekrany, §5 ograniczenia legacy) – w tym samym commicie ją zaktualizujesz.
 4. Plany są w [docs/plany/](docs/plany/README.md). Praca wg planu: **jeden punkt = jedna sesja** – weź pierwszy punkt „do zrobienia” ze spełnionym „Wymaga” (albo wskazany przez użytkownika), po skończeniu (warunki „gotowe”, commit, kolumna Stan) zakończ i zaproponuj nową sesję. Plan rozbudowy R0–R12 jest zrobiony: [PLAN-rozbudowy.md](docs/plany/PLAN-rozbudowy.md) – tam sekcja „Jak pracować” (wzór dla kolejnych planów i automatu `scripts/plan.sh`).
-5. Stos testowy: `tests/stack.sh up && tests/stack.sh seed`.
+5. Testy i wdrożenie: `tests/deploy.sh` (niżej „Testy”). Lokalnego stosu testowego nie stawiaj, chyba że użytkownik o to poprosi.
 
 ## Niepodważalne zasady
 
@@ -25,7 +25,7 @@ Język pracy z użytkownikiem, dokumentacji, komentarzy, komunikatów i UI: **po
 - **Dane z legacy i CG są obce.** Tekst do DOM tylko przez `textContent` (żadnego `innerHTML`/`eval`), bez stylów i skryptów inline (CSP na każdej odpowiedzi). Komunikat błędu legacy pokaż operatorowi (toast), z polskim wstępem.
 - **Sekrety zostają w serwerze.** Token mostu i token CG Playout nie trafiają do przeglądarki; pola `…apikey/token/password/secret` w odpowiedziach maskuje `mask_secrets`. Każde żądanie zmieniające wymaga `X-VizRS-Live: 1` (CSRF).
 - **CG Playout tylko przez jego API**, przez pośrednika `/api/cg/…` z białą listą ścieżek (DOKUMENTACJA §3). Panel nie zapisuje plików CG ani legacy (decyzja R2: YAML, skrypty i JSON leżą na wolumenie `/config`).
-- **Produkcji nie ruszaj.** Testy ręczne tylko na stosie testowym (`tests/stack.sh`, porty niżej). Produkcyjny ErsatzTV użytkownika (`virtrs-*`, port 8409) jest poza zasięgiem sesji.
+- **Lokalny stos użytkownika (`virtrs-*`) tylko przez `tests/deploy.sh`** (decyzja użytkownika 2026-11-07: „wdrażaj od razu, bez stosów do testów”): skrypt podmienia sam panel (`live`), przejście po ekranach jest tylko do odczytu, a błąd = powrót do poprzedniego obrazu. Legacy, CG Playout, VizRS i proxy nie restartuj, nie zapisuj nic do legacy ani CG poza tym, o co prosi użytkownik.
 - **Gdzie co opisywać:** README tylko wprowadza i odsyła; opis działania tylko w `docs/DOKUMENTACJA.md` (nie powielaj go w README, planach ani w STATUS); praca operatora – `docs/INSTRUKCJA.md`; wdrożenie, kopie, aktualizacja, awarie – `docs/RUNBOOK.md`; nowy plan – `docs/plany/` + wiersz w `docs/plany/README.md`.
 - **Dokumentacja razem z kodem:** commit zmieniający zachowanie (ekran, API panelu lub mostu, biała lista, opcje, obrazy) aktualizuje w tym samym commicie `docs/DOKUMENTACJA.md` (§4 tabela ekranów, §5 ograniczenia legacy), a gdy dotyczy codziennej pracy – także `docs/INSTRUKCJA.md`; wdrożenie – `docs/RUNBOOK.md`; zmiany wydania – `CHANGELOG.md` („Niewydane”); zamknięta luka – usuń wiersz z `docs/LUKI.md`; zmiana etapu – `docs/STATUS.md`.
 
@@ -63,17 +63,17 @@ Stos testowy (`tests/stack.sh up|seed|test|down|reset|mem`, dane w `$VIZRS_LIVE_
 
 Źródło legacy do podglądu: `git clone --depth 1 https://github.com/ErsatzTV/legacy` do katalogu tymczasowego (poza repo). Komendy ekranu legacy: `ErsatzTV/Pages/<Ekran>.razor` (`Mediator.Send(`, `new <Komenda>(`), definicje w `ErsatzTV.Application/**/Commands|Queries/*.cs`; parametry i wyliczenia daje działający most: `GET /api/commands` (konsola w Diagnostyce).
 
-## Testy (bramka przed commitem)
+## Testy
 
 ```bash
-tests/gate.sh     # wszystko poniżej po kolei
-(cd server && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test && cargo build --release)
-tests/stack.sh up && tests/stack.sh seed     # smoke mostu i proxy (commandsMissing = []), ramówka wyłącznie przez panel
-tests/stack.sh test                          # e2e UI (Playwright)
+tests/deploy.sh   # lokalnie, po każdej zmianie (ok. 20–60 s): cargo fmt/clippy/test, node --check, obraz panelu,
+                  # podmiana `live` w stosie CG Playout, tests/prod-smoke.cjs (wszystkie ekrany, tylko odczyt), przy błędzie powrót
+DEPLOY_SHOTS=<katalog poza repo> tests/deploy.sh   # to samo + zrzut każdego ekranu (przy pracy nad UI – obejrzyj)
+tests/gate.sh     # pełna bramka ze stosem testowym i e2e – uruchamia ją CI (ci.yml) po pushu; lokalnie tylko na prośbę
 ```
 
-Playwright nie jest zależnością repo: `PLAYWRIGHT_DIR` wskazuje katalog z `node_modules/playwright` (albo `tests/local.env`, poza repo).
-Nowa funkcja = nowe przypadki w `tests/e2e.cjs` (i w razie potrzeby dane w `tests/stack.sh seed`). Przy pracy nad UI **zobacz wynik** – zrzuty `E2E_SHOTS=<katalog poza repo>`, pliki PNG poza repo.
+`tests/deploy.sh` czyta `VIZRS_CG_DIR` (katalog stosu CG Playout, domyślnie `../VirtRS CG Playout`) i `PLAYWRIGHT_DIR` z `tests/local.env` (poza repo); token panelu bierze z `.env` CG Playout. Bezpiecznik `prod-smoke.cjs`: przeglądarka przepuszcza tylko GET, logowanie i komendy `Get…/Query…/Search…/Count…` + `NewFFmpegProfile` – każda inna próba oblewa przebieg.
+Nowa funkcja = nowe przypadki w `tests/e2e.cjs` (sprawdzi je CI; w razie potrzeby dane w `tests/stack.sh seed`). Przy pracy nad UI **zobacz wynik** – zrzuty z `DEPLOY_SHOTS`, pliki PNG poza repo.
 
 ## Struktura
 
@@ -90,7 +90,7 @@ Nowa funkcja = nowe przypadki w `tests/e2e.cjs` (i w razie potrzeby dane w `test
 | `docker/` | `legacy-bridge.Dockerfile` (oficjalny legacy + DLL + `commands.txt`), `live.Dockerfile` (`scratch`, musl), `proxy.Caddyfile` |
 | `compose.yml`, `.env.example` | wdrożenie: `live`, `ersatztv` (tylko `expose`), `proxy`; wersje przypięte |
 | `compose.cg-playout.yml` | nakładka: VizRS Live w stosie VizRS CG Playout (RUNBOOK §2a) |
-| `tests/` | `stack.sh` (stos testowy, smoke, seed), `e2e.cjs` (Playwright + atrapy), `gate.sh` (bramka), `real.sh` (prawdziwe usługi) |
+| `tests/` | `deploy.sh` (szybkie testy + wdrożenie panelu na lokalny stos + `prod-smoke.cjs`, przejście tylko do odczytu), `stack.sh` (stos testowy, smoke, seed), `e2e.cjs` (Playwright + atrapy), `gate.sh` (pełna bramka, CI), `real.sh` (prawdziwe usługi) |
 | `scripts/plan.sh` | automat planu: jeden punkt = jedna świeża sesja `claude -p`; dzienniki w `.plan-logs/` (poza repo) |
 | `.github/workflows/` | `ci.yml` (bramka), `legacy-latest.yml` (co tydzień najnowsze legacy), `release.yml` (obrazy ghcr po tagu `v*`) |
 | `docs/` | dokumentacja (spis: [docs/README.md](docs/README.md)); `docs/plany/` – plany (dokumenty projektowe, nie opis bieżącego działania) |
@@ -101,6 +101,6 @@ Przeglądarka → `POST /api/cmd/{Nazwa}` (panel, ciasteczko + `X-VizRS-Live`) �
 
 ## Commity
 
-- Jedna spójna zmiana = jeden commit, po polsku, opisowo (styl historii: „Sloty na żywo: jak nadawać – serwer i klucz RTMP, adres SRT z hasłem”; punkt planu: „R10: …”). Tylko zielone stany (bramka).
+- Jedna spójna zmiana = jeden commit, po polsku, opisowo (styl historii: „Sloty na żywo: jak nadawać – serwer i klucz RTMP, adres SRT z hasłem”; punkt planu: „R10: …”, „M2: …”). Tylko zielone stany (`tests/deploy.sh`).
 - Pliki dodawaj jawnie (`git add ścieżka`), nie `git add -A`. Nie commituj `server/target/`, `bridge/bin|obj/`, `.env`, `etv-config/`, `media/`, zrzutów, `tests/local.env` ani `.plan-logs/`.
 - Commit i push tylko na prośbę użytkownika (wyjątek: sesja automatu `scripts/plan.sh` robi lokalny commit, nigdy push).
