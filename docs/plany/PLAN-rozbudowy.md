@@ -2,13 +2,15 @@
 
 Cel końcowy: **operator nie korzysta z web GUI ErsatzTV legacy** – wszystko, co daje web GUI legacy, robi się w VizRS Live, a web GUI legacy jest zamknięte dla operatorów (R10).
 
+> **Stan:** wdrożony – R0–R11 w wydaniu 1.0.0, R12 w „Niewydane”. Dalsze prace: [../STATUS.md](../STATUS.md) i [../LUKI.md](../LUKI.md); ta sekcja „Jak pracować” jest wzorem dla kolejnych planów.
+
 ## Jak pracować z tym planem
 
 - **Jeden punkt = jedna sesja.** Każdy punkt jest opisany tak, żeby dało się go zrobić w świeżej sesji bez historii rozmowy. Nie łącz punktów w jednej sesji; po skończeniu punktu zakończ sesję.
 - **Kolejność:** od góry tabeli. Punkt można zacząć, gdy jego „Wymaga” jest zrobione.
 - **Automat:** `scripts/plan.sh run` bierze następny punkt (pierwszy „do zrobienia” ze spełnionym „Wymaga”) i uruchamia dla niego nową sesję `claude -p` bez operatora; `-n N` – kilka punktów po kolei, `-p Rk` – wskazany punkt, `--dry-run` – tylko pokaż. Po sesji automat sam sprawdza: Stan = „zrobione”, nowy commit, czyste drzewo, `tests/gate.sh` zielony; inaczej się zatrzymuje. Sesja, która nie może dokończyć punktu, ustawia Stan = „przerwane: powód” – taki punkt czeka na człowieka. Dzienniki: `.plan-logs/`. Koszt i czas: `PLAN_BUDGET_USD`, `PLAN_TIMEOUT`.
 - **Na początku sesji:**
-  1. Przeczytaj `CLAUDE.md`, ten plik (tabelę i swój punkt), `docs/DOKUMENTACJA.md` (zwłaszcza §2 most, §4 ekrany, §5 ograniczenia), `git log -5`.
+  1. Przeczytaj `CLAUDE.md`, `docs/STATUS.md`, ten plik (tabelę i swój punkt), `docs/DOKUMENTACJA.md` (zwłaszcza §2 most, §4 ekrany, §5 ograniczenia), `git log -5`.
   2. Uruchom stos testowy: `tests/stack.sh up && tests/stack.sh seed` (porty 18409/18090, produkcyjnego ErsatzTV `virtrs-*` nie ruszaj).
   3. Źródło legacy do podglądu: `git clone --depth 1 https://github.com/ErsatzTV/legacy` do katalogu tymczasowego (poza repo). Wersja w obrazie: `GET /vizrs-bridge/health` → `legacy`.
 - **Jak znaleźć komendy ekranu legacy:** w `ErsatzTV/Pages/<Ekran>.razor` (i `ErsatzTV/ViewModels/*EditViewModel.cs`) szukaj `Mediator.Send(` i `new <Komenda>(`; definicje w `ErsatzTV.Application/**/Commands|Queries/*.cs`. Parametry i wartości wyliczeń daje też działający most: `GET /api/commands` (konsola w Diagnostyce).
@@ -37,6 +39,7 @@ Cel końcowy: **operator nie korzysta z web GUI ErsatzTV legacy** – wszystko, 
 | R9 | Grafika VizRS i sloty na żywo (VizRS CG Playout) | R2 | zrobione (2026-11-07) |
 | R10 | Zamknięcie web GUI legacy, proxy, aktualizacje legacy, CI | R1–R8 | zrobione (2026-11-07) |
 | R11 | Wydanie 1.0: instrukcja operatora, obrazy, przegląd bezpieczeństwa | R10 | zrobione (2026-11-07) |
+| R12 | VizRS Live Panel (CG Playout `/live`) wchłonięty: Sloty na żywo (MCR), Audycje LIVE, operator i studio w pasku górnym | R9 | zrobione (2026-11-07) |
 
 ---
 

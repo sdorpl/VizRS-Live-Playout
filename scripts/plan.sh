@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Automat planu rozbudowy (docs/PLAN-rozbudowy.md): jeden punkt = jedna świeża sesja Claude Code bez operatora.
+# Automat planu rozbudowy (docs/plany/PLAN-rozbudowy.md): jeden punkt = jedna świeża sesja Claude Code bez operatora.
 #
 #   scripts/plan.sh status                 # tabela planu i następny punkt
 #   scripts/plan.sh next                   # tylko identyfikator następnego punktu (pusty, gdy nie ma)
@@ -16,7 +16,7 @@
 #          PLAN_TIMEOUT (np. 4h), PLAN_CLAUDE_ARGS (dodatkowe argumenty claude).
 set -euo pipefail
 cd "$(dirname "$0")/.."
-PLAN=${PLAN_FILE:-docs/PLAN-rozbudowy.md}
+PLAN=${PLAN_FILE:-docs/plany/PLAN-rozbudowy.md}
 LOGS=.plan-logs
 
 # Wiersze tabeli: punkt<TAB>wymaga(rozwinięte, spacjami)<TAB>stan<TAB>zakres
@@ -56,7 +56,7 @@ state_of() { table | awk -F'\t' -v p="$1" '$1 == p {print $3}'; }
 
 prompt_for() {
   cat <<P
-Zrealizuj punkt $1 planu docs/PLAN-rozbudowy.md – cały i tylko ten punkt.
+Zrealizuj punkt $1 planu docs/plany/PLAN-rozbudowy.md – cały i tylko ten punkt.
 
 Działasz bez operatora (automat scripts/plan.sh). Zasady tej sesji:
 - Postępuj wg CLAUDE.md i sekcji „Jak pracować z tym planem”: przeczytaj CLAUDE.md, plan (tabelę i punkt $1), docs/DOKUMENTACJA.md, git log -5; uruchom tests/stack.sh up && tests/stack.sh seed.

@@ -2,7 +2,7 @@
 
 Część rodziny **VizRS**. Polski panel do prowadzenia kanałów telewizyjnych **ErsatzTV**: kanały, ramówka, playouty, EPG, diagnostyka – bez używania web GUI ErsatzTV legacy. Logika (baza, skaner, planowanie, nadawanie przez ErsatzTV Next) zostaje w legacy; VizRS Live ją pokazuje i nią steruje.
 
-> **Stan: 1.0.0** (ErsatzTV legacy v26.12.0; operator: [docs/INSTRUKCJA.md](docs/INSTRUKCJA.md), administrator: [docs/RUNBOOK.md](docs/RUNBOOK.md)). Działa end-to-end: pełna edycja kanałów, harmonogramów (ramówka klasyczna z pozycjami), playoutów (wszystkie rodzaje, harmonogramy zastępcze, kalendarz tygodnia playoutu blokowego), bloków i szablonów dnia, deco i szablonów deco, bibliotek i mediów (przeglądarka, kosz), kolekcji (zwykłe, inteligentne, wielo-, powtórki), playlist z podglądem, profili kodowania, znaków wodnych, wypełniaczy i logo kanału, ustawień legacy; logi, konserwacja, test odtwarzania, podgląd ramówki i EPG, diagnostyka, konsola komend. Grafika VizRS i sloty na żywo (przez VizRS CG Playout); web GUI legacy zamknięte za proxy (R10, sprawdzone też z legacy v26.12.0); kolejne etapy: [docs/PLAN-rozbudowy.md](docs/PLAN-rozbudowy.md). Plan: [PLAN-vizrs-live.md](../VizRS%20CG%20System/docs/plany/PLAN-vizrs-live.md) w VizRS CG System.
+> **Stan: 1.0.0** (ErsatzTV legacy v26.12.0; operator: [docs/INSTRUKCJA.md](docs/INSTRUKCJA.md), administrator: [docs/RUNBOOK.md](docs/RUNBOOK.md)). Działa end-to-end: pełna edycja kanałów, harmonogramów (ramówka klasyczna z pozycjami), playoutów (wszystkie rodzaje, harmonogramy zastępcze, kalendarz tygodnia playoutu blokowego), bloków i szablonów dnia, deco i szablonów deco, bibliotek i mediów (przeglądarka, kosz), kolekcji (zwykłe, inteligentne, wielo-, powtórki), playlist z podglądem, profili kodowania, znaków wodnych, wypełniaczy i logo kanału, ustawień legacy; logi, konserwacja, test odtwarzania, podgląd ramówki i EPG, diagnostyka, konsola komend. Grafika VizRS i sloty na żywo (przez VizRS CG Playout); web GUI legacy zamknięte za proxy (R10, sprawdzone też z legacy v26.12.0); stan prac: [docs/STATUS.md](docs/STATUS.md). Plan: [PLAN-vizrs-live.md](../VizRS%20CG%20System/docs/plany/PLAN-vizrs-live.md) w VizRS CG System.
 
 ## Jak to działa
 
@@ -26,7 +26,17 @@ docker compose up -d --build
 
 Panel: `http://<serwer>:8090/` (logowanie tokenem `VIZRS_LIVE_TOKEN`). Widzowie: `http://<serwer>:8409/iptv/channels.m3u` (przez proxy; web GUI legacy z zewnątrz = 403).
 
-Szczegóły, opcje, bezpieczeństwo i ograniczenia: [docs/DOKUMENTACJA.md](docs/DOKUMENTACJA.md). Dalsze prace: [docs/PLAN-rozbudowy.md](docs/PLAN-rozbudowy.md) (R0–R11, jeden punkt na sesję).
+Szczegóły, opcje, bezpieczeństwo i ograniczenia: [docs/DOKUMENTACJA.md](docs/DOKUMENTACJA.md).
+
+## Dokumentacja
+
+| Dokument | Dla kogo |
+|---|---|
+| [Instrukcja operatora](docs/INSTRUKCJA.md) | operator kanału – codzienna praca, przebudowa ramówki, awarie |
+| [Pełna dokumentacja](docs/DOKUMENTACJA.md) | wszyscy – most, panel, ekrany, ograniczenia legacy, testy, bezpieczeństwo |
+| [Runbook](docs/RUNBOOK.md) | administrator – wdrożenie, kopie, aktualizacja legacy, odtworzenie |
+| [Historia zmian](CHANGELOG.md) | wszyscy |
+| [Spis wszystkich dokumentów](docs/README.md) | w tym stan prac, znane braki, plany |
 
 ## Praca nad kodem
 
@@ -36,6 +46,8 @@ tests/stack.sh seed        # wideo testowe i kanał INFO24 z ramówką – wył�
 PLAYWRIGHT_DIR=… node tests/e2e.cjs     # e2e panelu
 tests/stack.sh down
 ```
+
+Programiści i agenci: [CLAUDE.md](CLAUDE.md) (zasady, struktura, testy, commity; Gemini CLI: [GEMINI.md](GEMINI.md)).
 
 ## Licencja
 
