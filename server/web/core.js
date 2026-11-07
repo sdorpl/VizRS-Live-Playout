@@ -98,7 +98,10 @@ export function dialog(title, body, buttons) {
   document.getElementById('dlg-title').textContent = title;
   document.getElementById('dlg-body').replaceChildren(body);
   return new Promise((resolve) => {
-    const close = (v) => { ov.hidden = true; resolve(v); };
+    // zmiana ekranu (hash) zamyka okno jak „Anuluj” – inaczej zostaje nad nowym ekranem
+    const onNav = () => close(false);
+    const close = (v) => { window.removeEventListener('hashchange', onNav); ov.hidden = true; resolve(v); };
+    window.addEventListener('hashchange', onNav);
     document.getElementById('dlg-buttons').replaceChildren(...buttons.map(([t, v, cls]) => btn(t, () => close(v), cls)));
     ov.hidden = false;
     const first = ov.querySelector('input, button.acc, button.danger');

@@ -409,6 +409,12 @@ function check(cond, msg) {
   await page.waitForSelector('#item-card');
   check(/H\.264/.test(await page.textContent('#item-card')), 'karta pozycji: strumień H.264');
   await page.click('#dlg-buttons button:has-text("Zamknij")');
+  // M0: okno zamyka się przy zmianie ekranu (wcześniej zostawało nad kolejnymi ekranami)
+  await page.click('main tbody tr');
+  await page.waitForSelector('#item-card');
+  await page.goto(`${BASE}/#kosz`);
+  await page.waitForSelector('main[data-view="kosz"]');
+  check(await page.isHidden('#overlay'), 'okno karty pozycji zamknięte po przejściu na inny ekran');
 
   await page.goto(`${BASE}/#kosz`);
   await page.waitForSelector('main[data-view="kosz"]');
