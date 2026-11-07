@@ -11,11 +11,10 @@ Ograniczenia samego legacy, których panel nie obejdzie bez zmiany legacy (np. j
 | 1 | Brak TLS w panelu i w proxy dla widzów | zamierzone (serwer bez zależności); LAN/VPN albo zewnętrzne proxy TLS – RUNBOOK; ciasteczko dostaje `Secure` przy `X-Forwarded-Proto: https` (DOKUMENTACJA §9) |
 | 2 | Ciasteczko sesji = token panelu (brak magazynu sesji) | wymiana tokenu unieważnia wszystkie sesje (RUNBOOK §6); ryzyko przyjęte w R11 |
 | 3 | Sloty na żywo nie sprawdzone z prawdziwym sygnałem (OBS → CG Playout), Plex nie sprawdzony z prawdziwym kontem | e2e na atrapach; `tests/real.sh` sprawdził Jellyfin, Emby i reguły grafiki na prawdziwym CG (DOKUMENTACJA §7); krok ręczny przed wdrożeniem – STATUS |
-| 4 | Limit logowań wspólny dla wszystkich klientów | atakujący może przez minutę blokować logowanie; operator z ważnym ciasteczkiem pracuje dalej (DOKUMENTACJA §9) |
 | 5 | Panel nie bierze blokady biblioteki legacy (`IEntityLocker`, poza MediatR) | drugie zlecenie synchronizacji tej samej biblioteki trafia do kolejki (DOKUMENTACJA §4, R8) |
 | 6 | CSP dopuszcza `img-src`/`frame-src` `http:`/`https:` | potrzebne podglądowi obrazów legacy spod `--stream-url` i `/output` VizRS; ryzyko przyjęte (DOKUMENTACJA §9) |
 | 7 | CI i publikacja obrazów nigdy nie uruchomione | wymaga push i tagu – kroki ręczne w STATUS |
-| 8 | Na antenie bez warstw grafiki VizRS (pigułki „W10 belka 101” z makiety) | CG Playout nie wystawia w `/api/live/state` stanu warstw ani stron na antenie; do dodania w API CG Playout, potem w karcie kanału (PLAN-makieta M2) |
+| 22 | Na antenie bez warstw grafiki VizRS (pigułki „W10 belka 101” z makiety) | CG Playout nie wystawia w `/api/live/state` stanu warstw ani stron na antenie; do dodania w API CG Playout, potem w karcie kanału (PLAN-makieta M2) |
 
 ## G2 – wierność wobec web GUI legacy
 

@@ -317,24 +317,50 @@ struct App {
     cfg: Config,
     bridge: Bridge,
     cg: Option<Bridge>,
-    /// nieudane logowania: początek okna i liczba prób (wspólne dla wszystkich klientów)
-    login_fails: std::sync::Mutex<(std::time::Instant, u32)>,
+    /// nieudane logowania w bieżących oknach: na adres klienta i łącznie
+    login_fails: std::sync::Mutex<LoginFails>,
 }
 
-/// Najwyżej tyle nieudanych logowań na [`LOGIN_WINDOW`] – potem 429 do końca okna.
-pub const LOGIN_MAX_FAILS: u32 = 10;
-pub const LOGIN_WINDOW: std::time::Duration = std::time::Duration::from_secs(60);
+/// Okna nieudanych logowań: `(początek okna, liczba)` na adres IP klienta i łącznie (bezpiecznik).
+#[derive(Default)]
+struct LoginFails {
+    per_ip: std::collections::HashMap<Option<std::net::IpAddr>, (std::time::Instant, u32)>,
+    all: Option<(std::time::Instant, u32)>,
+}
 
-/// `true` = logowanie zablokowane; `failed` = dolicz nieudaną próbę.
-fn login_limited(app: &App, failed: bool) -> bool {
+/// Najwyżej tyle nieudanych logowań z jednego adresu na [`LOGIN_WINDOW`] – potem 429 dla tego adresu do końca okna.
+pub const LOGIN_MAX_FAILS: u32 = 10;
+/// Bezpiecznik: tyle nieudanych logowań łącznie (z wielu adresów) blokuje logowanie wszystkim do końca okna.
+pub const LOGIN_MAX_FAILS_ALL: u32 = 100;
+pub const LOGIN_WINDOW: std::time::Duration = std::time::Duration::from_secs(60);
+/// Najwyżej tyle adresów w pamięci limitu (po usunięciu wygasłych okien; nadmiar = bezpiecznik łączny).
+const LOGIN_MAX_PEERS: usize = 4096;
+
+/// `true` = logowanie z adresu `peer` zablokowane; `failed` = dolicz nieudaną próbę.
+fn login_limited(app: &App, peer: Option<std::net::IpAddr>, failed: bool) -> bool {
     let mut g = app.login_fails.lock().unwrap_or_else(|e| e.into_inner());
-    if g.0.elapsed() >= LOGIN_WINDOW {
-        *g = (std::time::Instant::now(), 0);
+    let now = std::time::Instant::now();
+    let fresh = |w: &(std::time::Instant, u32)| now.duration_since(w.0) < LOGIN_WINDOW;
+    if !g.all.as_ref().is_some_and(fresh) {
+        g.all = Some((now, 0));
     }
     if failed {
-        g.1 += 1;
+        if let Some(a) = g.all.as_mut() {
+            a.1 += 1;
+        }
+        if !g.per_ip.contains_key(&peer) && g.per_ip.len() >= LOGIN_MAX_PEERS {
+            g.per_ip.retain(|_, w| fresh(w));
+        }
+        if g.per_ip.len() < LOGIN_MAX_PEERS || g.per_ip.contains_key(&peer) {
+            let w = g.per_ip.entry(peer).or_insert((now, 0));
+            if !fresh(w) {
+                *w = (now, 0);
+            }
+            w.1 += 1;
+        }
     }
-    g.1 >= LOGIN_MAX_FAILS
+    let mine = g.per_ip.get(&peer).filter(|w| fresh(w)).map_or(0, |w| w.1);
+    mine >= LOGIN_MAX_FAILS || g.all.map_or(0, |a| a.1) >= LOGIN_MAX_FAILS_ALL
 }
 
 /// Ciasteczko sesji; `Secure`, gdy panel stoi za proxy TLS (`X-Forwarded-Proto: https`).
@@ -385,7 +411,7 @@ fn main() {
             auth: "X-VizRS-Token",
         },
         cg: cg_client(&cfg),
-        login_fails: std::sync::Mutex::new((std::time::Instant::now(), 0)),
+        login_fails: std::sync::Mutex::new(LoginFails::default()),
         cfg,
     });
 
@@ -459,7 +485,10 @@ fn healthcheck() -> i32 {
 fn handle(app: &App, stream: TcpStream) {
     http::set_timeouts(&stream, 15);
     let resp = match http::read_request(&stream) {
-        Ok(req) => route(app, &req),
+        Ok(mut req) => {
+            req.peer = stream.peer_addr().ok().map(|a| a.ip());
+            route(app, &req)
+        }
         Err(http::ParseError::TooLarge) => Response::error(413, "żądanie za duże"),
         Err(http::ParseError::Bad(m)) => Response::error(400, m),
         Err(http::ParseError::Io) => return,
@@ -511,15 +540,18 @@ fn route(app: &App, req: &Request) -> Response {
     match (req.method.as_str(), path) {
         ("POST", "/api/login") => {
             let given = String::from_utf8_lossy(&req.body).trim().to_string();
-            if app.cfg.token.is_some() && login_limited(app, false) {
+            if app.cfg.token.is_some() && login_limited(app, req.peer, false) {
                 return Response::error(429, "za dużo nieudanych logowań – odczekaj minutę");
             }
             match &app.cfg.token {
                 Some(t) if eq_ct(&given, t) => Response::json(200, "{\"ok\":true}")
                     .with_header("Set-Cookie", session_cookie(req, t, 2_592_000)),
                 Some(_) => {
-                    login_limited(app, true);
-                    eprintln!("login: zły token");
+                    login_limited(app, req.peer, true);
+                    match req.peer {
+                        Some(ip) => eprintln!("login: zły token ({ip})"),
+                        None => eprintln!("login: zły token"),
+                    }
                     std::thread::sleep(std::time::Duration::from_millis(400));
                     Response::error(401, "zły token panelu")
                 }
@@ -1376,7 +1408,7 @@ mod tests {
                 auth: "X-VizRS-Token",
             },
             cg: None,
-            login_fails: std::sync::Mutex::new((std::time::Instant::now(), 0)),
+            login_fails: std::sync::Mutex::new(LoginFails::default()),
             cfg: c,
         }
     }
@@ -1507,13 +1539,32 @@ mod tests {
     #[test]
     fn login_limit_and_cookie() {
         let a = app(Some("0123456789abcdef"));
+        let ip = |n: u8| Some(std::net::IpAddr::from([10, 0, 0, n]));
         for _ in 0..LOGIN_MAX_FAILS {
-            assert!(!login_limited(&a, false));
-            login_limited(&a, true);
+            assert!(!login_limited(&a, ip(1), false));
+            login_limited(&a, ip(1), true);
         }
         let mut r = req("POST", "/api/login", &[("X-VizRS-Live", "1")]);
         r.body = b"0123456789abcdef".to_vec();
-        assert_eq!(route(&a, &r).status, 429, "nawet dobry token po 10 błędach");
+        r.peer = ip(1);
+        assert_eq!(
+            route(&a, &r).status,
+            429,
+            "nawet dobry token po 10 błędach z tego adresu"
+        );
+        let mut other = req("POST", "/api/login", &[("X-VizRS-Live", "1")]);
+        other.body = r.body.clone();
+        other.peer = ip(2);
+        assert_eq!(route(&a, &other).status, 200, "inny adres loguje się dalej");
+        // bezpiecznik: wiele adresów razem blokuje wszystkich
+        let all = app(Some("0123456789abcdef"));
+        for n in 0..LOGIN_MAX_FAILS_ALL {
+            login_limited(&all, ip((n % 200) as u8 + 3), true);
+        }
+        assert!(
+            login_limited(&all, ip(250), false),
+            "po {LOGIN_MAX_FAILS_ALL} błędach łącznie blokada dla wszystkich"
+        );
         let b = app(Some("0123456789abcdef"));
         let ok = route(&b, &r);
         assert_eq!(ok.status, 200);

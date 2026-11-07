@@ -18,6 +18,8 @@ pub struct Request {
     pub path: String,
     pub headers: Vec<(String, String)>,
     pub body: Vec<u8>,
+    /// adres klienta (połączenie TCP; nagłówkom X-Forwarded-For nie ufamy)
+    pub peer: Option<std::net::IpAddr>,
 }
 
 impl Request {
@@ -98,6 +100,7 @@ pub fn read_request<R: Read>(stream: R) -> Result<Request, ParseError> {
         path,
         headers,
         body: Vec::new(),
+        peer: None,
     };
     if req.header("transfer-encoding").is_some() {
         return Err(ParseError::Bad("Transfer-Encoding nieobsługiwane"));
