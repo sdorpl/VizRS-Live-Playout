@@ -4,7 +4,7 @@
 //   parts.js („lista + edytor”, edytor pozycji, wybór treści, grupy, oś doby) · when.js (dni, miesiące, zakres dat)
 //   · views/*.js (ekrany po grupach menu)
 
-import { S, main, h, btn, head, api, cmd, ApiError, route, hms } from './core.js';
+import { S, main, h, btn, head, api, cmd, ApiError, route, hms, dialog, operatorName } from './core.js';
 import './views/antena.js';
 import './views/kanaly.js';
 import './views/profile.js';
@@ -19,6 +19,7 @@ import './views/deco.js';
 import './views/playouty.js';
 import './views/harmonogramy.js';
 import './views/grafika.js';
+import './views/live.js';
 import './views/system.js';
 
 async function refreshStatus() {
@@ -47,6 +48,35 @@ async function refreshWarnings() {
   } catch { w.hidden = true; }
 }
 
+/** Wskaźnik „studio na antenie” w pasku górnym (VizRS CG Playout), widoczny na każdym ekranie. */
+async function refreshStudio() {
+  const el = document.getElementById('st-studio');
+  if (!S.status?.cg) { el.hidden = true; return; }
+  try {
+    const st = (await api('/api/cg/live/state')).result;
+    const air = (st.channels || []).filter((c) => c.on_air).map((c) => c.number);
+    const held = (st.channels || []).filter((c) => c.hold).map((c) => c.number);
+    el.textContent = air.length ? `studio na antenie: ${air.join(', ')}` : held.length ? `studio wstrzymane: ${held.join(', ')}` : 'studio: ramówka';
+    el.className = 'pill ' + (air.length ? 'on' : held.length ? 'warn' : '');
+    el.hidden = false;
+  } catch { el.textContent = 'CG Playout: brak połączenia'; el.className = 'pill bad'; el.hidden = false; }
+}
+
+function operatorButton() {
+  const b = document.getElementById('st-operator');
+  const show = () => (b.textContent = `operator: ${operatorName() || '–'}`);
+  show();
+  b.addEventListener('click', async () => {
+    const input = h('input', { id: 'op-name', maxlength: 40, value: operatorName() });
+    const body = h('div', { class: 'form' }, h('label', { for: 'op-name' }, 'Stanowisko / operator'), input,
+      h('span'), h('span', { class: 'dim' }, 'Trafia do dziennika zdarzeń CG Playout (ZDEJMIJ, WPUŚĆ, audycje). Pamiętane w tej przeglądarce.'));
+    if (await dialog('Nazwa stanowiska', body, [['Anuluj', false], ['Zapisz', true, 'acc']])) {
+      operatorName(input.value.trim().slice(0, 40));
+      show();
+    }
+  });
+}
+
 function clock() {
   const c = document.getElementById('clock');
   const tick = () => (c.textContent = hms(new Date()));
@@ -56,6 +86,7 @@ function clock() {
 
 async function start() {
   clock();
+  operatorButton();
   document.getElementById('logout').addEventListener('click', async () => { await api('/api/logout', { method: 'POST', body: '' }); location.reload(); });
   try {
     await refreshStatus();
@@ -76,6 +107,8 @@ async function start() {
     return;
   }
   route();
+  refreshStudio();
+  setInterval(refreshStudio, 5000);
 }
 
 start();

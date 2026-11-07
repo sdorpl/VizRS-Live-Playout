@@ -61,9 +61,16 @@ impl Bridge {
         self.call("POST", path, body, "application/json")
     }
 
-    /// Dowolna metoda z treścią JSON (pośrednik CG Playout).
-    pub fn send(&self, method: &str, path: &str, body: &[u8]) -> Result<Reply, String> {
-        self.call(method, path, body, "application/json")
+    /// Dowolna metoda z treścią JSON (pośrednik CG Playout), z nazwą stanowiska w `X-Operator` (dziennik CG Playout).
+    /// `operator` musi być już oczyszczony (`main::operator_name`).
+    pub fn send_as(
+        &self,
+        method: &str,
+        path: &str,
+        body: &[u8],
+        operator: &str,
+    ) -> Result<Reply, String> {
+        self.call_as(method, path, body, "application/json", operator)
     }
 
     /// POST z własnym typem treści (wgrywanie obrazu).
@@ -72,6 +79,17 @@ impl Bridge {
     }
 
     fn call(&self, method: &str, path: &str, body: &[u8], ct: &str) -> Result<Reply, String> {
+        self.call_as(method, path, body, ct, "VizRS Live")
+    }
+
+    fn call_as(
+        &self,
+        method: &str,
+        path: &str,
+        body: &[u8],
+        ct: &str,
+        operator: &str,
+    ) -> Result<Reply, String> {
         let t = &self.target;
         let addr = (t.host.as_str(), t.port)
             .to_socket_addrs()
@@ -83,7 +101,7 @@ impl Bridge {
         let _ = s.set_read_timeout(Some(Duration::from_secs(60)));
         let _ = s.set_write_timeout(Some(Duration::from_secs(10)));
         let head = format!(
-            "{method} {}{}{path} HTTP/1.1\r\nHost: {}:{}\r\n{}: {}{}\r\nX-Operator: VizRS Live\r\nContent-Type: {ct}\r\nContent-Length: {}\r\nConnection: close\r\nUser-Agent: vizrs-live/{}\r\n\r\n",
+            "{method} {}{}{path} HTTP/1.1\r\nHost: {}:{}\r\n{}: {}{}\r\nX-Operator: {operator}\r\nContent-Type: {ct}\r\nContent-Length: {}\r\nConnection: close\r\nUser-Agent: vizrs-live/{}\r\n\r\n",
             t.base,
             self.prefix,
             t.host,

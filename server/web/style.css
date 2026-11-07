@@ -224,3 +224,49 @@ td.log { font-family: var(--mono, monospace); font-size: 12px; white-space: pre-
 .inputs .input { border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; }
 .inputs h4 { margin: 0 0 6px; font-size: 13px; }
 .inputs dd.bar input { flex: 1; min-width: 0; }
+
+/* Sloty na żywo – stanowisko MCR (przeniesione z dawnego VizRS Live Panel CG Playout) */
+.live-status { margin: 0 0 10px; }
+.live-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); align-items: start; }
+.live-ch { display: grid; gap: 10px; padding-bottom: 12px; border-width: 2px; }
+.live-ch.onair { border-color: var(--red); box-shadow: 0 0 0 1px var(--red) inset; }
+.live-ch.warn { border-color: var(--acc-d); }
+.live-ch > :not(.live-h):not(dl) { margin: 0 12px; }
+.live-h { display: flex; align-items: center; gap: 10px; padding: 10px 12px 0; }
+.live-h .num { font: 600 20px var(--mono); }
+.live-h .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.tally { font-weight: 700; font-size: 12px; letter-spacing: .04em; padding: 3px 9px; border-radius: 3px; background: var(--panel2); color: var(--dim); }
+.tally.air { background: var(--red); color: #fff; }
+.tally.held { background: var(--acc); color: #1a1100; }
+.thumb { min-height: 96px; border-radius: 6px; background: #0b0c0e; border: 1px solid var(--line); display: flex; align-items: center; justify-content: center; gap: 14px; color: var(--dim); position: relative; padding: 12px; }
+.thumb.sig { background: linear-gradient(135deg, #22161a, #121316); color: var(--text); }
+.thumb.sig.held { background: linear-gradient(135deg, #2c2410, #121316); }
+.thumb .rec { position: absolute; top: 8px; left: 10px; display: flex; gap: 6px; align-items: center; font-size: 12px; }
+.thumb .big-t { font-weight: 700; letter-spacing: .05em; }
+.dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; background: var(--dim); }
+.dot.r { background: var(--red); animation: blink 1s steps(2) infinite; }
+.dot.y { background: var(--acc); }
+@keyframes blink { 50% { opacity: .3; } }
+@media (prefers-reduced-motion: reduce) { .dot.r { animation: none; } }
+.live-ch .now { display: flex; justify-content: space-between; gap: 10px; padding: 6px 10px; border-radius: 4px; background: var(--panel2); }
+.live-ch .now.warn { background: #3d2c10; color: #f3c46b; }
+.live-ch .ctl { gap: 10px; }
+button.big { font-size: 15px; font-weight: 700; padding: 9px 18px; letter-spacing: .03em; }
+button.big.off { background: #3a1716; border-color: var(--red); color: #ff8a86; }
+button.big.off.arm { background: var(--red); color: #fff; }
+button.big.on { background: var(--green); border-color: var(--green); color: #04150b; }
+details.how summary { cursor: pointer; color: var(--dim); padding: 4px 0; }
+details.how[open] summary { margin-bottom: 8px; }
+.tabs-ch { padding: 10px 12px 0; }
+.tabs-ch button.sel { background: var(--sel); border-color: var(--blue); }
+.guide { padding: 6px 0; }
+.guide .slot { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 8px; padding: 5px 12px; align-items: center; border-bottom: 1px solid #23262c; }
+.guide .slot.cur { background: var(--sel); }
+.wizard .steps { list-style: none; padding: 0; margin: 0 0 12px; display: grid; gap: 6px; }
+.wizard .steps .ic { display: inline-block; width: 20px; font-weight: 700; color: var(--green); }
+.wizard .steps .bad .ic { color: var(--red); }
+.wizard .note ol { margin: 8px 0 0; padding-left: 20px; display: grid; gap: 4px; }
+.live-side { padding: 10px 12px; display: grid; gap: 8px; }
+.live-side p { margin: 0; }
+.live-side select { min-width: 0; flex: 1; }
+dl.kv dd { flex-wrap: wrap; }

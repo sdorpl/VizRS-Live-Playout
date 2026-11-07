@@ -2,6 +2,10 @@
 
 ## Niewydane
 
+- **Stos testowy oszczędniejszy w RAM**: dane domyślnie w `~/.cache/vizrs-live-test` zamiast `/tmp` (tmpfs), legacy z workstation GC i limitem `VIZRS_LIVE_TEST_MEM` (1g), proxy 128 MB, Jellyfin/Emby/Plex w `tests/real.sh` po `VIZRS_LIVE_REAL_MEM` (1g); `tests/gate.sh` po zielonym przebiegu zatrzymuje stos, który sam uruchomił (`GATE_KEEP_STACK=1`); `tests/stack.sh mem` pokazuje zużycie. Legacy w stosie: ok. 850 → 450 MB.
+- **Dokumentacja na wzór VizRS CG System**: nowe `docs/STATUS.md` (etap, następne zadanie, kroki ręczne), `docs/LUKI.md` (znane braki G1 → G2 → G3), `docs/README.md` (spis), `docs/plany/` (plan rozbudowy przeniesiony do `docs/plany/PLAN-rozbudowy.md`, `scripts/plan.sh` za nim); `CLAUDE.md` przebudowany (start sesji, niepodważalne zasady, porty stosu testowego, struktura, commity), nowy `GEMINI.md` dla Gemini CLI (wczytuje `CLAUDE.md`); spis treści w DOKUMENTACJA, tabela dokumentów w README.
+- **VizRS Live Panel wchłonięty i usunięty** (CG Playout `/live` → VizRS Live; strona `/live`, logowanie i `etv_public` usunięte z CG Playout – zostaje tylko jego API `/api/live/*`): Sloty na żywo jako stanowisko MCR – lampki CG/ErsatzTV/odbioru, tally, licznik sygnału studia wg zegara CG, ostrzeżenie i odliczanie, gdy audycja LIVE trwa albo zbliża się bez studia, ZDEJMIJ dwoma kliknięciami, ramówka EPG z oznaczeniem LIVE, zdarzenia; stan co 1 s. Nowy ekran **Audycje LIVE**: stan plik/biblioteka/kolekcja, najbliższa emisja, kreator po zapisie (kroki CG + pozycja w Harmonogramach, przebudowa), wybór biblioteki Remote Streams z legacy (pośrednik `PUT /api/cg/live/settings`), przebudowa ramówki per kanał. Pasek górny: „studio na antenie” i nazwa stanowiska (`X-Operator` → dziennik CG jako „VizRS Live · nazwa”).
+
 ## 1.0.0 – wydanie (2026-11-07)
 
 - **Edytor reguł grafiki** w Grafice kanału: reguły globalne (start pozycji, przed końcem audycji i ile sekund, przerwa reklamowa, rozpoznawanie reklam), reguły audycji i kanałów; zapis przez nowe API VizRS CG Playout `GET/PUT /api/live/graphics` (walidacja w CG, zmiana od następnej pozycji bez restartu). Pośrednik `/api/cg/live/graphics` (GET, PUT).

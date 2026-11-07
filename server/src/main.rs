@@ -125,6 +125,11 @@ const STATIC: &[(&str, &str, &str)] = &[
         include_str!("../web/views/grafika.js"),
     ),
     (
+        "/views/live.js",
+        "text/javascript; charset=utf-8",
+        include_str!("../web/views/live.js"),
+    ),
+    (
         "/views/system.js",
         "text/javascript; charset=utf-8",
         include_str!("../web/views/system.js"),
@@ -471,7 +476,13 @@ fn route(app: &App, req: &Request) -> Response {
         _ if !authorized(app, req) => Response::error(401, "zaloguj się tokenem panelu"),
         ("GET", "/api/status") => status(app),
         ("GET", "/api/exposure") => exposure(app),
-        (m, p) if p.starts_with("/api/cg/") => cg_proxy(app, m, &p["/api/cg/".len()..], &req.body),
+        (m, p) if p.starts_with("/api/cg/") => cg_proxy(
+            app,
+            m,
+            &p["/api/cg/".len()..],
+            &req.body,
+            &operator_name(req.header("x-operator")),
+        ),
         ("GET", "/api/commands") => forward(app.bridge.get("/commands"), "commands"),
         ("POST", p) if p.starts_with(http::UPLOAD_PREFIX) => {
             upload(app, req, &p[http::UPLOAD_PREFIX.len()..])
@@ -632,6 +643,7 @@ pub fn cg_path(method: &str, rest: &str) -> Option<String> {
         ("GET", ["pages", ch]) => format!("/etv/pages?channel={ch}"),
         ("GET", ["live", "state"]) => "/api/live/state".into(),
         ("GET" | "PUT", ["live", "graphics"]) => "/api/live/graphics".into(),
+        ("PUT", ["live", "settings"]) => "/api/live/settings".into(),
         ("GET", ["live", "shows"]) | ("POST", ["live", "shows"]) => "/api/live/shows".into(),
         ("POST", ["live", "shows", "scan"]) => "/api/live/shows/scan".into(),
         ("PUT" | "DELETE", ["live", "shows", id]) => format!("/api/live/shows/{id}"),
@@ -644,9 +656,43 @@ pub fn cg_path(method: &str, rest: &str) -> Option<String> {
     Some(p)
 }
 
+/// Nazwa stanowiska do dziennika CG Playout: nagłówek `X-Operator` przeglądarki
+/// (zakodowany `encodeURIComponent`, bo fetch nie wysyła polskich liter w nagłówku),
+/// bez znaków sterujących, do 40 znaków; zawsze z przedrostkiem „VizRS Live”.
+pub fn operator_name(raw: Option<&str>) -> String {
+    let bytes = raw.unwrap_or("").as_bytes();
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < bytes.len() {
+        let hex = bytes
+            .get(i + 1..i + 3)
+            .and_then(|h| std::str::from_utf8(h).ok())
+            .and_then(|h| u8::from_str_radix(h, 16).ok());
+        match (bytes[i], hex) {
+            (b'%', Some(b)) => {
+                out.push(b);
+                i += 3;
+            }
+            (b, _) => {
+                out.push(b);
+                i += 1;
+            }
+        }
+    }
+    let name: String = String::from_utf8_lossy(&out)
+        .chars()
+        .filter(|c| !c.is_control())
+        .take(40)
+        .collect();
+    match name.trim() {
+        "" => "VizRS Live".into(),
+        n => format!("VizRS Live · {n}"),
+    }
+}
+
 /// Pośrednik `/api/cg/…` → VizRS CG Playout (R9): token CG zostaje w serwerze,
 /// odpowiedź w kopercie panelu `{"ok":true,"result":…}` albo `{"ok":false,"error":…}`.
-fn cg_proxy(app: &App, method: &str, rest: &str, body: &[u8]) -> Response {
+fn cg_proxy(app: &App, method: &str, rest: &str, body: &[u8], operator: &str) -> Response {
     let Some(cg) = &app.cg else {
         return Response::error(
             409,
@@ -661,7 +707,7 @@ fn cg_proxy(app: &App, method: &str, rest: &str, body: &[u8]) -> Response {
     } else {
         body
     };
-    match cg.send(method, &path, body) {
+    match cg.send_as(method, &path, body, operator) {
         Ok(r) if (200..300).contains(&r.status) => {
             let inner = if r.body.is_empty() {
                 b"null".to_vec()
@@ -1003,7 +1049,22 @@ mod tests {
             Some("/api/live/graphics")
         );
         assert_eq!(cg_path("DELETE", "live/graphics"), None);
-        assert_eq!(cg_path("PUT", "live/settings"), None);
+        assert_eq!(
+            cg_path("PUT", "live/settings").as_deref(),
+            Some("/api/live/settings")
+        );
+        assert_eq!(cg_path("GET", "live/settings"), None);
+        assert_eq!(operator_name(None), "VizRS Live");
+        assert_eq!(operator_name(Some("  ")), "VizRS Live");
+        assert_eq!(
+            operator_name(Some("Stanowisko%20%C5%81%0D%0AX-Evil:%201")),
+            "VizRS Live · Stanowisko ŁX-Evil: 1"
+        );
+        assert_eq!(operator_name(Some("a%zz")), "VizRS Live · a%zz");
+        assert_eq!(
+            operator_name(Some(&"x".repeat(99))).chars().count(),
+            13 + 40
+        );
         assert_eq!(cg_path("GET", "ingest/24&x=1"), None);
         assert_eq!(cg_path("GET", "pages/.."), None);
         assert_eq!(cg_path("DELETE", "live/channels/24"), None);

@@ -95,7 +95,7 @@ export function crudView(cfg) {
 }
 
 // ---------- widok tylko do odczytu (lista z zakładkami) ----------
-export const READONLY = 'Ten ekran na razie tylko czyta dane z legacy. Edycja dojdzie w kolejnych punktach planu (docs/PLAN-rozbudowy.md).';
+export const READONLY = 'Ten ekran na razie tylko czyta dane z legacy. Edycja dojdzie w kolejnych punktach planu (docs/plany/PLAN-rozbudowy.md).';
 
 /** sources = [{ title, cmd, args?, pick?(wynik), cols, empty? }] – po zakładce na źródło. */
 export function listView(title, desc, sources, footer) {

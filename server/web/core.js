@@ -109,10 +109,18 @@ export const confirmDlg = (title, text, okText = 'Tak', cls = 'danger') =>
 
 // ---------- API ----------
 export class ApiError extends Error {}
+
+/** Nazwa stanowiska / operatora (pasek górny) – trafia do dziennika CG Playout jako „VizRS Live · nazwa”. */
+export function operatorName(set) {
+  try {
+    if (set != null) localStorage.setItem('vizrs-live-operator', set);
+    return localStorage.getItem('vizrs-live-operator') || '';
+  } catch { return ''; }
+}
 export async function api(path, opts = {}) {
   const res = await fetch(path, {
     method: opts.method || 'GET',
-    headers: { 'X-VizRS-Live': '1', ...(opts.body != null ? { 'Content-Type': opts.type || 'application/json' } : {}) },
+    headers: { 'X-VizRS-Live': '1', ...(path.startsWith('/api/cg/') && operatorName() ? { 'X-Operator': encodeURIComponent(operatorName()) } : {}), ...(opts.body != null ? { 'Content-Type': opts.type || 'application/json' } : {}) },
     body: opts.body,
     credentials: 'same-origin',
   });
