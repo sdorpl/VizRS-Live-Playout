@@ -2,6 +2,7 @@
 
 ## Niewydane
 
+- CI i publikacja działają (LUKI #7 zamknięta): `ci.yml` zielone od 2026-11-07, wydanie v1.2.1 opublikowane, pakiety ghcr publiczne.
 ## 1.2.1 – wydanie (2026-11-07)
 
 - Wersja panelu i mostu 1.2.1 (obrazy `ghcr.io/sdorpl/vizrs-live:1.2.1`, `ghcr.io/sdorpl/vizrs-live-legacy:1.2.1` – amd64 + arm64); pierwsze opublikowane wydanie po 1.1.0 – zawiera też całą sekcję 1.2.0 niżej.

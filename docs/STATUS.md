@@ -34,8 +34,7 @@ Plan [PLAN-makieta.md](plany/PLAN-makieta.md) (panel na wzór makiety UI) zrobio
 
 Sesje automatu niczego nie publikują i nie ruszają produkcji; to zostało do zrobienia ręcznie:
 
-- Wydanie 1.2.1: tag `v1.2.1` wypchnięty 2026-11-07 (v1.2.0 – bramka nie przeszła, bez publikacji); po pierwszej publikacji pakiety ghcr `vizrs-live` i `vizrs-live-legacy` ustawić jako publiczne.
-- CI (`ci.yml`, `legacy-latest.yml`) zacznie działać po wypchnięciu `.github/workflows/` i włączeniu Actions w repozytorium (DOKUMENTACJA §8).
+- Wydanie 1.2.1: tag `v1.2.1` wypchnięty 2026-11-07 (v1.2.0 – bramka nie przeszła, bez publikacji); wydanie opublikowane (obrazy ghcr amd64 + arm64, binarki, notka); pakiety ghcr `vizrs-live` i `vizrs-live-legacy` publiczne (sprawdzone anonimowo 2026-11-07).
 - Lokalna produkcja (stos `virtrs` CG Playout) przełączona 2026-11-07 na VizRS Live nakładką `compose.cg-playout.yml` (RUNBOOK §2a): legacy v26.11.6 → v26.12.0 z mostem (migracja bazy; kopia w `~/vizrs-kopie/`), proxy na 8409, panel na 8090, CG Playout z live API. Do sprawdzenia: tunery i odtwarzacze, które korzystały z innych ścieżek niż `/iptv/*` (`curl -I`, DOKUMENTACJA §8).
 - Produkcja (stos `virtrs`) po poprawce integracji z VizRS (Trio, podgląd `/output`): przebudować obraz panelu (`vizrs-live:local`), w `.env` CG Playout usunąć `VIZRS_LIVE_VIZRS_URL=http://127.0.0.1:8789` (nakładka ustawi `:8789` = host panelu, token wyjścia i anteny kanałów), `docker compose up -d live`; sprawdzić ramkę w Grafice kanału i „Trio ↗”.
 - ~~Produkcja (stos `virtrs`) – legacy zawsze najnowsze~~ – zrobione 2026-11-07 21:15: kopia `~/vizrs-kopie/etv-config-2026-11-07-2114-przed-legacy-latest.tgz` i `.env`, `LIVE_LEGACY_IMAGE` usunięte z `.env` CG Playout, `ersatztv` na `vizrs-live-legacy:local` (najnowsze legacy = v26.12.0, most 1.2.0, `commandsMissing = []`, NVIDIA przez CDI, `tests/hwaccel.sh` zielony).
