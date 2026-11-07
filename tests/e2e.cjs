@@ -926,6 +926,19 @@ function check(cond, msg) {
   await page.goto(`${BASE}/#playouty`);
   await page.waitForSelector('main[data-view="playouty"]');
   await rerender(() => page.click(`td:text-is("${bChName}")`));
+  // M6: „Zbudowany do” i „Przebuduj” w wierszu, kolumna „Blok” w najbliższych pozycjach
+  const bRow = await page.evaluate((n) => {
+    const tr = [...document.querySelectorAll('main tr')].find((r) => [...r.cells].some((c) => c.textContent === n));
+    const ths = [...tr.closest('table').querySelectorAll('th')].map((t) => t.textContent);
+    return { until: tr.cells[ths.indexOf('Zbudowany do')].textContent, btn: !!tr.querySelector('button') };
+  }, bChName);
+  check(/\d/.test(bRow.until) && bRow.btn, `playouty: „Zbudowany do” w wierszu (${bRow.until}) i przycisk przebudowy`);
+  const blkCol = await page.evaluate(() => {
+    const t = [...document.querySelectorAll('main .panel')].find((p) => /najbliższe pozycje/.test(p.querySelector('h2')?.textContent || ''))?.querySelector('table');
+    const i = [...t.querySelectorAll('th')].map((x) => x.textContent).indexOf('Blok');
+    return i < 0 ? [] : [...t.querySelectorAll('tbody tr')].map((r) => r.cells[i]?.textContent);
+  });
+  check(blkCol.some((b) => b === blkA || b === blkB), `playout blokowy: kolumna „Blok” z nazwą bloku (${[...new Set(blkCol)].join(', ')})`);
   await shot('r6-kalendarz');
 
   // sprzątanie R6 (UI: playout, szablony, deco, bloki; reszta przez API)

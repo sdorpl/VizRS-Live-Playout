@@ -32,7 +32,7 @@ Pasek górny: **wybór kanału** (obok nazwy panelu – Na antenie, EPG, Playout
 
 Zmiana harmonogramu, bloków, szablonów, kalendarza czy deco **nie zmienia od razu tego, co już zaplanowane**. Po zmianie:
 
-- **Przebuduj** (Na antenie albo Playouty) – dobudowuje i odświeża przyszłe pozycje; to wystarcza zwykle;
+- **Przebuduj** (Na antenie albo Playouty – także w wierszu listy, obok „Zbudowany do”) – dobudowuje i odświeża przyszłe pozycje; to wystarcza zwykle;
 - **Od nowa** – kasuje zaplanowane pozycje i układa wszystko jeszcze raz (np. po dużej przebudowie ramówki; kanał „przeskoczy”);
 - **Resetuj wszystkie** (Playouty) – „Od nowa” dla wszystkich kanałów, z potwierdzeniem.
 

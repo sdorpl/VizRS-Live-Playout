@@ -28,7 +28,7 @@
 
 ## Następne zadanie
 
-[PLAN-makieta.md](plany/PLAN-makieta.md) – panel na wzór makiety UI, następny punkt **M6** (Playouty). Poza planem: z [LUKI.md](LUKI.md) pozycja o najwyższym priorytecie (G1 → G2 → G3). Większa praca = nowy plan w [plany/](plany/README.md) (wzór: „Jak pracować” w PLAN-rozbudowy).
+[PLAN-makieta.md](plany/PLAN-makieta.md) – panel na wzór makiety UI, następny punkt **M7** (Bloki: kalendarz tygodnia). Poza planem: z [LUKI.md](LUKI.md) pozycja o najwyższym priorytecie (G1 → G2 → G3). Większa praca = nowy plan w [plany/](plany/README.md) (wzór: „Jak pracować” w PLAN-rozbudowy).
 
 ## Kroki ręczne (czekają na użytkownika)
 

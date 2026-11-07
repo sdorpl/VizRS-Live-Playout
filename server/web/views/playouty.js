@@ -6,7 +6,7 @@
 // ostatnią pozycję (Id = −1, najwyższy Index); ReplacePlayoutAlternateScheduleItems zapisuje pozycję
 // o najwyższym Index jako harmonogram główny. Panel pokazuje harmonogram główny jako osobne pole edytora.
 
-import { VIEWS, h, btn, panel, pill, cmd, pl, table, toast, confirmDlg, route, dateTime, isFiller, cmdNote, onChannel } from '../core.js';
+import { VIEWS, h, btn, panel, pill, cmd, pl, table, toast, confirmDlg, route, dateTime, isFiller, cmdNote, onChannel, S, api } from '../core.js';
 import { form } from '../form.js';
 import { crudView, itemsEditor } from '../parts.js';
 import { build } from './antena.js';
@@ -48,10 +48,20 @@ async function maintenance(p, command, title, text, done) {
   } catch (e) { toast(`Legacy odrzucił: ${e.message}`, 'bad'); }
 }
 
+const KIND_PILL = { Block: 'info', Sequential: 'warn', Scripted: 'warn', ExternalJson: 'warn' };
+const FILLER_PL = { PreRoll: 'przed (pre-roll)', MidRoll: 'w trakcie (mid-roll)', PostRoll: 'po (post-roll)', Tail: 'ogon', Fallback: 'zapasowy', GuideMode: 'ukryty w EPG' };
+
 function buildState(p) {
   const b = p.BuildStatus;
   if (!b) return pill('nie budowany');
   return b.Success ? pill('OK', 'ok') : pill('błąd budowy', 'bad');
+}
+
+// „Zbudowany do” + stan budowy tylko przy kłopocie (jak w makiecie) + godzina codziennej budowy od nowa
+function untilCell(p) {
+  const until = p._until === undefined ? '?' : p._until ? h('span', { title: `${p._count} przyszłych pozycji` }, dateTime(p._until)) : h('span', { class: 'dim' }, 'pusto');
+  return h('span', null, until, p.BuildStatus?.Success ? null : [' ', buildState(p)],
+    p.DbDailyRebuildTime ? h('span', { class: 'dim', title: 'codziennie od nowa o tej godzinie' }, ' ↻ ' + p.DbDailyRebuildTime.slice(0, 5)) : null);
 }
 
 // ---------- ekran ----------
@@ -75,6 +85,14 @@ VIEWS.playouty = crudView({
     const rows = (res?.Page || []).filter((p) => onChannel(p.ChannelNumber)).sort((a, b) => (parseFloat(a.ChannelNumber) || 0) - (parseFloat(b.ChannelNumber) || 0));
     channels.sort((a, b) => (parseFloat(a.Number) || 0) - (parseFloat(b.Number) || 0));
     schedules.sort((a, b) => a.Name.localeCompare(b.Name, 'pl'));
+    // „Zbudowany do” = koniec ostatniej przyszłej pozycji (TotalCount → ostatnia strona po 1 pozycji)
+    await Promise.all(rows.map(async (p) => {
+      try {
+        const n = (await cmd('GetFuturePlayoutItemsById', { PlayoutId: p.PlayoutId, ShowFiller: true, PageNum: 0, PageSize: 1 }))?.TotalCount || 0;
+        p._until = n ? (await cmd('GetFuturePlayoutItemsById', { PlayoutId: p.PlayoutId, ShowFiller: true, PageNum: n - 1, PageSize: 1 }))?.Page?.[0]?.Finish ?? null : null;
+        p._count = n;
+      } catch { p._until = undefined; }
+    }));
     return { rows, channels, schedules };
   },
   loadOne: async (p) => {
@@ -86,14 +104,15 @@ VIEWS.playouty = crudView({
     const sorted = [...alts].sort((a, b) => a.Index - b.Index);
     const main = sorted.pop() || null;  // najwyższy Index = harmonogram główny
     const cal = p.ScheduleKind === 'Block' ? await loadCalendar(p) : {};
-    return { alternates: sorted.map(fromLegacy), main, items, cal: null, ...cal };
+    const cgGuide = S.status?.cg ? await api('/api/cg/live/state').then((r) => r.result?.guide || null).catch(() => null) : null;
+    return { alternates: sorted.map(fromLegacy), main, items, cal: null, cgGuide, ...cal };
   },
   id: (p) => p.PlayoutId,
   cols: [
-    ['ChannelNumber', 'Kanał', { class: 'num' }], ['ChannelName', 'Nazwa'], [(p) => pl(p.ScheduleKind), 'Rodzaj'],
+    ['ChannelNumber', 'Kanał', { class: 'num' }], ['ChannelName', 'Nazwa'], [(p) => pill(pl(p.ScheduleKind), KIND_PILL[p.ScheduleKind]), 'Rodzaj'],
     [(p) => p.ScheduleName || p.ScheduleFile, 'Źródło', { class: 'w' }],
-    [(p) => (p.DbDailyRebuildTime ? p.DbDailyRebuildTime.slice(0, 5) : '—'), 'Od nowa o', { class: 'num' }],
-    [buildState, 'Budowa'],
+    [untilCell, 'Zbudowany do', { class: 'num' }],
+    [(p) => btn(['Classic', 'Block'].includes(p.ScheduleKind) ? 'Przebuduj' : 'Od nowa', () => build(p, ['Classic', 'Block'].includes(p.ScheduleKind) ? 'Refresh' : 'Reset')), ''],
   ],
   editor: (p, ctx) => {
     ctx.current = p;
@@ -157,11 +176,23 @@ VIEWS.playouty = crudView({
       ? panel('Harmonogramy zastępcze', null, h('div', { class: 'note' }, 'Kanał nadaje w trybie „na żądanie” – legacy nie pozwala na harmonogramy zastępcze.'))
       : panel(`Harmonogramy zastępcze · ${p.ChannelName}`, h('span', { class: 'dim' }, 'pierwszy pasujący wygrywa; zapis razem z playoutem („Zapisz”)'),
         ctx.altEd.el, cmdNote('GetPlayoutAlternateSchedules', 'ReplacePlayoutAlternateScheduleItems'));
+    // audycje LIVE z ramówki CG Playout – ta sama godzina startu co pozycja legacy (jak w EPG)
+    const guide = (ctx.cgGuide?.[String(p.ChannelNumber)] || []).filter((g) => g.live);
+    const live = (i) => guide.some((g) => Math.abs(g.start - new Date(i.Start)) < 90e3);
+    // blok (playout blokowy): SchedulingContext pozycji to JSON z BlockId; wypełniacz bez kontekstu – blok poprzedniej pozycji
+    const blockName = new Map((ctx.cal?.blocks || []).map((b) => [b.Id, b.Name]));
+    let lastBlock = '';
+    const blocks = p.ScheduleKind === 'Block' ? ctx.items.map((i) => {
+      try { const id = JSON.parse(i.SchedulingContext || 'null')?.BlockId; if (id != null) lastBlock = blockName.get(id) || `blok ${id}`; } catch { /* inny kontekst */ }
+      return lastBlock;
+    }) : null;
     const items = panel(`${p.ChannelName} · najbliższe pozycje`, null,
       table(ctx.items, [[(i) => dateTime(i.Start), 'Start', { class: 'num' }], [(i) => dateTime(i.Finish), 'Koniec', { class: 'num' }],
-        [(i) => (isFiller(i) ? h('span', { class: 'dim' }, i.Title + ' (wypełniacz)') : i.Title), 'Pozycja', { class: 'w' }], ['Duration', 'Czas']],
+        [(i) => (isFiller(i) ? h('span', { class: 'dim' }, i.Title) : live(i) ? h('span', null, pill('LIVE', 'on'), ' ', i.Title) : i.Title), 'Pozycja', { class: 'w' }],
+        [(i) => (isFiller(i) ? h('span', { class: 'dim' }, FILLER_PL[i.FillerKind] || 'wypełniacz') : ''), 'Rodzaj'], ['Duration', 'Czas', { class: 'num' }],
+        ...(blocks ? [[(i) => blocks[ctx.items.indexOf(i)], 'Blok']] : [])],
       { empty: 'Brak przyszłych pozycji – przebuduj playout.' }),
-      cmdNote('GetFuturePlayoutItemsById', 'BuildPlayout'));
+      cmdNote('GetFuturePlayoutItemsById', 'BuildPlayout', 'GetAllBlocks', 'CG Playout GET /api/live/state (audycje LIVE)'));
     return [alt, ...(ctx.cal ? calendarPanels(p, ctx) : []), items];
   },
   beforeSave: (ctx) => {
