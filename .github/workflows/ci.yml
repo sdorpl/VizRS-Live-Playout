@@ -56,4 +56,4 @@ jobs:
         if: failure()
         run: |
           docker logs vizrs-live-test-legacy 2>&1 | tail -200 || true
-          cat /tmp/vizrs-live-test/panel.log || true
+          cat "${VIZRS_LIVE_TEST_DIR:-$HOME/.cache/vizrs-live-test}/panel.log" || true

@@ -1,21 +1,27 @@
 #!/usr/bin/env bash
 # Stos testowy VizRS Live na osobnych portach (nie rusza produkcyjnego ErsatzTV):
-#   legacy z mostem: 127.0.0.1:18409, proxy dla widzów (R10): 127.0.0.1:18410, panel: 127.0.0.1:18090, dane: $VIZRS_LIVE_TEST_DIR (domyślnie /tmp/vizrs-live-test)
+#   legacy z mostem: 127.0.0.1:18409, proxy dla widzów (R10): 127.0.0.1:18410, panel: 127.0.0.1:18090, dane: $VIZRS_LIVE_TEST_DIR (domyślnie ~/.cache/vizrs-live-test)
 #
 #   tests/stack.sh up      # buduje obraz mostu i panel, uruchamia, sprawdza most (smoke)
 #   tests/stack.sh seed    # wideo testowe + kanał INFO24 z ramówką – wszystko komendami przez panel (drugi raz nic nie dubluje)
 #   tests/stack.sh test    # e2e UI (tests/e2e.cjs) na działającym stosie; Playwright: PLAYWRIGHT_DIR albo tests/local.env
 #   tests/stack.sh down    # zatrzymuje (dane zostają)
 #   tests/stack.sh reset   # zatrzymuje i usuwa dane testowe ($VIZRS_LIVE_TEST_DIR)
+#   tests/stack.sh mem     # ile RAM zajmuje stos testowy (kontenery, panele, Chromium, dane w tmpfs)
 # Inna wersja legacy (aktualizacja, DOKUMENTACJA §6): LEGACY_IMAGE=ghcr.io/ersatztv/legacy:<wersja> tests/stack.sh up
 #   (najlepiej z osobnym VIZRS_LIVE_TEST_DIR – nowsze legacy migruje bazę i starsze już jej nie otworzy)
 # Pełna bramka przed commitem: tests/gate.sh
+# Pamięć: dane na dysku, nie w /tmp (często tmpfs = RAM); legacy z workstation GC i limitem VIZRS_LIVE_TEST_MEM (domyślnie 1g;
+#   legacy ma w runtimeconfig Server GC – sterta na każdy rdzeń); VIZRS_LIVE_TEST_MEM=0 – bez limitu.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 # lokalne ustawienia testów (nie w repo), np. PLAYWRIGHT_DIR=/ścieżka/z/node_modules/playwright
 [ -f tests/local.env ] && . tests/local.env
 
-DIR="${VIZRS_LIVE_TEST_DIR:-/tmp/vizrs-live-test}"
+DIR="${VIZRS_LIVE_TEST_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/vizrs-live-test}"
+MEM="${VIZRS_LIVE_TEST_MEM:-1g}"
+# limit pamięci kontenera (docker run …): pusty przy VIZRS_LIVE_TEST_MEM=0
+mem_limit() { [ "$MEM" = 0 ] || printf -- '--memory=%s --memory-swap=%s' "$1" "$1"; }
 TOKEN="test-token-0123456789"
 # VizRS CG Playout w testach: atrapa z tests/e2e.cjs na 127.0.0.1:18700 (R9)
 CG_TOKEN="test-cg-token-0123456789"
@@ -56,9 +62,12 @@ case "${1:-}" in
     (cd server && cargo build --release -q)
     docker rm -f "$NAME" "$PROXY_NAME" >/dev/null 2>&1 || true
     docker network inspect "$NET" >/dev/null 2>&1 || docker network create "$NET" >/dev/null
-    docker run -d --name "$NAME" --network "$NET" -p 127.0.0.1:18409:8409 -e VIZRS_BRIDGE_TOKEN="$TOKEN" -v "$DIR/config:/config" vizrs-live-legacy:dev >/dev/null
+    # shellcheck disable=SC2046
+    docker run -d --name "$NAME" --network "$NET" -p 127.0.0.1:18409:8409 $(mem_limit "$MEM") -e DOTNET_gcServer=0 \
+      -e VIZRS_BRIDGE_TOKEN="$TOKEN" -v "$DIR/config:/config" vizrs-live-legacy:dev >/dev/null
     # proxy jak w compose.yml (docker/proxy.Caddyfile); panel podaje widzom adres proxy
-    docker run -d --name "$PROXY_NAME" --network "$NET" -p 127.0.0.1:18410:8409 -e LEGACY_UPSTREAM="$NAME:8409" \
+    # shellcheck disable=SC2046
+    docker run -d --name "$PROXY_NAME" --network "$NET" -p 127.0.0.1:18410:8409 $(mem_limit 128m) -e LEGACY_UPSTREAM="$NAME:8409" \
       -v "$PWD/docker/proxy.Caddyfile:/etc/caddy/Caddyfile:ro" "${PROXY_IMAGE:-caddy:2.10.2-alpine}" >/dev/null
     wait_bridge
     pkill -f "[v]izrs-live --port 18090" 2>/dev/null || true
@@ -113,7 +122,7 @@ case "${1:-}" in
     PLAYWRIGHT_DIR="$PLAYWRIGHT_DIR" node tests/e2e.cjs "$PANEL"
     ;;
   reset)
-    case "$DIR" in /|/tmp|/home|"$HOME"|"") echo "reset: odmawiam usunięcia '$DIR'" >&2; exit 1 ;; esac
+    case "$DIR" in /|/tmp|/home|"$HOME"|"$HOME/.cache"|"") echo "reset: odmawiam usunięcia '$DIR'" >&2; exit 1 ;; esac
     pkill -f "[v]izrs-live --port 18090" 2>/dev/null || true
     docker rm -f "$NAME" "$PROXY_NAME" >/dev/null 2>&1 || true
     docker network rm "$NET" >/dev/null 2>&1 || true
@@ -127,8 +136,20 @@ case "${1:-}" in
     docker rm -f "$NAME" "$PROXY_NAME" >/dev/null 2>&1 || true
     echo "zatrzymane; dane: $DIR"
     ;;
+  mem)
+    docker stats --no-stream --format '{{.Name}}\t{{.MemUsage}}' | grep '^vizrs-live-test' || echo "kontenery stosu: nie działają"
+    for p in 18090 18092; do
+      pid=$(pgrep -f "[v]izrs-live --port $p" | head -1) || true
+      [ -n "$pid" ] && printf 'panel %s\t%s MiB\n' "$p" "$(( $(ps -o rss= -p "$pid") / 1024 ))"
+    done
+    printf 'Chromium z Playwright\t%s MiB\n' "$(ps -eo rss=,args= | grep '[m]s-playwright' | awk '{s+=$1} END {print int(s/1024)}')"
+    fs=$(df --output=fstype "$DIR" 2>/dev/null | tail -1) || true
+    printf 'dane %s (%s)\t%s\n' "$DIR" "${fs:-brak}" "$(du -sh "$DIR" 2>/dev/null | cut -f1)"
+    [ "$fs" = tmpfs ] && echo "UWAGA: $DIR leży w tmpfs – dane testowe zajmują RAM" >&2
+    true
+    ;;
   *)
-    echo "użycie: tests/stack.sh up|seed|test|down|reset" >&2
+    echo "użycie: tests/stack.sh up|seed|test|down|reset|mem" >&2
     exit 2
     ;;
 esac

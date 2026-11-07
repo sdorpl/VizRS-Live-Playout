@@ -3,7 +3,7 @@
 #   Jellyfin  127.0.0.1:18196   (w sieci stosu: http://vizrs-live-test-jellyfin:8096)
 #   Emby      127.0.0.1:18896   (http://vizrs-live-test-emby:8096)
 #   Plex      127.0.0.1:18324   (http://vizrs-live-test-plex:32400; logowanie PIN przez plex.tv – ręcznie)
-#   VizRS CG Playout 127.0.0.1:18701 (binarka z ../VirtRS CG Playout, Live Panel z tokenem, etv_config = dane stosu)
+#   VizRS CG Playout 127.0.0.1:18701 (binarka z ../VirtRS CG Playout, live API z tokenem, etv_config = dane stosu)
 #   drugi panel VizRS Live 127.0.0.1:18092 podłączony do prawdziwego CG Playout (panel 18090 zostaje na atrapie e2e)
 #
 #   tests/stack.sh up && tests/stack.sh seed   # najpierw stos (legacy, wideo testowe)
@@ -13,12 +13,14 @@
 #   tests/real.sh down     # odłącza legacy od Jellyfin i Emby, zatrzymuje i usuwa kontenery (dane w $DIR/real zostają); reset – też dane
 # Przed tests/stack.sh test zrób tests/real.sh down: pozycje z Jellyfin i Emby zmieniają liczby, których oczekuje e2e.
 #
+# Pamięć: każda usługa z limitem VIZRS_LIVE_REAL_MEM (domyślnie 1g; 0 – bez limitu), Jellyfin i Emby z workstation GC.
 # Produkcji (virtrs-*, port 8409) nie dotyka. Obrazy: JELLYFIN_IMAGE, EMBY_IMAGE, PLEX_IMAGE; Plex: PLEX_CLAIM=claim-… (https://plex.tv/claim) – opcjonalnie.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 [ -f tests/local.env ] && . tests/local.env
 
-DIR="${VIZRS_LIVE_TEST_DIR:-/tmp/vizrs-live-test}"
+DIR="${VIZRS_LIVE_TEST_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/vizrs-live-test}"
+REAL_MEM="${VIZRS_LIVE_REAL_MEM:-1g}"
 R="$DIR/real"
 NET="vizrs-live-test-net"
 MEDIA="$DIR/config/media/info24"
@@ -85,14 +87,16 @@ case "${1:-}" in
       docker ps -q -f "name=^$n$" | grep -q . && { say "$n: działa"; return; }
       docker rm -f "$n" >/dev/null 2>&1 || true
       local ports="$1" image="$2"; shift 2
-      docker run -d --name "$n" --network "$NET" -p "127.0.0.1:$ports" -v "$MEDIA:/media/info24:ro" "$@" "$image" >/dev/null
+      local lim=()
+      [ "$REAL_MEM" = 0 ] || lim=(--memory="$REAL_MEM" --memory-swap="$REAL_MEM")
+      docker run -d --name "$n" --network "$NET" -p "127.0.0.1:$ports" "${lim[@]}" -v "$MEDIA:/media/info24:ro" "$@" "$image" >/dev/null
       say "ok   $n ($image) na 127.0.0.1:${ports%%:*}"
     }
-    run jellyfin 18196:8096 "$JELLYFIN_IMAGE" --user "$(id -u):$(id -g)" -v "$R/jellyfin/config:/config" -v "$R/jellyfin/cache:/cache"
-    run emby 18896:8096 "$EMBY_IMAGE" -e UID="$(id -u)" -e GID="$(id -g)" -v "$R/emby/config:/config"
+    run jellyfin 18196:8096 "$JELLYFIN_IMAGE" -e DOTNET_gcServer=0 --user "$(id -u):$(id -g)" -v "$R/jellyfin/config:/config" -v "$R/jellyfin/cache:/cache"
+    run emby 18896:8096 "$EMBY_IMAGE" -e DOTNET_gcServer=0 -e UID="$(id -u)" -e GID="$(id -g)" -v "$R/emby/config:/config"
     run plex 18324:32400 "$PLEX_IMAGE" -e PLEX_UID="$(id -u)" -e PLEX_GID="$(id -g)" -e TZ=Europe/Warsaw ${PLEX_CLAIM:+-e PLEX_CLAIM="$PLEX_CLAIM"} \
       -v "$R/plex/config:/config" -v "$R/plex/cache:/transcode"
-    # VizRS CG Playout z repozytorium obok (bez Dockera); Live Panel na danych stosu
+    # VizRS CG Playout z repozytorium obok (bez Dockera); live API na danych stosu
     cg_bin="$CG_REPO/target/release/vizrs-cg"
     (cd "$CG_REPO" && cargo build --release -q --bin vizrs-cg)
     if ! curl -sf -o /dev/null http://127.0.0.1:18701/health; then
@@ -147,5 +151,5 @@ JSON
     [ "$1" = reset ] && rm -rf -- "${DIR:?}/real"
     say "zatrzymane${1/down/}"
     ;;
-  *) sed -n '2,16p' "$0"; exit 1 ;;
+  *) sed -n '2,17p' "$0"; exit 1 ;;
 esac
