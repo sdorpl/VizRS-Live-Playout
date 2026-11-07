@@ -21,7 +21,7 @@ Jak w [PLAN-rozbudowy.md](PLAN-rozbudowy.md) („Jak pracować”): jeden punkt 
 | M2 | Na antenie: karta kanału z ramką VizRS, panel „Uwagi”, wspólna oś zdarzeń | M1 | zrobione (2026-11-07) |
 | M3 | Przewodnik EPG: wszystkie kanały, wybór okna czasu, sklejanie krótkich pozycji | M1 | zrobione (2026-11-07) |
 | M4 | Media: kafle w Przeglądarce, „Zapisz jako kolekcję inteligentną” | M0 | zrobione (2026-11-07) |
-| M5 | Kolekcje: jedna lista z pigułką rodzaju, podgląd zawartości w edytorze | M4 | do zrobienia |
+| M5 | Kolekcje: jedna lista z pigułką rodzaju, podgląd zawartości w edytorze | M4 | zrobione (2026-11-07; bez łącznego czasu – brak danych w legacy) |
 | M6 | Playouty: „Zbudowany do” i „Przebuduj” w wierszu, najbliższe pozycje z blokiem i LIVE | M0 | do zrobienia |
 | M7 | Bloki: kalendarz tygodnia jako siatka godzin × dni | M6 | do zrobienia |
 | M8 | Grafika kanału i Sloty na żywo: reguły „Kiedy / Co / Ile”, tabela wejść ze stanem | M2 | do zrobienia |

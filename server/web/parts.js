@@ -30,7 +30,7 @@ export function crudView(cfg) {
   let sel = null; // id zaznaczonej pozycji albo 'new'
   const c = cfg.commands;
   const required = [cfg.listCmd, c.create, c.update, c.delete, c.copy, ...(cfg.needs || [])].filter(Boolean);
-  return async () => {
+  const view = async () => {
     const miss = missing(required);
     if (miss.length) return [head(cfg.title, cfg.desc), missingNote(miss)];
     const ctx = await cfg.load();
@@ -92,6 +92,10 @@ export function crudView(cfg) {
       ...[cfg.below ? cfg.below(current, ctx) : null].flat(),
     ];
   };
+  /** Zaznaczenie z zewnątrz (np. przegląd wszystkich rodzajów): id pozycji albo 'new'; działa przy następnym przerysowaniu. */
+  view.select = (id) => { sel = id; };
+  view.cfg = cfg;
+  return view;
 }
 
 // ---------- widok tylko do odczytu (lista z zakładkami) ----------

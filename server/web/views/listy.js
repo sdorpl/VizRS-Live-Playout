@@ -2,7 +2,7 @@
 // i powtórki. Odpowiednik Collections, Smart Collections, Multi Collections i Rerun Collections w legacy.
 // Playlisty: views/playlisty.js. Pozycje do kolekcji zwykłej dodaje się w Przeglądarce mediów.
 
-import { VIEWS, h, btn, panel, cmd, pl, table, toast, confirmDlg, route, cmdNote } from '../core.js';
+import { VIEWS, h, btn, head, panel, pill, cmd, pl, table, toast, confirmDlg, route, cmdNote } from '../core.js';
 import { form } from '../form.js';
 import { crudView, itemsEditor, contentPicker } from '../parts.js';
 
@@ -230,7 +230,29 @@ function rerunArgs(d) {
 }
 
 // ---------- ekran z zakładkami ----------
-const TABS = [['Zwykłe', plain], ['Inteligentne', smart], ['Wielokolekcje', multi], ['Powtórki', reruns]];
+// ---------- wszystkie rodzaje (jak w makiecie UI: jedna lista z pigułką rodzaju) ----------
+const KINDS = [[plain, 'zwykła', null], [smart, 'inteligentna', 'info'], [multi, 'wielokolekcja', 'warn'], [reruns, 'powtórki', 'ok']];
+/** Przegląd: kolekcje czterech rodzajów w jednej tabeli; klik – edytor w zakładce rodzaju, „+ …” – nowa danego rodzaju. */
+async function overview() {
+  const lists = await Promise.all(KINDS.map(([v]) => v.cfg.load().then((c) => c.rows || []).catch(() => [])));
+  const rows = lists.flatMap((rs, k) => rs.map((r) => ({ r, k }))).sort((a, b) => a.r.Name.localeCompare(b.r.Name, 'pl'));
+  const go = (k, id) => { KINDS[k][0].select(id); TAB.i = k + 1; route(); };
+  const count = ({ r, k }) => {
+    if (k !== 2) return r.Count ?? '?';
+    const n = (r.Items?.length ?? 0) + (r.SmartItems?.length ?? 0);
+    return n ? `${n} skł.` : '—';
+  };
+  const detail = ({ r, k }) => (k === 1 ? h('span', { class: 'mono' }, r.Query) : k === 3 ? rerunName(r) : null);
+  return [
+    head(plain.cfg.title, plain.cfg.desc, KINDS.map(([v], k) => btn(v.cfg.noun.add, () => go(k, 'new'), k === 0 ? 'acc' : null))),
+    panel('Wszystkie kolekcje', h('span', { class: 'dim' }, String(rows.length)),
+      table(rows, [[(x) => x.r.Name, 'Nazwa', { class: 'w' }], [(x) => pill(KINDS[x.k][1], KINDS[x.k][2]), 'Rodzaj'], [count, 'Pozycje', { class: 'num' }],
+        [detail, 'Zapytanie / źródło', { class: 'w' }]], { onRow: (x) => go(x.k, KINDS[x.k][0].cfg.id(x.r)), empty: 'Nie ma jeszcze kolekcji – załóż pierwszą przyciskiem wyżej.' }),
+      cmdNote('GetAllCollections', 'GetAllSmartCollections', 'GetAllMultiCollections', 'GetPagedRerunCollections')),
+  ];
+}
+
+const TABS = [['Wszystkie', overview], ['Zwykłe', plain], ['Inteligentne', smart], ['Wielokolekcje', multi], ['Powtórki', reruns]];
 
 VIEWS.kolekcje = async () => {
   const nodes = await TABS[TAB.i][1]();

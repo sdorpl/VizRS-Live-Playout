@@ -589,6 +589,8 @@ function check(cond, msg) {
   const colName = 'E2E kolekcja ' + tag;
   await page.goto(`${BASE}/#kolekcje`);
   await page.waitForSelector('main[data-view="kolekcje"]');
+  // M5: „Wszystkie” – jedna lista rodzajów, „+ Nowa kolekcja” przełącza na zwykłe
+  check(/Wszystkie kolekcje/.test(await page.textContent('main')) && await page.isVisible('.page-tabs button.on:has-text("Wszystkie")'), 'kolekcje: domyślnie przegląd wszystkich rodzajów');
   await rerender(() => page.click('text=+ Nowa kolekcja'));
   await page.fill('#col-Name', colName);
   await page.click('button:has-text("Załóż kolekcję")');
@@ -722,6 +724,13 @@ function check(cond, msg) {
   check(!(await api('GetAllPlaylistGroups')).result.some((g) => g.Name === plgName), 'playlista i grupa usunięte');
   await page.goto(`${BASE}/#kolekcje`);
   await page.waitForSelector('main[data-view="kolekcje"]');
+  await rerender(() => page.click('.page-tabs button:has-text("Wszystkie")'));
+  const allRows = await page.$$eval('main tbody tr', (trs) => trs.map((t) => t.textContent));
+  check([[colName, 'zwykła'], [scName, 'inteligentna'], [mcName, 'wielokolekcja'], [rcName, 'powtórki']].every(([n, k]) => allRows.some((t) => t.includes(n) && t.includes(k))),
+    'kolekcje: przegląd – cztery rodzaje w jednej liście z pigułką rodzaju');
+  await rerender(() => page.click(`td:text-is("${scName}")`));
+  check(await page.isVisible('.page-tabs button.on:has-text("Inteligentne")') && /E2E/.test(await page.textContent('main .split .panel:nth-child(2) header h2')),
+    'kolekcje: klik w przeglądzie otwiera edytor w zakładce rodzaju');
   for (const [tab, nm] of [['Powtórki', rcName], ['Wielokolekcje', mcName], ['Inteligentne', scName], ['Zwykłe', colName]]) {
     await rerender(() => page.click(`.page-tabs button:has-text("${tab}")`));
     await rerender(() => page.click(`td:text-is("${nm}")`));
