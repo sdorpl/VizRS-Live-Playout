@@ -147,6 +147,55 @@ async function rulesPanel() {
 }
 
 // ---------- Sloty na żywo ----------
+// Dane nadawania z CG Playout (`inputs` kanału, z VIZRS_INGEST): RTMP – serwer i klucz jak w OBS, SRT – adres z hasłem.
+// Host nieznany (VIZRS_INGEST_PUBLIC puste) = host, z którego operator otwiera panel.
+const copyBtn = (label, text) => btn('Kopiuj', async () => {
+  try { await navigator.clipboard.writeText(text); toast(`Skopiowano: ${label}`); } catch { toast('Przeglądarka nie pozwoliła skopiować – zaznacz i skopiuj ręcznie.', 'bad'); }
+});
+
+// odsłonięte pola przetrwają odświeżanie widoku co 5 s (do przeładowania strony)
+const revealed = new Set();
+
+function secretField(label, value, aria) {
+  const open = revealed.has(aria);
+  const out = h('input', { type: open ? 'text' : 'password', readonly: true, value, class: 'mono grow', 'aria-label': aria });
+  const show = btn(open ? 'Ukryj' : 'Pokaż', () => {
+    const hidden = out.type === 'password';
+    out.type = hidden ? 'text' : 'password';
+    show.textContent = hidden ? 'Ukryj' : 'Pokaż';
+    if (hidden) revealed.add(aria); else revealed.delete(aria);
+  });
+  return [h('dt', null, label), h('dd', { class: 'bar' }, out, show, copyBtn(label, value))];
+}
+
+function plainField(label, value, aria) {
+  return [h('dt', null, label), h('dd', { class: 'bar' }, h('input', { readonly: true, value, class: 'mono grow', 'aria-label': aria }), copyBtn(label, value))];
+}
+
+function inputsBox(c) {
+  const list = c.inputs || [];
+  if (!list.length) {
+    return h('div', { class: 'note', 'data-inputs': c.number }, 'Ten kanał nie ma wejścia studia. Wejścia ustawia się w VizRS CG Playout: VIZRS_INGEST (np. „' + c.number +
+      '=rtmp://0.0.0.0:1936/live/<klucz>”) w usługach ingest i cg, adres dla nadawców w VIZRS_INGEST_PUBLIC.');
+  }
+  return h('div', { class: 'inputs', 'data-inputs': c.number }, list.map((i, n) => {
+    const host = i.host || location.hostname;
+    const id = `${c.number}-${n + 1}`;
+    if (i.kind === 'rtmp') {
+      const server = `rtmp://${host}:${i.port}${i.app || ''}`;
+      return h('div', { class: 'input' }, h('h4', null, 'RTMP (OBS, vMix, koder sprzętowy)'),
+        h('dl', { class: 'kv' }, ...plainField('Serwer', server, `Serwer RTMP ${id}`), ...secretField('Klucz strumienia', i.key, `Klucz RTMP ${id}`)),
+        h('p', { class: 'dim' }, 'OBS: Ustawienia → Strumień → Usługa „Własny…”, Serwer i Klucz strumienia jak wyżej. Wyjście: H.264 + AAC, interwał klatek kluczowych 1–2 s.'));
+    }
+    const q = [['mode', 'caller'], i.passphrase ? ['passphrase', i.passphrase] : null, i.streamid ? ['streamid', i.streamid] : null].filter(Boolean);
+    const url = `srt://${host}:${i.port}?` + q.map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&');
+    return h('div', { class: 'input' }, h('h4', null, 'SRT (MPEG-TS)'),
+      h('dl', { class: 'kv' }, ...secretField('Adres SRT', url, `Adres SRT ${id}`),
+        ...(i.passphrase ? secretField('Hasło (passphrase)', i.passphrase, `Hasło SRT ${id}`) : [])),
+      h('p', { class: 'dim' }, 'Nadawca w trybie caller; w OBS: Serwer = cały adres SRT, Klucz pusty.'));
+  }));
+}
+
 function channelCard(c) {
   const src = c.source || {};
   const act = (path, okMsg) => async () => {
@@ -167,7 +216,8 @@ function channelCard(c) {
         c.hold ? btn('▶ WPUŚĆ', act('release', 'Studio wpuszczone'), 'acc')
           : btn('■ ZDEJMIJ', async () => { if (await confirmDlg('Zdjąć studio?', `Kanał ${c.number} wróci do ramówki (w audycji LIVE – plansza), aż do WPUŚĆ.`, 'Zdejmij')) act('hold', 'Studio zdjęte')(); }, 'danger'),
         h('label', { class: 'chk' }, anytime, 'studio także poza audycjami'),
-        btn('⟲ Przebuduj ramówkę', act('rebuild', 'Ramówka kanału przebudowana')))));
+        btn('⟲ Przebuduj ramówkę', act('rebuild', 'Ramówka kanału przebudowana'))),
+      h('h3', null, 'Jak nadawać na ten kanał'), inputsBox(c)));
 }
 
 async function showDialog(channels, show) {
@@ -213,6 +263,9 @@ VIEWS.live = async () => {
       btn('⟳ Odśwież z ErsatzTV', async () => { try { await cg('live/shows/scan', 'POST'); toast('Skan biblioteki zlecony'); } catch (e) { toast(e.message, 'bad'); } }),
       btn('+ Nowa audycja LIVE', () => showDialog(showChannels), 'acc')),
     state.ingest ? null : h('div', { class: 'note' }, 'Live ingest w CG Playout jest wyłączony (brak ingest_token / VIZRS_INGEST_TOKEN) – studio nie przejmie kanału.'),
+    h('div', { class: 'note' }, 'Jak to działa: nadawca (OBS, koder) wysyła obraz na wejście kanału – dane niżej, przy kanale. ' +
+      'Gdy sygnał dojdzie, kanał przechodzi na studio: zawsze („studio także poza audycjami”) albo tylko w czasie audycji LIVE z ramówki. ' +
+      'Grafika VizRS zostaje na wierzchu. Koniec nadawania = powrót do ramówki od bieżącego miejsca. ZDEJMIJ odcina studio mimo sygnału.'),
     h('div', { class: 'split wide' },
       h('div', { class: 'cols' }, channels.length ? channels.map(channelCard) : h('div', { class: 'note' }, 'CG Playout nie zna jeszcze kanałów (synchronizacja z legacy co 30 s).')),
       h('div', { class: 'cols' },

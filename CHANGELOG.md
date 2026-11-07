@@ -5,6 +5,7 @@
 ## 1.0.0 – wydanie (2026-11-07)
 
 - **Edytor reguł grafiki** w Grafice kanału: reguły globalne (start pozycji, przed końcem audycji i ile sekund, przerwa reklamowa, rozpoznawanie reklam), reguły audycji i kanałów; zapis przez nowe API VizRS CG Playout `GET/PUT /api/live/graphics` (walidacja w CG, zmiana od następnej pozycji bez restartu). Pośrednik `/api/cg/live/graphics` (GET, PUT).
+- **Sloty na żywo – jak nadawać**: przy każdym kanale serwer i klucz RTMP (jak w OBS) oraz adres SRT z hasłem, z „Pokaż” i „Kopiuj”, i krótki opis, kiedy studio przejmuje kanał. Dane z nowego pola `inputs` w `/api/live/state` VizRS CG Playout (`VIZRS_INGEST`, `VIZRS_INGEST_PUBLIC`); bez wejścia – podpowiedź, co ustawić.
 - `tests/real.sh`: prawdziwe Jellyfin, Emby, Plex i VizRS CG Playout obok stosu testowego (Jellyfin i Emby konfigurowane automatycznie, `connect` łączy z nimi legacy) – ręczne sprawdzenie tego, co e2e testuje na atrapach.
 - e2e stabilniejsze: „+ Dodaj zamianę” (R8), wgrywanie obrazu znaku wodnego (R5) i usuwanie deco (R6) czekają na przerysowanie widoku.
 

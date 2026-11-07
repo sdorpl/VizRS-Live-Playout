@@ -50,7 +50,9 @@ function check(cond, msg) {
       if (u === '/api/live/state') return send(200, {
         ingest: true, now,
         channels: [{ number: '24', name: 'INFO24', source: { live: true, audio: true, video: 'h264', seconds: 75 }, on_air: !CG.hold && CG.anytime, hold: CG.hold, anytime: CG.anytime,
-          now: { title: 'Wiadomosci', start: now - 60000, stop: now + 60000, live: false }, next_live: { title: 'Poranek na żywo', start: now + 3600000, stop: now + 7200000, live: true } }],
+          now: { title: 'Wiadomosci', start: now - 60000, stop: now + 60000, live: false }, next_live: { title: 'Poranek na żywo', start: now + 3600000, stop: now + 7200000, live: true },
+          inputs: [{ kind: 'rtmp', host: 'tv.example.pl', port: 1936, app: '/live', key: 'studio-klucz', passphrase: '', streamid: '' },
+            { kind: 'srt', host: '', port: 9000, app: '', key: '', passphrase: 'tajne haslo', streamid: '' }] }],
         events: [{ at: now - 5000, channel: '24', text: 'nadawca połączony' }],
       });
       if (u === '/api/live/shows' && q.method === 'GET') return send(200, { shows: CG.shows, error: null, channels: [{ number: '24', name: 'INFO24' }] });
@@ -1044,6 +1046,12 @@ function check(cond, msg) {
 
   await page.goto(`${BASE}/#live`);
   await page.waitForSelector('main[data-view="live"] [data-live-channel="24"]');
+  // jak nadawać: serwer i klucz RTMP (klucz ukryty, „Pokaż”), SRT z hasłem; host z panelu, gdy CG go nie zna
+  check(await page.inputValue('input[aria-label="Serwer RTMP 24-1"]') === 'rtmp://tv.example.pl:1936/live', 'sloty: serwer RTMP dla OBS');
+  check(await page.getAttribute('input[aria-label="Klucz RTMP 24-1"]', 'type') === 'password' && await page.inputValue('input[aria-label="Klucz RTMP 24-1"]') === 'studio-klucz', 'sloty: klucz strumienia (ukryty)');
+  await page.click('[data-inputs="24"] .input:first-child button:has-text("Pokaż")');
+  check(await page.getAttribute('input[aria-label="Klucz RTMP 24-1"]', 'type') === 'text', 'sloty: „Pokaż” odsłania klucz');
+  check(await page.inputValue('input[aria-label="Adres SRT 24-2"]') === 'srt://127.0.0.1:9000?mode=caller&passphrase=tajne%20haslo', 'sloty: adres SRT z hasłem (host z panelu)');
   check(/NA ANTENIE/.test(await page.textContent('main')), 'sloty: kanał 24 z sygnałem studia NA ANTENIE');
   check(/Poranek na żywo/.test(await page.textContent('main')), 'sloty: audycja LIVE na liście');
   await page.click('button:has-text("■ ZDEJMIJ")');

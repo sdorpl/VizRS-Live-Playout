@@ -4,13 +4,14 @@
 #   Emby      127.0.0.1:18896   (http://vizrs-live-test-emby:8096)
 #   Plex      127.0.0.1:18324   (http://vizrs-live-test-plex:32400; logowanie PIN przez plex.tv – ręcznie)
 #   VizRS CG Playout 127.0.0.1:18701 (binarka z ../VirtRS CG Playout, Live Panel z tokenem, etv_config = dane stosu)
-#   drugi panel VizRS Live 127.0.0.1:18091 podłączony do prawdziwego CG Playout (panel 18090 zostaje na atrapie e2e)
+#   drugi panel VizRS Live 127.0.0.1:18092 podłączony do prawdziwego CG Playout (panel 18090 zostaje na atrapie e2e)
 #
 #   tests/stack.sh up && tests/stack.sh seed   # najpierw stos (legacy, wideo testowe)
 #   tests/real.sh up       # uruchamia usługi; Jellyfin i Emby konfiguruje sam (konto, biblioteka z wideo testowym, klucz API)
 #   tests/real.sh connect  # łączy legacy z Jellyfin i Emby przez panel (klucze z up), z zamianą ścieżek
 #   tests/real.sh status   # adresy, klucze, stan
-#   tests/real.sh down     # zatrzymuje i usuwa kontenery (dane w $DIR/real zostają); reset – też dane
+#   tests/real.sh down     # odłącza legacy od Jellyfin i Emby, zatrzymuje i usuwa kontenery (dane w $DIR/real zostają); reset – też dane
+# Przed tests/stack.sh test zrób tests/real.sh down: pozycje z Jellyfin i Emby zmieniają liczby, których oczekuje e2e.
 #
 # Produkcji (virtrs-*, port 8409) nie dotyka. Obrazy: JELLYFIN_IMAGE, EMBY_IMAGE, PLEX_IMAGE; Plex: PLEX_CLAIM=claim-… (https://plex.tv/claim) – opcjonalnie.
 set -euo pipefail
@@ -29,7 +30,7 @@ CG_TOKEN="real-cg-token-0123456789"
 TOKEN="test-token-0123456789"
 USER_NAME="vizrs"
 USER_PW="vizrs-test-haslo"
-PANEL="http://127.0.0.1:18091"
+PANEL="http://127.0.0.1:18092"
 
 say() { printf '%s\n' "$*"; }
 wait_http() { # wait_http URL [prób]
@@ -106,7 +107,7 @@ JSON
       say "ok   VizRS CG Playout na 127.0.0.1:18701 (dziennik $R/cg/cg.log; bez silnika VizRS – komendy grafiki idą w próżnię)"
     fi
     if ! curl -sf -o /dev/null "$PANEL/api/status"; then
-      nohup server/target/release/vizrs-live --port 18091 --bridge http://127.0.0.1:18409 --bridge-token "$TOKEN" \
+      nohup server/target/release/vizrs-live --port 18092 --bridge http://127.0.0.1:18409 --bridge-token "$TOKEN" \
         --stream-url http://127.0.0.1:18410 --cg-url http://127.0.0.1:18701 --cg-token "$CG_TOKEN" >"$R/panel.log" 2>&1 &
       echo $! >"$R/panel.pid"
       wait_http "$PANEL/api/status" 30
@@ -135,6 +136,11 @@ JSON
     say "panel: $PANEL/  ·  Jellyfin http://127.0.0.1:18196  ·  Emby http://127.0.0.1:18896  ·  Plex http://127.0.0.1:18324/web  ·  konto $USER_NAME / $USER_PW"
     ;;
   down | reset)
+    # legacy z powrotem bez Jellyfin i Emby: ich pozycje psułyby liczby w e2e (tests/stack.sh test)
+    if curl -sf -o /dev/null "$PANEL/api/status"; then
+      for K in Jellyfin Emby; do cmd "Disconnect$K" >/dev/null; done
+      say "legacy odłączony od Jellyfin i Emby"
+    fi
     for f in "$R/cg/pid" "$R/panel.pid"; do [ -f "$f" ] && kill "$(cat "$f")" 2>/dev/null; rm -f "$f"; done
     docker rm -f vizrs-live-test-jellyfin vizrs-live-test-emby vizrs-live-test-plex >/dev/null 2>&1 || true
     # pliki usług należą do bieżącego użytkownika (UID w kontenerach)

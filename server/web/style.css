@@ -219,3 +219,8 @@ img.thumb.sm { max-width: 64px; max-height: 32px; }
 .week .bars .daybar.thin { margin: 0 12px 6px; }
 td.log { font-family: var(--mono, monospace); font-size: 12px; white-space: pre-wrap; word-break: break-word; }
 .logbar select { width: auto; } .logbar input[type=search] { width: auto; flex: 1 1 220px; max-width: 420px; }
+
+.inputs { display: grid; gap: 10px; }
+.inputs .input { border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; }
+.inputs h4 { margin: 0 0 6px; font-size: 13px; }
+.inputs dd.bar input { flex: 1; min-width: 0; }
