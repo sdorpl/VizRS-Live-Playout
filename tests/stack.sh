@@ -59,7 +59,7 @@ case "${1:-}" in
     docker run -d --name "$NAME" --network "$NET" -p 127.0.0.1:18409:8409 -e VIZRS_BRIDGE_TOKEN="$TOKEN" -v "$DIR/config:/config" vizrs-live-legacy:dev >/dev/null
     # proxy jak w compose.yml (docker/proxy.Caddyfile); panel podaje widzom adres proxy
     docker run -d --name "$PROXY_NAME" --network "$NET" -p 127.0.0.1:18410:8409 -e LEGACY_UPSTREAM="$NAME:8409" \
-      -v "$PWD/docker/proxy.Caddyfile:/etc/caddy/Caddyfile:ro" "${PROXY_IMAGE:-caddy:2.10-alpine}" >/dev/null
+      -v "$PWD/docker/proxy.Caddyfile:/etc/caddy/Caddyfile:ro" "${PROXY_IMAGE:-caddy:2.10.2-alpine}" >/dev/null
     wait_bridge
     pkill -f "[v]izrs-live --port 18090" 2>/dev/null || true
     nohup server/target/release/vizrs-live --port 18090 --bridge http://127.0.0.1:18409 --bridge-token "$TOKEN" \

@@ -36,7 +36,7 @@ Cel końcowy: **operator nie korzysta z web GUI ErsatzTV legacy** – wszystko, 
 | R8 | Źródła zewnętrzne: Jellyfin, Emby, Plex (PIN), strumienie zdalne | R3 | zrobione (2026-11-07) |
 | R9 | Grafika VizRS i sloty na żywo (VizRS CG Playout) | R2 | zrobione (2026-11-07) |
 | R10 | Zamknięcie web GUI legacy, proxy, aktualizacje legacy, CI | R1–R8 | zrobione (2026-11-07) |
-| R11 | Wydanie 1.0: instrukcja operatora, obrazy, przegląd bezpieczeństwa | R10 | do zrobienia |
+| R11 | Wydanie 1.0: instrukcja operatora, obrazy, przegląd bezpieczeństwa | R10 | zrobione (2026-11-07) |
 
 ---
 
@@ -161,3 +161,5 @@ Cel końcowy: **operator nie korzysta z web GUI ErsatzTV legacy** – wszystko, 
 ## R11 – Wydanie 1.0
 
 **Zakres:** `docs/INSTRUKCJA.md` dla operatora (codzienna praca: kanał, ramówka, przebudowa, awarie), `docs/RUNBOOK.md` (wdrożenie, kopie `etv-config`, aktualizacja legacy, odtworzenie), obrazy na `ghcr.io/sdorpl/…`, wersje przypięte w `.env.example`, przegląd bezpieczeństwa (tokeny, CSRF, CSP, limity, sekrety R8, proxy R10), CHANGELOG 1.0.0.
+
+**Zrobione (2026-11-07) – decyzje:** obrazy `ghcr.io/sdorpl/vizrs-live:1.0.0` i `vizrs-live-legacy:1.0.0-legacy26.12.0` (tag niesie wersję legacy, bez `latest`), publikacja przez `release.yml` po tagu – nie wykonana (wymaga push, krok ręczny, DOKUMENTACJA §9). Legacy przypięte do v26.12.0, Caddy do 2.10.2. TLS dalej poza panelem (RUNBOOK: LAN/VPN albo proxy TLS; `Secure` przy `X-Forwarded-Proto: https`). Przegląd bezpieczeństwa: dodany limit logowań i pełne CSP na każdej odpowiedzi; ryzyka przyjęte opisane w DOKUMENTACJA §9.

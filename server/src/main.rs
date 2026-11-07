@@ -257,6 +257,34 @@ struct App {
     cfg: Config,
     bridge: Bridge,
     cg: Option<Bridge>,
+    /// nieudane logowania: początek okna i liczba prób (wspólne dla wszystkich klientów)
+    login_fails: std::sync::Mutex<(std::time::Instant, u32)>,
+}
+
+/// Najwyżej tyle nieudanych logowań na [`LOGIN_WINDOW`] – potem 429 do końca okna.
+pub const LOGIN_MAX_FAILS: u32 = 10;
+pub const LOGIN_WINDOW: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// `true` = logowanie zablokowane; `failed` = dolicz nieudaną próbę.
+fn login_limited(app: &App, failed: bool) -> bool {
+    let mut g = app.login_fails.lock().unwrap_or_else(|e| e.into_inner());
+    if g.0.elapsed() >= LOGIN_WINDOW {
+        *g = (std::time::Instant::now(), 0);
+    }
+    if failed {
+        g.1 += 1;
+    }
+    g.1 >= LOGIN_MAX_FAILS
+}
+
+/// Ciasteczko sesji; `Secure`, gdy panel stoi za proxy TLS (`X-Forwarded-Proto: https`).
+fn session_cookie(req: &Request, value: &str, max_age: u32) -> String {
+    let secure = if req.header("x-forwarded-proto") == Some("https") {
+        "; Secure"
+    } else {
+        ""
+    };
+    format!("{COOKIE}={value}; HttpOnly; SameSite=Strict; Path=/; Max-Age={max_age}{secure}")
 }
 
 fn cg_client(c: &Config) -> Option<Bridge> {
@@ -297,6 +325,7 @@ fn main() {
             auth: "X-VizRS-Token",
         },
         cg: cg_client(&cfg),
+        login_fails: std::sync::Mutex::new((std::time::Instant::now(), 0)),
         cfg,
     });
 
@@ -422,22 +451,23 @@ fn route(app: &App, req: &Request) -> Response {
     match (req.method.as_str(), path) {
         ("POST", "/api/login") => {
             let given = String::from_utf8_lossy(&req.body).trim().to_string();
+            if app.cfg.token.is_some() && login_limited(app, false) {
+                return Response::error(429, "za dużo nieudanych logowań – odczekaj minutę");
+            }
             match &app.cfg.token {
-                Some(t) if eq_ct(&given, t) => Response::json(200, "{\"ok\":true}").with_header(
-                    "Set-Cookie",
-                    format!("{COOKIE}={t}; HttpOnly; SameSite=Strict; Path=/; Max-Age=2592000"),
-                ),
+                Some(t) if eq_ct(&given, t) => Response::json(200, "{\"ok\":true}")
+                    .with_header("Set-Cookie", session_cookie(req, t, 2_592_000)),
                 Some(_) => {
+                    login_limited(app, true);
+                    eprintln!("login: zły token");
                     std::thread::sleep(std::time::Duration::from_millis(400));
                     Response::error(401, "zły token panelu")
                 }
                 None => Response::json(200, "{\"ok\":true}"),
             }
         }
-        ("POST", "/api/logout") => Response::json(200, "{\"ok\":true}").with_header(
-            "Set-Cookie",
-            format!("{COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0"),
-        ),
+        ("POST", "/api/logout") => Response::json(200, "{\"ok\":true}")
+            .with_header("Set-Cookie", session_cookie(req, "", 0)),
         _ if !authorized(app, req) => Response::error(401, "zaloguj się tokenem panelu"),
         ("GET", "/api/status") => status(app),
         ("GET", "/api/exposure") => exposure(app),
@@ -804,10 +834,7 @@ fn static_file(app: &App, req: &Request) -> Response {
             return Response::new(200, ct, b);
         }
     }
-    Response::new(200, ct, body.as_bytes().to_vec()).with_header(
-        "Content-Security-Policy",
-        "default-src 'self'; img-src 'self' data: http: https:; frame-src http: https:; connect-src 'self'; style-src 'self'; script-src 'self'".into(),
-    )
+    Response::new(200, ct, body.as_bytes().to_vec())
 }
 
 #[cfg(test)]
@@ -1010,6 +1037,7 @@ mod tests {
                 auth: "X-VizRS-Token",
             },
             cg: None,
+            login_fails: std::sync::Mutex::new((std::time::Instant::now(), 0)),
             cfg: c,
         }
     }
@@ -1135,6 +1163,35 @@ mod tests {
             502,
             "bez tokenu panelu lokalnie wpuszcza"
         );
+    }
+
+    #[test]
+    fn login_limit_and_cookie() {
+        let a = app(Some("0123456789abcdef"));
+        for _ in 0..LOGIN_MAX_FAILS {
+            assert!(!login_limited(&a, false));
+            login_limited(&a, true);
+        }
+        let mut r = req("POST", "/api/login", &[("X-VizRS-Live", "1")]);
+        r.body = b"0123456789abcdef".to_vec();
+        assert_eq!(route(&a, &r).status, 429, "nawet dobry token po 10 błędach");
+        let b = app(Some("0123456789abcdef"));
+        let ok = route(&b, &r);
+        assert_eq!(ok.status, 200);
+        let c = &ok.headers.iter().find(|h| h.0 == "Set-Cookie").unwrap().1;
+        assert!(c.contains("HttpOnly") && c.contains("SameSite=Strict") && !c.contains("Secure"));
+        let mut tls = req(
+            "POST",
+            "/api/login",
+            &[("X-VizRS-Live", "1"), ("X-Forwarded-Proto", "https")],
+        );
+        tls.body = r.body.clone();
+        let c2 = route(&b, &tls);
+        assert!(c2.headers.iter().any(|h| h.1.ends_with("; Secure")));
+        let mut out = Vec::new();
+        Response::json(200, "{}").write_to(&mut out).unwrap();
+        let head = String::from_utf8_lossy(&out);
+        assert!(head.contains("frame-ancestors 'none'") && head.contains("X-Frame-Options: DENY"));
     }
 
     #[test]

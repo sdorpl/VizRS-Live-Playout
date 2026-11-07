@@ -2,6 +2,15 @@
 
 ## Niewydane
 
+## 1.0.0 – wydanie (2026-11-07)
+
+- **Dokumenty**: `docs/INSTRUKCJA.md` (operator: codzienna praca, przebudowa ramówki, awarie) i `docs/RUNBOOK.md` (wdrożenie, kopie `etv-config`, aktualizacja panelu i legacy, odtworzenie, awarie, wydanie).
+- **Obrazy** `ghcr.io/sdorpl/vizrs-live:1.0.0` i `ghcr.io/sdorpl/vizrs-live-legacy:1.0.0-legacy26.12.0` (workflow `release.yml` po tagu `v*`; publikacja – krok ręczny, DOKUMENTACJA §9). `compose.yml` używa ich domyślnie (`docker compose pull`), budowa na miejscu dalej działa.
+- **Wersje przypięte**: `.env.example` – `LIVE_IMAGE`, `LIVE_LEGACY_IMAGE`, `LEGACY_IMAGE=ghcr.io/ersatztv/legacy:v26.12.0`, `PROXY_IMAGE=caddy:2.10.2-alpine`; domyślne legacy w `legacy-bridge.Dockerfile` też v26.12.0.
+- **Bezpieczeństwo** (przegląd, DOKUMENTACJA §9): limit nieudanych logowań (10/min, potem 429) z wpisem w dzienniku; CSP na wszystkich odpowiedziach (też API i `--web`) z `object-src 'none'`, `base-uri 'none'`, `form-action 'self'`, `frame-ancestors 'none'`; ciasteczko `Secure` za proxy TLS (`X-Forwarded-Proto: https`).
+- Wersja panelu i mostu 1.0.0.
+- e2e: osobny panel z tokenem – nagłówki CSP, 401 bez sesji, CSRF, logowanie w UI (zły i dobry token, atrybuty ciasteczka), limit logowań; wersja 1.0.0 panelu i mostu.
+
 - **Web GUI legacy zamknięte** (R10): usługa `proxy` (Caddy, `docker/proxy.Caddyfile`) w `compose.yml` wystawia na 8409 tylko `/iptv/*`, `/artwork/*` (GET/HEAD) i HDHomeRun; web GUI, `/api` legacy i `/vizrs-bridge/*` = 403. Legacy bez portu na zewnątrz (`expose`). `.env.example`: `PROXY_IMAGE`.
 - **Diagnostyka**: „Web GUI legacy dla widzów” (serwer panelu sprawdza adres `--stream-url`: GUI i most zamknięte, M3U otwarte; nowe `GET /api/exposure`) i **lista kontrolna pokrycia** menu legacy → ekrany panelu (pominięcia z uzasadnieniem).
 - Sprawdzone z ErsatzTV legacy **v26.12.0** (smoke, seed na świeżej bazie, e2e) – bez zmian w moście; procedura aktualizacji w DOKUMENTACJA §6 rozpisana.

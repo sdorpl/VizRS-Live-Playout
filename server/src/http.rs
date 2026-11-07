@@ -4,6 +4,8 @@ use std::io::{self, BufRead, BufReader, Read, Write};
 use std::net::TcpStream;
 use std::time::Duration;
 
+/// CSP każdej odpowiedzi (też UI z `--web` i API): bez skryptów i stylów inline, bez osadzania panelu w ramce.
+pub const CSP: &str = "default-src 'self'; img-src 'self' data: http: https:; frame-src http: https:; connect-src 'self'; style-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
 pub const MAX_HEAD: usize = 16 * 1024;
 pub const MAX_BODY: usize = 1024 * 1024;
 /// Limit treści dla wgrywania obrazów (`/api/upload/…`).
@@ -154,11 +156,12 @@ impl Response {
 
     pub fn write_to<W: Write>(&self, mut w: W) -> io::Result<()> {
         let mut head = format!(
-            "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nContent-Length: {}\r\nConnection: close\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nX-Frame-Options: DENY\r\nReferrer-Policy: same-origin\r\n",
+            "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nContent-Length: {}\r\nConnection: close\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nX-Frame-Options: DENY\r\nReferrer-Policy: same-origin\r\nContent-Security-Policy: {}\r\n",
             self.status,
             reason(self.status),
             self.content_type,
-            self.body.len()
+            self.body.len(),
+            CSP
         );
         for (k, v) in &self.headers {
             head.push_str(k);
@@ -185,6 +188,7 @@ pub fn reason(status: u16) -> &'static str {
         405 => "Method Not Allowed",
         413 => "Payload Too Large",
         415 => "Unsupported Media Type",
+        429 => "Too Many Requests",
         500 => "Internal Server Error",
         502 => "Bad Gateway",
         503 => "Service Unavailable",

@@ -2,7 +2,7 @@
 # Budowa (z katalogu repozytorium):
 #   docker build -f docker/legacy-bridge.Dockerfile -t vizrs-live-legacy .
 #   docker build -f docker/legacy-bridge.Dockerfile --build-arg LEGACY_IMAGE=ghcr.io/ersatztv/legacy:<wersja> -t vizrs-live-legacy .
-ARG LEGACY_IMAGE=ghcr.io/ersatztv/legacy:latest
+ARG LEGACY_IMAGE=ghcr.io/ersatztv/legacy:v26.12.0
 ARG DOTNET_SDK=mcr.microsoft.com/dotnet/sdk:10.0
 
 FROM ${LEGACY_IMAGE} AS legacy

@@ -1,6 +1,8 @@
 # VizRS Live – dokumentacja
 
-Wersja 0.4.0, sprawdzona z ErsatzTV legacy **v26.11.6** i **v26.12.0** (obraz `ghcr.io/ersatztv/legacy`, silnik Next; aktualizacja – §6).
+Wersja 1.0.0, sprawdzona z ErsatzTV legacy **v26.11.6** i **v26.12.0** (obraz `ghcr.io/ersatztv/legacy`, silnik Next; wydanie przypięte do **v26.12.0**; aktualizacja – §6).
+
+Instrukcja operatora: [INSTRUKCJA.md](INSTRUKCJA.md). Wdrożenie, kopie, aktualizacja, odtworzenie: [RUNBOOK.md](RUNBOOK.md).
 
 ## 1. Składniki
 
@@ -12,7 +14,7 @@ Wersja 0.4.0, sprawdzona z ErsatzTV legacy **v26.11.6** i **v26.12.0** (obraz `g
 | obraz legacy z mostem | `docker/legacy-bridge.Dockerfile` | `FROM ghcr.io/ersatztv/legacy` + `VizRS.Bridge.dll` + `commands.txt` + 2 zmienne środowiskowe |
 | obraz panelu | `docker/live.Dockerfile` | statyczna binarka musl w `scratch` |
 | proxy dla widzów | `docker/proxy.Caddyfile` (obraz `caddy`, usługa `proxy` w `compose.yml`) | na zewnątrz tylko strumienie, M3U/XMLTV, obrazy i HDHomeRun; web GUI legacy i most – 403 (§8) |
-| CI | `.github/workflows/ci.yml`, `legacy-latest.yml` | bramka na GitHub Actions; co tydzień najnowsze legacy (§7) |
+| CI | `.github/workflows/ci.yml`, `legacy-latest.yml`, `release.yml` | bramka na GitHub Actions; co tydzień najnowsze legacy (§7); wydanie obrazów po tagu `v*` (§9) |
 
 ## 2. Most (VizRS Bridge)
 
@@ -90,7 +92,7 @@ Biała lista: jedna nazwa komendy w wierszu, `#` – komentarz. Nazwy nieznane w
 
 **Pośrednik CG Playout (R9).** Ścieżki panelu → CG Playout: `GET health` → `/health`; `GET ingest/{kanał}` → `/ingest/state?channel=`; `GET pages/{kanał}` → `/etv/pages?channel=`; `GET live/state`, `GET|POST live/shows`, `POST live/shows/scan`, `PUT|DELETE live/shows/{id}`, `PUT live/channels/{kanał}` (`anytime`), `POST live/channels/{kanał}/{hold|release|rebuild}` → `/api/live/…`. Segmenty: litery, cyfry, `-._` (bez `..`). Serwer wysyła `Authorization: Bearer <cg-token>` i `X-Operator: VizRS Live` (dziennik operacji CG Playout), bez `Origin` – CG Playout przyjmuje zmiany od klienta bez `Origin` (sprawdzenie `same_site` w `src/panel.rs` CG). Ustawień panelu CG (`PUT /api/live/settings`: biblioteka Remote Streams, publiczny adres ErsatzTV) pośrednik nie przepuszcza – ustawia się je raz w `/live` CG Playout. Do odpowiedzi stosowane jest to samo maskowanie sekretów co dla komend.
 
-Każde żądanie zmieniające (`POST`, `PUT`, `DELETE`) wymaga nagłówka `X-VizRS-Live: 1` (obce strony nie mogą go wysłać bez CORS – ochrona przed CSRF). Gdy ustawiony jest token panelu, `/api/*` wymaga ciasteczka albo `Authorization: Bearer`. Odpowiedzi mają CSP bez skryptów i stylów inline, `X-Frame-Options: DENY`.
+Każde żądanie zmieniające (`POST`, `PUT`, `DELETE`) wymaga nagłówka `X-VizRS-Live: 1` (obce strony nie mogą go wysłać bez CORS – ochrona przed CSRF). Gdy ustawiony jest token panelu, `/api/*` wymaga ciasteczka albo `Authorization: Bearer`. **Każda** odpowiedź (też API i UI z `--web`) ma CSP (`http::CSP`: bez skryptów i stylów inline, `object-src 'none'`, `base-uri 'none'`, `form-action 'self'`, `frame-ancestors 'none'`), `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Cache-Control: no-store`. Logowanie: najwyżej 10 nieudanych prób na minutę (licznik wspólny dla wszystkich klientów), potem 429 do końca okna – także dla dobrego tokenu; każda nieudana próba czeka 400 ms i trafia do dziennika (`login: zły token`). Ciasteczko dostaje `Secure`, gdy panel stoi za proxy TLS (`X-Forwarded-Proto: https`).
 
 ### UI (`server/web/`)
 
@@ -251,3 +253,41 @@ Operatorzy pracują wyłącznie w panelu. Legacy nie ma portu na zewnątrz (`exp
 2. Administrator, który wyjątkowo potrzebuje web GUI legacy: tunel SSH do sieci Dockera albo tymczasowo `ports: ["127.0.0.1:8410:8409"]` przy usłudze `ersatztv` – nie dla operatorów.
 3. CI zacznie działać po wypchnięciu `.github/workflows/` na GitHub (sesja automatu nie robi push); w ustawieniach repozytorium Actions muszą być włączone. `legacy-latest.yml` nie wymaga sekretów (obraz legacy jest publiczny).
 
+
+## 9. Wydanie 1.0 (R11)
+
+### Obrazy i wersje
+
+| Obraz | Tag | Z czego |
+|---|---|---|
+| `ghcr.io/sdorpl/vizrs-live` | `1.0.0` | `docker/live.Dockerfile` |
+| `ghcr.io/sdorpl/vizrs-live-legacy` | `1.0.0-legacy26.12.0` | `docker/legacy-bridge.Dockerfile` na `ghcr.io/ersatztv/legacy:v26.12.0` |
+| `caddy` (proxy) | `2.10.2-alpine` | obraz oficjalny |
+
+Wszystkie przypięte w `.env.example` (`LIVE_IMAGE`, `LIVE_LEGACY_IMAGE`, `LEGACY_IMAGE`, `PROXY_IMAGE`) i jako domyślne w `compose.yml`; domyślny `LEGACY_IMAGE` w `docker/legacy-bridge.Dockerfile` też `v26.12.0` (stos testowy buduje się więc na wersji wydania; inna: `LEGACY_IMAGE=… tests/stack.sh up`). Publikację robi `.github/workflows/release.yml` po tagu `v<wersja>` (sprawdza zgodność tagu z `Cargo.toml`, przechodzi `tests/gate.sh`, buduje i wypycha oba obrazy z `GITHUB_TOKEN`).
+
+**Decyzje (2026-11-07, sesja automatu – zachowawczo):**
+- Tag obrazu legacy niesie obie wersje (`<panel>-legacy<legacy>`) – most jest sprawdzony z konkretną wersją legacy, więc nazwa mówi, co jest w środku; nowa wersja legacy = nowy tag bez nowego wydania panelu.
+- Brak tagu `latest` na ghcr – produkcja zawsze na przypiętej wersji.
+- TLS: panel i proxy zostają na HTTP (decyzja R10 podtrzymana); w RUNBOOK zalecenie LAN/VPN albo zewnętrzne proxy TLS. Panel nie robi TLS sam (serwer bez zależności).
+
+**Kroki ręczne (sesja automatu niczego nie publikuje):**
+1. `git push origin main` i `git tag v1.0.0 && git push origin v1.0.0` – uruchamia `release.yml`.
+2. Po pierwszej publikacji: pakiety `vizrs-live` i `vizrs-live-legacy` na GitHub ustawić jako publiczne (albo `docker login ghcr.io` na serwerze produkcyjnym).
+3. Produkcja: `.env` wg `.env.example` (nowe zmienne `LIVE_IMAGE`, `LIVE_LEGACY_IMAGE`), kopia `etv-config`, `docker compose pull && docker compose up -d` (RUNBOOK §2–4).
+
+### Przegląd bezpieczeństwa
+
+| Obszar | Stan | Zmiana w 1.0 |
+|---|---|---|
+| tokeny | panel i most: min. 16 znaków, porównanie w stałym czasie (`eq_ct`); most bez tokenu = 503; panel poza 127.0.0.1 nie startuje bez tokenu; token CG zostaje w serwerze | **limit logowań** 10/min (429), wpis w dzienniku przy złym tokenie |
+| sesja | ciasteczko `HttpOnly`, `SameSite=Strict`, 30 dni; wartość = token panelu (wymiana tokenu unieważnia wszystkie sesje – RUNBOOK §6) | `Secure` za proxy TLS |
+| CSRF | `X-VizRS-Live: 1` na każde żądanie zmieniające (też logowanie, `PUT`, `DELETE`), `SameSite=Strict` | e2e na osobnym panelu z tokenem |
+| CSP / XSS | tekst do DOM tylko `textContent`, brak `innerHTML`/`eval` w `server/web/` (sprawdzone `grep`), bez inline | CSP na **wszystkich** odpowiedziach (wcześniej tylko wbudowane UI), dodane `object-src`, `base-uri`, `form-action`, `frame-ancestors` |
+| limity | nagłówki 16 KB, treść 1 MB (wgrywanie 10 MB, tylko PNG/JPEG/GIF/WebP z sygnaturą), 64 połączenia, czas 15 s, bez `Transfer-Encoding` | – |
+| most | biała lista komend, 403 spoza niej; bez `Get…ConnectionParameters`, `TryCompletePlexPinFlow`, `RebuildSearchIndex`; most tylko w sieci Dockera, przez proxy 403 | – |
+| sekrety (R8) | maskowanie `…apikey/token/password/secret` w odpowiedziach komend i CG | – |
+| proxy (R10) | na zewnątrz tylko `GET/HEAD` strumieni, `/artwork/*`, HDHomeRun | obraz przypięty `2.10.2-alpine` |
+| obrazy | panel: `scratch`, użytkownik 10001, statyczna binarka; legacy: obraz upstream bez zmian + 2 pliki | wersje przypięte |
+
+Świadomie pozostawione (ryzyko przyjęte): `img-src`/`frame-src` dopuszczają `http:`/`https:` (podgląd obrazów legacy spod `--stream-url` i `/output` VizRS pod adresem z konfiguracji); ciasteczko = token (brak magazynu sesji w serwerze bez stanu); limit logowań wspólny – atakujący może przez minutę blokować logowanie (operator z ważnym ciasteczkiem pracuje dalej); legacy w kontenerze działa jako root (obraz upstream – bez zmian legacy).

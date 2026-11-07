@@ -622,7 +622,7 @@ function check(cond, msg) {
   // ---------- R6: bloki, szablony dnia, deco, playout blokowy z kalendarzem tygodnia ----------
   const r6 = 'E2E ' + tag;
   // zrzuty ekranu nowych widoków do obejrzenia: E2E_SHOTS=<katalog poza repo>
-  const shot = (n) => (process.env.E2E_SHOTS ? page.screenshot({ path: `${process.env.E2E_SHOTS}/${n}.png`, fullPage: true }) : null);
+  const shot = (n, p = page) => (process.env.E2E_SHOTS ? p.screenshot({ path: `${process.env.E2E_SHOTS}/${n}.png`, fullPage: true }) : null);
   const bgName = r6 + ' bloki', blkA = r6 + ' blok A', blkB = r6 + ' blok B';
   await page.goto(`${BASE}/#bloki`);
   await page.waitForSelector('main[data-view="bloki"]');
@@ -1060,6 +1060,46 @@ function check(cond, msg) {
   await shot('r10-diagnostyka');
   await rerender(() => page.click('.panel:has(h2:text-is("Pokrycie web GUI legacy")) a[href="#harmonogramy"]'));
   check(await page.$('main[data-view="harmonogramy"]') !== null, 'pokrycie: przejście do ekranu panelu');
+
+
+  // ---------- R11: wydanie 1.0 – przegląd bezpieczeństwa (osobny panel z tokenem na 18091) ----------
+  check(st10.panel === '1.0.0' && st10.bridge?.result?.bridge === '1.0.0', `wersja 1.0.0: panel ${st10.panel}, most ${st10.bridge?.result?.bridge}`);
+  const SEC = 'http://127.0.0.1:18091', PTOK = 'e2e-panel-token-0123456789';
+  const secProc = require('child_process').spawn(path.join(__dirname, '..', 'server', 'target', 'release', 'vizrs-live'),
+    ['--port', '18091', '--bridge', 'http://127.0.0.1:18409', '--bridge-token', 'test-token-0123456789', '--token', PTOK], { stdio: 'ignore' });
+  try {
+    for (let i = 0; i < 50; i++) { try { if ((await fetch(`${SEC}/health`)).ok) break; } catch {} await new Promise((r) => setTimeout(r, 100)); }
+    const root = await fetch(`${SEC}/`);
+    const csp = root.headers.get('content-security-policy') || '';
+    check(/script-src 'self'/.test(csp) && /frame-ancestors 'none'/.test(csp) && /object-src 'none'/.test(csp) && root.headers.get('x-frame-options') === 'DENY',
+      'bezpieczeństwo: CSP bez inline, bez ramek i obiektów; X-Frame-Options');
+    const apiCsp = (await fetch(`${SEC}/api/status`)).headers.get('content-security-policy');
+    check(!!apiCsp, 'bezpieczeństwo: CSP także w odpowiedziach API');
+    check((await fetch(`${SEC}/api/status`)).status === 401, 'bezpieczeństwo: API bez logowania = 401');
+    check((await fetch(`${SEC}/api/login`, { method: 'POST', body: PTOK })).status === 403, 'bezpieczeństwo: POST bez X-VizRS-Live (CSRF) = 403');
+    check((await fetch(`${SEC}/api/cmd/GetAllChannels`, { method: 'POST', headers: { 'X-VizRS-Live': '1', Origin: 'http://zla.strona' }, body: '{}' })).status === 401,
+      'bezpieczeństwo: komenda bez sesji odrzucona');
+    // logowanie w UI: zły token, potem dobry
+    const sp = await browser.newPage();
+    await sp.goto(`${SEC}/#antena`);
+    await sp.waitForSelector('#login-token');
+    await shot('r11-logowanie', sp);
+    await sp.fill('#login-token', 'zly-token-0123456789');
+    await sp.click('#dlg-buttons button:has-text("Zaloguj")');
+    await sp.waitForSelector('#toast.bad');
+    check(/zły token/.test(await sp.textContent('#toast')), 'logowanie: zły token – komunikat');
+    await sp.waitForSelector('#login-token');
+    await sp.fill('#login-token', PTOK);
+    await sp.click('#dlg-buttons button:has-text("Zaloguj")');
+    await sp.waitForSelector('main[data-view="antena"] .head h1');
+    const ck = (await sp.context().cookies(SEC)).find((c) => c.name === 'vizrs_live');
+    check(ck && ck.httpOnly && ck.sameSite === 'Strict', 'logowanie: ciasteczko HttpOnly, SameSite=Strict');
+    await sp.close();
+    // limit nieudanych logowań (10 na minutę, wspólny)
+    const tries = await Promise.all(Array.from({ length: 10 }, () => fetch(`${SEC}/api/login`, { method: 'POST', headers: { 'X-VizRS-Live': '1' }, body: 'zle' }).then((r) => r.status)));
+    const after = (await fetch(`${SEC}/api/login`, { method: 'POST', headers: { 'X-VizRS-Live': '1' }, body: PTOK })).status;
+    check(tries.filter((x) => x === 401).length >= 9 && after === 429, `logowanie: po 10 nieudanych próbach 429 nawet dla dobrego tokenu (${after})`);
+  } finally { secProc.kill(); }
 
   check(errors.length === 0, 'brak błędów JS' + (errors.length ? ': ' + errors.join(' | ') : ''));
   await browser.close();

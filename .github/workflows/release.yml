@@ -1,0 +1,53 @@
+# Wydanie (R11): po tagu v* buduje i publikuje obrazy na ghcr.io/sdorpl/…
+#   ghcr.io/sdorpl/vizrs-live:<wersja>                         – panel
+#   ghcr.io/sdorpl/vizrs-live-legacy:<wersja>-legacy<legacy>   – ErsatzTV legacy z mostem
+# Wersja legacy = LEGACY_IMAGE z .env.example (przypięta). Przed publikacją: tests/gate.sh na tej wersji.
+# Uruchamia się dopiero po wypchnięciu tagu (krok ręczny, docs/RUNBOOK.md „Wydanie”).
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  obrazy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      PLAYWRIGHT_DIR: ${{ runner.temp }}/pw
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: wersje
+        run: |
+          V=$(sed -n 's/^version = "\(.*\)"/\1/p' server/Cargo.toml | head -1)
+          L=$(sed -n 's#^LEGACY_IMAGE=##p' .env.example)
+          test "${GITHUB_REF_TYPE}" != tag || test "${GITHUB_REF_NAME}" = "v$V" || { echo "tag $GITHUB_REF_NAME ≠ v$V z Cargo.toml"; exit 1; }
+          echo "V=$V" >> "$GITHUB_ENV"; echo "LEGACY_IMAGE=$L" >> "$GITHUB_ENV"; echo "LV=${L##*:v}" >> "$GITHUB_ENV"
+      - name: Playwright (Chromium)
+        run: |
+          mkdir -p "$PLAYWRIGHT_DIR" && cd "$PLAYWRIGHT_DIR"
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund playwright@1.58.2
+          npx playwright install --with-deps chromium
+      - name: bramka na przypiętej wersji legacy
+        run: tests/gate.sh
+      - name: budowa obrazów
+        run: |
+          docker build -f docker/live.Dockerfile -t ghcr.io/sdorpl/vizrs-live:$V .
+          docker build -f docker/legacy-bridge.Dockerfile --build-arg LEGACY_IMAGE=$LEGACY_IMAGE -t ghcr.io/sdorpl/vizrs-live-legacy:$V-legacy$LV .
+      - name: publikacja
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          docker push ghcr.io/sdorpl/vizrs-live:$V
+          docker push ghcr.io/sdorpl/vizrs-live-legacy:$V-legacy$LV

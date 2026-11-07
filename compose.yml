@@ -1,6 +1,8 @@
 # VizRS Live: ErsatzTV legacy z mostem + panel.
 #   cp .env.example .env   # ustaw tokeny
-#   docker compose up -d --build
+#   docker compose pull && docker compose up -d     # gotowe obrazy ghcr.io/sdorpl/… (wydanie 1.0)
+#   docker compose up -d --build                    # albo budowa na miejscu (np. inna wersja LEGACY_IMAGE)
+# Wdrożenie, kopie, aktualizacja, odtworzenie: docs/RUNBOOK.md
 # Panel: http://<serwer>:8090/  (token panelu: VIZRS_LIVE_TOKEN)
 # Strumienie dla widzów: http://<serwer>:8409/iptv/channels.m3u (przez proxy; web GUI legacy zamknięte – R10)
 services:
@@ -9,8 +11,8 @@ services:
       context: .
       dockerfile: docker/legacy-bridge.Dockerfile
       args:
-        LEGACY_IMAGE: ${LEGACY_IMAGE:-ghcr.io/ersatztv/legacy:latest}
-    image: vizrs-live-legacy:${LEGACY_TAG:-latest}
+        LEGACY_IMAGE: ${LEGACY_IMAGE:-ghcr.io/ersatztv/legacy:v26.12.0}
+    image: ${LIVE_LEGACY_IMAGE:-ghcr.io/sdorpl/vizrs-live-legacy:1.0.0-legacy26.12.0}
     restart: unless-stopped
     environment:
       VIZRS_BRIDGE_TOKEN: ${VIZRS_BRIDGE_TOKEN:?ustaw VIZRS_BRIDGE_TOKEN w .env}
@@ -23,7 +25,7 @@ services:
 
   proxy:
     # na zewnątrz tylko /iptv/*, /artwork/* (GET) i HDHomeRun; reszta 403 (docker/proxy.Caddyfile)
-    image: ${PROXY_IMAGE:-caddy:2.10-alpine}
+    image: ${PROXY_IMAGE:-caddy:2.10.2-alpine}
     restart: unless-stopped
     depends_on: [ersatztv]
     environment:
@@ -37,7 +39,7 @@ services:
     build:
       context: .
       dockerfile: docker/live.Dockerfile
-    image: vizrs-live:latest
+    image: ${LIVE_IMAGE:-ghcr.io/sdorpl/vizrs-live:1.0.0}
     restart: unless-stopped
     depends_on: [ersatztv]
     environment:
