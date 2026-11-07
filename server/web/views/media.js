@@ -5,7 +5,7 @@
 // Ścieżki bibliotek to ścieżki w kontenerze legacy (np. /config/media/…, /media/…), nie na komputerze operatora.
 // Postępu skanu legacy nie udostępnia zapytaniem (idzie przez zdarzenia Blazora) – panel odświeża liczbę pozycji.
 
-import { VIEWS, h, btn, head, panel, pill, cmd, pl, table, toast, dialog, confirmDlg, route, cmdNote, missing, missingNote, S } from '../core.js';
+import { VIEWS, h, btn, head, panel, pill, cmd, pl, table, toast, dialog, confirmDlg, route, cmdNote, missing, missingNote, S, legacyUrl } from '../core.js';
 import { form } from '../form.js';
 import { crudView } from '../parts.js';
 
@@ -142,6 +142,38 @@ const STATE = { Normal: null, FileNotFound: ['brak pliku', 'bad'], Unavailable: 
 const statePill = (s) => (STATE[s] ? pill(...STATE[s]) : s && s !== 'Normal' ? pill(s) : null);
 const PAGE = 50;
 const B = { q: '', tab: 'OtherVideos', page: 1, sel: new Set() }; // sel – zaznaczone MediaItemId bieżącej zakładki
+// widok wyników: tabela albo kafle (jak w makiecie UI), pamiętany w przeglądarce
+const VIEW_KEY = 'vizrs-live-media-view';
+const viewMode = (set) => {
+  try { if (set) localStorage.setItem(VIEW_KEY, set); return localStorage.getItem(VIEW_KEY) || 'tabela'; } catch { return set || 'tabela'; }
+};
+/** Okładka legacy (/artwork/…, otwarte dla widzów przez proxy) – plakat filmu/serialu, miniatura pozostałych; bez obrazu null. */
+function poster(kind, c) {
+  if (!c.Poster) return null;
+  const dir = ['Movies', 'Shows', 'Seasons'].includes(kind) ? 'posters' : 'thumbnails';
+  const src = legacyUrl(`artwork/${dir}/${c.Poster}`);
+  if (!src) return null;
+  const img = h('img', { src, alt: '', loading: 'lazy' });
+  img.addEventListener('error', () => img.remove());
+  return img;
+}
+
+/** Bieżące zapytanie jako kolekcja inteligentna (CreateSmartCollection) – potem Kolekcje. */
+async function saveSmart(q) {
+  const input = h('input', { id: 'smart-name', value: q.length > 40 ? '' : q, placeholder: 'np. Archiwum INFO24' });
+  const ok = await dialog('Zapisz jako kolekcję inteligentną', h('div', { class: 'form' },
+    h('label', { for: 'smart-name' }, 'Nazwa'), input,
+    h('span'), h('span', { class: 'dim mono' }, 'Zapytanie: ' + q),
+    h('span'), h('span', { class: 'dim' }, 'Kolekcja inteligentna to zapisane zapytanie – lista pozycji aktualizuje się sama po skanie bibliotek.')),
+  [['Anuluj', false], ['Zapisz', true, 'acc']]);
+  if (!ok) return;
+  if (!input.value.trim()) return toast('Podaj nazwę kolekcji.', 'bad');
+  try {
+    await cmd('CreateSmartCollection', { Name: input.value.trim(), Query: q });
+    toast(`Zapisano kolekcję inteligentną „${input.value.trim()}”.`, 'ok');
+    location.hash = '#kolekcje';
+  } catch (e) { toast('Legacy odrzucił kolekcję: ' + e.message, 'bad'); }
+}
 
 const FIELDS = 'title:, type:, tag:, genre:, library_name:, state:, minutes:, height:, video_codec:, release_date:, plot:';
 
@@ -199,17 +231,33 @@ VIEWS.przegladarka = async () => {
     b.addEventListener('change', () => { if (b.checked) B.sel.add(c.MediaItemId); else B.sel.delete(c.MediaItemId); showSel(); });
     return b;
   }, ''];
-  const list = table(rows, [...(canAdd ? [pickCol] : []), ['Title', 'Tytuł', { class: 'w' }], ['Subtitle', 'Opis / plik'], [(c) => statePill(c.State), 'Stan'], ['MediaItemId', 'Id', { class: 'num' }]],
-    { onRow: (c) => itemCard(c.MediaItemId, c.Title), empty: B.q ? 'Nic nie pasuje do zapytania.' : 'Brak pozycji tego rodzaju – dodaj bibliotekę i ją zeskanuj.' });
+  const empty = B.q ? 'Nic nie pasuje do zapytania.' : 'Brak pozycji tego rodzaju – dodaj bibliotekę i ją zeskanuj.';
+  const mode = viewMode();
+  const list = mode === 'kafle'
+    ? (rows.length ? h('div', { class: 'cards', 'data-media-tiles': '' }, rows.map((c) => {
+      const tile = h('div', { class: 'mc', tabindex: '0', role: 'button', 'aria-label': `Karta pozycji ${c.Title}` },
+        h('div', { class: 'th' }, poster(B.tab, c) || h('span', null, kindLabel(B.tab))),
+        h('div', { class: 'tx' },
+          h('span', { class: 'bar' }, canAdd ? pickCol[0](c) : null, h('b', null, c.Title)),
+          h('span', { class: 'dim' }, c.Subtitle || ''), statePill(c.State)));
+      const open = (e) => { if (!e.target.closest('input')) itemCard(c.MediaItemId, c.Title); };
+      tile.addEventListener('click', open);
+      tile.addEventListener('keydown', (e) => { if (e.key === 'Enter') open(e); });
+      return tile;
+    })) : h('div', { class: 'empty' }, empty))
+    : table(rows, [...(canAdd ? [pickCol] : []), ['Title', 'Tytuł', { class: 'w' }], ['Subtitle', 'Opis / plik'], [(c) => statePill(c.State), 'Stan'], ['MediaItemId', 'Id', { class: 'num' }]],
+      { onRow: (c) => itemCard(c.MediaItemId, c.Title), empty });
+  const modeBtn = (m, t) => { const b = btn(t, () => { viewMode(m); route(true); }); b.classList.toggle('on', m === mode); b.setAttribute('aria-pressed', String(m === mode)); return b; };
   const pager = pages > 1 ? h('div', { class: 'bar pad pager' },
     btn('‹ Poprzednia', () => { B.page--; route(true); }, B.page <= 1 ? 'off' : null), h('span', { class: 'dim' }, `strona ${B.page} z ${pages} · ${total} poz.`),
     btn('Następna ›', () => { B.page++; route(true); }, B.page >= pages ? 'off' : null)) : h('div', { class: 'bar pad dim' }, `${total} poz.`);
   pager.querySelectorAll('button.off').forEach((b) => (b.disabled = true));
   return [
     head(title, desc),
-    h('div', { class: 'bar searchbar' }, input, btn('Szukaj', go, 'acc'), B.q ? btn('Wyczyść', () => { B.q = ''; B.page = 1; route(); }) : null),
+    h('div', { class: 'bar searchbar' }, input, btn('Szukaj', go, 'acc'), B.q ? btn('Wyczyść', () => { B.q = ''; B.page = 1; route(); }) : null,
+      B.q.trim() && !missing(['CreateSmartCollection']).length ? btn('Zapisz jako kolekcję inteligentną', () => saveSmart(B.q.trim())) : null),
     h('div', { class: 'hint' }, `Bez pola szuka w tytule. Pola: ${FIELDS} Łącz AND / OR / NOT, frazy w cudzysłowie, np. library_name:"Archiwum INFO24".`),
-    panel('Pozycje', h('span', { class: 'dim' }, 'kliknij pozycję, by zobaczyć kartę'), tabs, list, pager,
+    panel('Pozycje', h('span', { class: 'bar' }, h('span', { class: 'dim' }, 'kliknij pozycję, by zobaczyć kartę'), modeBtn('tabela', 'Tabela'), modeBtn('kafle', 'Kafle')), tabs, list, pager,
       canAdd && rows.length ? h('div', { class: 'bar pad' }, btn('Dodaj zaznaczone do…', () => addTo(B.tab), 'acc'), selCount) : null, cmdNote(KINDS.find((k) => k[0] === B.tab)[1], 'QuerySearchIndexAllItems', 'GetMediaItemInfo')),
   ];
 };

@@ -289,3 +289,15 @@ dl.kv dd { flex-wrap: wrap; }
 .monitor video { display: block; width: 100%; aspect-ratio: 16 / 9; background: #000; }
 .monitor .mon-foot { display: flex; align-items: center; gap: 7px; padding: 4px 7px; min-height: 26px; font-size: 12px; }
 .monitor .mon-foot .pill { flex: none; }
+
+/* Przeglądarka mediów: kafle (makieta UI) */
+.cards { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); padding: 12px; }
+.mc { background: var(--panel2); border: 1px solid var(--line); border-radius: 4px; overflow: hidden; cursor: pointer; }
+.mc:hover, .mc:focus-visible { border-color: var(--acc-d); }
+.mc .th { aspect-ratio: 16 / 9; background: linear-gradient(135deg, #2b3c5a, #15181d); display: grid; place-items: center; color: #7f8ba0; font-size: 11px; overflow: hidden; }
+.mc .th img { width: 100%; height: 100%; object-fit: cover; }
+.mc .tx { padding: 6px 8px; display: grid; gap: 2px; min-width: 0; }
+.mc .tx b { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.mc .tx .dim { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; }
+.mc .tx .bar { flex-wrap: nowrap; min-width: 0; }
+.panel > header button.on { border-color: var(--acc); color: var(--acc); }

@@ -448,6 +448,29 @@ function check(cond, msg) {
   await page.waitForSelector('#item-card');
   check(/H\.264/.test(await page.textContent('#item-card')), 'karta pozycji: strumień H.264');
   await page.click('#dlg-buttons button:has-text("Zamknij")');
+  // M4: kafle (pamiętane), karta z kafla, „Zapisz jako kolekcję inteligentną” z zapytania
+  await rerender(() => page.click('main .panel header button:has-text("Kafle")'));
+  check(await page.locator('[data-media-tiles] .mc').count() === 1 && /Pogoda/.test(await page.textContent('[data-media-tiles]')), 'przeglądarka: kafle z wynikiem wyszukiwania');
+  await page.click('[data-media-tiles] .mc');
+  await page.waitForSelector('#item-card');
+  await page.click('#dlg-buttons button:has-text("Zamknij")');
+  const smartName = 'E2E inteligentna ' + Date.now().toString(36);
+  await page.click('button:has-text("Zapisz jako kolekcję inteligentną")');
+  await page.fill('#smart-name', smartName);
+  await page.click('#dlg-buttons button:has-text("Zapisz")');
+  await page.waitForSelector('main[data-view="kolekcje"]');
+  const smartOk = await page.evaluate(async (n) => {
+    const call = (c, b) => fetch('/api/cmd/' + c, { method: 'POST', headers: { 'X-VizRS-Live': '1', 'Content-Type': 'application/json' }, body: JSON.stringify(b || {}) }).then((r) => r.json());
+    const s = ((await call('GetAllSmartCollections')).result || []).find((x) => x.Name === n);
+    if (s) await call('DeleteSmartCollection', { SmartCollectionId: s.Id });
+    return s?.Query;
+  }, smartName);
+  check(smartOk === 'Pogoda', `przeglądarka: zapytanie zapisane jako kolekcja inteligentna (${smartOk}), potem usunięta`);
+  await page.goto(`${BASE}/#przegladarka`);
+  await page.waitForSelector('[data-media-tiles]');
+  await rerender(() => page.click('main .panel header button:has-text("Tabela")'));
+  await page.fill('#media-q', 'Pogoda');
+  await rerender(() => page.press('#media-q', 'Enter'));
   // M0: okno zamyka się przy zmianie ekranu (wcześniej zostawało nad kolejnymi ekranami)
   await page.click('main tbody tr');
   await page.waitForSelector('#item-card');
