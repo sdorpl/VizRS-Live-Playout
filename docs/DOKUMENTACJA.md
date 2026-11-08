@@ -6,7 +6,7 @@ Instrukcja operatora: [INSTRUKCJA.md](INSTRUKCJA.md). Wdrożenie, kopie, aktuali
 
 ## Spis treści
 
-1. [Składniki](#1-składniki)
+1. [Składniki](#1-składniki) – w tym [pakiet VizRS i zgodność](#pakiet-vizrs--zgodność-aplikacji)
 2. [Most (VizRS Bridge)](#2-most-vizrs-bridge) – wpięcie, API, konfiguracja
 3. [Panel (vizrs-live)](#3-panel-vizrs-live) – opcje, API panelu, UI
 4. [Ekrany](#4-ekrany) – tabela ekranów i komend, szczegóły i decyzje
@@ -29,6 +29,23 @@ Instrukcja operatora: [INSTRUKCJA.md](INSTRUKCJA.md). Wdrożenie, kopie, aktuali
 | wpięcie w stos CG Playout | `compose.cg-playout.yml` | nakładka na `docker-compose.yml` VizRS CG Playout: `ersatztv` → legacy z mostem bez portu, `proxy`, `live` z `http://cg:7700` (RUNBOOK §2a) |
 | akceleracja sprzętowa | `compose.vaapi.yml`, `compose.nvidia.yml` | nakładki przekazujące kartę graficzną (Intel/AMD VAAPI/QSV, NVIDIA NVENC przez CDI) do usługi `ersatztv` (RUNBOOK §2b) |
 | CI | `.github/workflows/ci.yml`, `legacy-latest.yml`, `release.yml`, `drafts.yml` | bramka na GitHub Actions; co tydzień najnowsze legacy (§7); wydanie (obrazy amd64/arm64, binarki, wydanie GitHub) po tagu `v*` albo ręcznie jako szkic (§9); usuwanie szkiców |
+
+### Pakiet VizRS – zgodność aplikacji
+
+VizRS Live to jedna z kilku aplikacji pakietu VizRS. Aplikacje pakietu mają być **zawsze ze sobą zgodne**: bieżące wersje wszystkich repozytoriów działają razem, w jednym stosie.
+
+| Repozytorium (katalogi obok, `../`) | Rola | Styk z VizRS Live |
+|---|---|---|
+| [VizRS CG System](../../VizRS%20CG%20System) | silnik grafiki: Trio (playout stron), `/output`, API TCP 6100 / HTTP / SSE; tu też plan rodziny (`docs/plany/PLAN-vizrs-live.md`) | przeglądarka operatora: ramka `/output` (też anteny kanałów `bus=ch-N`) i odnośniki do Trio (`--vizrs-url`, `--vizrs-output-token`, `--vizrs-channels`; §3, §4) |
+| [VizRS CG Playout](../../VirtRS%20CG%20Playout) (katalog `VirtRS CG Playout`) | grafika VizRS i sloty na żywo na kanałach ErsatzTV (sidecar `cg`) | serwer panelu przez pośrednika `/api/cg/…`: `/health`, `/etv/pages`, `/ingest/state`, `/api/live/*` (`--cg-url`, `--cg-token`; §3); wspólny stos `compose.cg-playout.yml` (RUNBOOK §2a) |
+| **VizRS Live** (to repo) | panel kanału nad ErsatzTV legacy | – |
+| [VizRS CG Artist](../../VizRS%20CG%20Artist) | samodzielny edytor grafik i animacji (sceny dla VizRS CG System) | brak bezpośredniego – sceny z Artist trafiają do VizRS CG System, a stamtąd na kanał (strony VizRS w Grafice kanału) |
+
+Zasady zgodności:
+
+- **Styk zmienia się w obu repozytoriach naraz.** Zmiana API, pól odpowiedzi, parametrów lub zmiennych wspólnego stosu (`compose.cg-playout.yml`) po jednej stronie wymaga dostosowania drugiej strony i jej dokumentacji, zanim wejdzie do wydania. Opis styku jest po stronie dostawcy (API CG Playout – jego DOKUMENTACJA §1 „Live API”, protokół VizRS – `docs/API.md` w VizRS CG System); tu – jak panel z niego korzysta (§3 pośrednik CG, §4).
+- **Starsza wersja sąsiada nie psuje panelu.** Brak nowego pola lub ścieżki (404) panel pokazuje jako „niedostępne w tej wersji” z podpowiedzią, a nie jako błąd (wzór: reguły grafiki i `inputs` przy starszym CG Playout, §4).
+- **Wydania razem.** Przed wydaniem VizRS Live sprawdź z bieżącymi wersjami CG Playout i VizRS CG System (lokalny stos `virtrs-*`, `tests/deploy.sh`); zmianę wymagającą nowszego sąsiada odnotuj w `CHANGELOG.md` z minimalną wersją.
 
 ## 2. Most (VizRS Bridge)
 
@@ -136,7 +153,7 @@ Nowy plik w `server/web/` trzeba dopisać do `STATIC` w `server/src/main.rs`; te
 | Ekran | Komendy legacy | Prototyp 0.1 |
 |---|---|---|
 | Przewodnik EPG | `GetAllChannels`, `GetPagedPlayouts`, `GetFuturePlayoutItemsById`; CG Playout `GET /api/live/state` (`guide`) | wszystkie włączone kanały w wierszach (bez playoutu – „brak playoutu” z odnośnikiem), linijka godzin, linia „teraz”, bieżąca pozycja wyróżniona, wypełniacze przygaszone; okno 4 h: „teraz”, „4 h →”, „← 4 h” (wstecz tylko do „teraz” – legacy podaje tylko przyszłe pozycje), data i godziny okna w nagłówku; pozycje krótsze niż 1,5 % okna (3,6 min) sklejone w bloki „pierwsza +N” do 30 min, pełna lista w podpowiedzi; audycje LIVE (pozycja legacy, której start ±90 s zgadza się z `live` w ramówce CG) – czerwona ramka i „●” |
-| Na antenie | `GetAllChannels`, `GetPagedPlayouts`, `GetFuturePlayoutItemsById`, `BuildPlayout`; CG Playout `GET /api/live/state` | karta kanału: teraz / następnie z postępem, przebudowa i reset playoutu, **ramka VizRS `/output` na antenie kanału** (przy `--vizrs-channels`; bez anten kanałów jedna wspólna ramka z wyborem po prawej); **„Najbliższe zdarzenia”** – pozycje ramówki wszystkich kanałów i najbliższe audycje LIVE z CG (`next_live`, pigułka LIVE); **„Uwagi”** – kanał bez playoutu, błąd budowy playoutu (komunikat legacy), przerwa w ramówce (leci wypełniacz zapasowy), CG Playout nie odpowiada, studio wstrzymane, slot na żywo w ciągu godziny bez sygnału studia – z odnośnikiem do Playoutów albo Slotów. Odświeżanie co 30 s podmienia tylko treść kart, list i uwag (karty i ramki VizRS zostają – bez przeładowania grafiki); inny zestaw kanałów = przerysowanie ekranu. **„Podgląd ▶”** – strumień kanału w oknie podglądu (`/api/stream/…`, §3) |
+| Na antenie | `GetAllChannels`, `GetPagedPlayouts`, `GetFuturePlayoutItemsById`, `BuildPlayout`; CG Playout `GET /api/live/state` | układ wg makiety UI (2026-11-08): w nagłówku licznik „N/M kanałów w ramówce” (czerwony, gdy wszystkie mają bieżącą pozycję) i „Otwórz Trio ↗” (antena główna; przy antenach kanałów Trio jest na kartach); karta kanału: stan w nagłówku (NA ANTENIE – jest bieżąca pozycja, ZASTĘPCZY – przerwa w ramówce, leci wypełniacz zapasowy, BRAK PLAYOUTU), **ramka VizRS `/output` na antenie kanału** z plakietką „NA ŻYWO”, gdy studio jest na antenie (`on_air` z CG; przy `--vizrs-channels` antena kanału; bez anten kanałów główna antena – w karcie, gdy na ekranie jest jedna karta, przy wielu kartach jedna wspólna ramka z wyborem po prawej), teraz (pigułka „wypełniacz” przy pozycji wypełniacza) / następnie z postępem, **wiersz stanu studia z CG** (studio NA ANTENIE, sygnał studia, studio wstrzymane, studio także poza audycjami, najbliższy slot LIVE z godziną – w makiecie były tu warstwy grafiki, ale CG Playout ich nie podaje), przebudowa i reset playoutu; **„Najbliższe zdarzenia”** – godzina z sekundami, pozycje ramówki wszystkich kanałów (dopisek „wypełniacz”) i najbliższe audycje LIVE z CG (`next_live`, pigułka LIVE); **„Uwagi”** – kanał bez playoutu, błąd budowy playoutu (komunikat legacy), przerwa w ramówce (leci wypełniacz zapasowy), CG Playout nie odpowiada, studio wstrzymane, slot na żywo w ciągu godziny bez sygnału studia – z odnośnikiem do Playoutów albo Slotów. Odświeżanie co 30 s podmienia tylko treść kart, list i uwag (karty i ramki VizRS zostają – bez przeładowania grafiki); inny zestaw kanałów = przerysowanie ekranu. **„Podgląd ▶”** – strumień kanału w oknie podglądu (`/api/stream/…`, §3) |
 | Kanały | `GetAllChannels`, `CreateChannel`, `UpdateChannel`, `DeleteChannel`, `SaveArtworkToDisk` (logo, przez `/api/upload/Logo`) (+ profile, znaki, wypełniacze do list wyboru) | **pełna edycja** (wzorzec „lista + edytor”, formularz z metadanych; „Kanał lustrzany” tylko dla źródła Mirror); logo: wgrany obraz albo adres URL, z podglądem |
 | Profile kodowania | `GetAllFFmpegProfiles`, `NewFFmpegProfile`, `CreateFFmpegProfile`, `UpdateFFmpegProfile`, `CopyFFmpegProfile`, `DeleteFFmpegProfile`, `GetAllResolutions`, `GetSupportedHardwareAccelerationKinds` (+ kanały) | **pełna edycja**: rozdzielczość, obraz, akceleracja z informacją o sprzęcie, dźwięk z normalizacją głośności (−23 LUFS), nowy z wartościami domyślnymi legacy, kopiuj, usuń (z listą kanałów) |
 | Znaki wodne | `GetAllWatermarks`, `CreateWatermark`, `UpdateWatermark`, `CopyWatermark`, `DeleteWatermark`, `SaveArtworkToDisk` (przez `/api/upload/Watermark`) (+ kanały) | **pełna edycja**: wgrany obraz albo logo kanału, tryb (stały, przerywany, wyrażenie krycia), 9 położeń, rozmiar, marginesy, krycie, warstwa; podgląd na makiecie kadru 16:9; miniatury na liście |

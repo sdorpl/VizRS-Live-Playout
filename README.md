@@ -4,6 +4,10 @@ Część rodziny **VizRS**. Polski panel do prowadzenia kanałów telewizyjnych 
 
 > **Stan: 1.2.2** (najnowsze ErsatzTV legacy, sprawdzone z v26.12.0; operator: [docs/INSTRUKCJA.md](docs/INSTRUKCJA.md), administrator: [docs/RUNBOOK.md](docs/RUNBOOK.md)). Działa end-to-end: pełna edycja kanałów, harmonogramów (ramówka klasyczna z pozycjami), playoutów (wszystkie rodzaje, harmonogramy zastępcze, kalendarz tygodnia playoutu blokowego), bloków i szablonów dnia, deco i szablonów deco, bibliotek i mediów (przeglądarka, kosz), kolekcji (zwykłe, inteligentne, wielo-, powtórki), playlist z podglądem, profili kodowania, znaków wodnych, wypełniaczy i logo kanału, ustawień legacy; logi, konserwacja, test odtwarzania i podgląd strumienia kanału, podgląd ramówki i EPG, diagnostyka, konsola komend. Grafika VizRS i sloty na żywo (przez VizRS CG Playout); web GUI legacy zamknięte za proxy (R10, sprawdzone też z legacy v26.12.0); stan prac: [docs/STATUS.md](docs/STATUS.md). Plan: [PLAN-vizrs-live.md](../VizRS%20CG%20System/docs/plany/PLAN-vizrs-live.md) w VizRS CG System.
 
+## Pakiet VizRS
+
+VizRS Live to jedna z kilku aplikacji pakietu VizRS, które mają być ze sobą **zawsze zgodne**: [VizRS CG System](../VizRS%20CG%20System) (silnik grafiki, Trio, `/output`), [VizRS CG Playout](../VirtRS%20CG%20Playout) (grafika i sloty na żywo na kanałach ErsatzTV), **VizRS Live** (to repo) i [VizRS CG Artist](../VizRS%20CG%20Artist) (edytor grafik i animacji). Styki i zasady zgodności: [DOKUMENTACJA §1](docs/DOKUMENTACJA.md#pakiet-vizrs--zgodność-aplikacji).
+
 ## Jak to działa
 
 ```
