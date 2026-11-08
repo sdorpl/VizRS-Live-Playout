@@ -6,7 +6,7 @@
 
 ## Bieżący etap
 
-**Wydanie 1.2.1** (2026-11-07) na najnowszym ErsatzTV legacy (sprawdzone z v26.12.0 i v26.11.6). Zrobione w całości: plan rozbudowy R0–R12 i plan makiety M0–M9; zawartość wydań: [CHANGELOG.md](../CHANGELOG.md). W 1.2.1 względem 1.1.0 (1.2.0 – tag bez publikacji): panel na wzór makiety UI (liczniki w menu, wybór kanału, Na antenie z ramką VizRS, EPG, kafle mediów, kolekcje, playouty, siatka tygodnia bloków, reguły grafiki i wejścia studia w tabelach, Ustawienia w panelach, „Stan” stosu), limit logowań na adres klienta, poprawiona integracja z VizRS (Trio, `/output`), legacy zawsze najnowsze, działające workflow wydań (amd64 + arm64), akceleracja Intel/AMD/NVIDIA sprawdzana w obrazie legacy przed publikacją.
+**Wydanie 1.2.2** (2026-11-08) na najnowszym ErsatzTV legacy (sprawdzone z v26.12.0 i v26.11.6). Zrobione w całości: plan rozbudowy R0–R12 i plan makiety M0–M9; zawartość wydań: [CHANGELOG.md](../CHANGELOG.md). W 1.2.1 względem 1.1.0 (1.2.0 – tag bez publikacji): panel na wzór makiety UI (liczniki w menu, wybór kanału, Na antenie z ramką VizRS, EPG, kafle mediów, kolekcje, playouty, siatka tygodnia bloków, reguły grafiki i wejścia studia w tabelach, Ustawienia w panelach, „Stan” stosu), limit logowań na adres klienta, poprawiona integracja z VizRS (Trio, `/output`), legacy zawsze najnowsze, działające workflow wydań (amd64 + arm64), akceleracja Intel/AMD/NVIDIA sprawdzana w obrazie legacy przed publikacją.
 
 **Grafika i sloty na żywo** – przez **VizRS CG Playout** (`../VizRS CG Playout`): reguły grafiki (`/api/live/graphics`), stan wejść, przejęcie kanału, audycje LIVE. Logika zostaje w CG Playout; panel woła jego API przez pośrednika `/api/cg/…`.
 
@@ -34,7 +34,7 @@ Plan [PLAN-makieta.md](plany/PLAN-makieta.md) (panel na wzór makiety UI) zrobio
 
 Sesje automatu niczego nie publikują i nie ruszają produkcji; to zostało do zrobienia ręcznie:
 
-- Wydanie 1.2.1: tag `v1.2.1` wypchnięty 2026-11-07 (v1.2.0 – bramka nie przeszła, bez publikacji); wydanie opublikowane (obrazy ghcr amd64 + arm64, binarki, notka); pakiety ghcr `vizrs-live` i `vizrs-live-legacy` publiczne (sprawdzone anonimowo 2026-11-07).
+- Wydanie 1.2.2: tag `v1.2.2` wypchnięty 2026-11-08 (razem z VizRS CG Playout v2.11.1); pakiety ghcr publiczne.
 - Lokalna produkcja (stos `virtrs` CG Playout) przełączona 2026-11-07 na VizRS Live nakładką `compose.cg-playout.yml` (RUNBOOK §2a): legacy v26.11.6 → v26.12.0 z mostem (migracja bazy; kopia w `~/vizrs-kopie/`), proxy na 8409, panel na 8090, CG Playout z live API. Do sprawdzenia: tunery i odtwarzacze, które korzystały z innych ścieżek niż `/iptv/*` (`curl -I`, DOKUMENTACJA §8).
 - Produkcja (stos `virtrs`) po poprawce integracji z VizRS (Trio, podgląd `/output`): przebudować obraz panelu (`vizrs-live:local`), w `.env` CG Playout usunąć `VIZRS_LIVE_VIZRS_URL=http://127.0.0.1:8789` (nakładka ustawi `:8789` = host panelu, token wyjścia i anteny kanałów), `docker compose up -d live`; sprawdzić ramkę w Grafice kanału i „Trio ↗”.
 - ~~Produkcja (stos `virtrs`) – legacy zawsze najnowsze~~ – zrobione 2026-11-07 21:15: kopia `~/vizrs-kopie/etv-config-2026-11-07-2114-przed-legacy-latest.tgz` i `.env`, `LIVE_LEGACY_IMAGE` usunięte z `.env` CG Playout, `ersatztv` na `vizrs-live-legacy:local` (najnowsze legacy = v26.12.0, most 1.2.0, `commandsMissing = []`, NVIDIA przez CDI, `tests/hwaccel.sh` zielony).

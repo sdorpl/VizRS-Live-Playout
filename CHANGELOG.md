@@ -2,6 +2,9 @@
 
 ## Niewydane
 
+## 1.2.2 – wydanie (2026-11-08)
+
+- Wersja panelu i mostu 1.2.2 (obrazy `ghcr.io/sdorpl/vizrs-live:1.2.2`, `ghcr.io/sdorpl/vizrs-live-legacy:1.2.2` – amd64 + arm64); działa z VizRS CG Playout 2.11.1 (strefy grafiki `VIZRS_AREA=auto`, `VIZRS_FFMPEG_CUDA=encode`).
 - Diagnostyka → „Stan”: wiersz „strefy grafiki” – strefy przebiegów nakładki CG Playout przy `VIZRS_AREA=auto` (PLAN-strefy S5 w CG Playout), % ekranu, grafika poza strefami jako UWAGA.
 - CI i publikacja działają (LUKI #7 zamknięta): `ci.yml` zielone od 2026-11-07, wydanie v1.2.1 opublikowane, pakiety ghcr publiczne.
 ## 1.2.1 – wydanie (2026-11-07)

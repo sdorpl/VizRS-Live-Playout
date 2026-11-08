@@ -4,9 +4,9 @@ Wdrożenie, kopie, aktualizacja legacy, odtworzenie. Praca operatora: [INSTRUKCJ
 
 ## 1. Składniki i porty
 
-| Usługa (`compose.yml`) | Obraz (wydanie 1.2.1) | Port na zewnątrz |
+| Usługa (`compose.yml`) | Obraz (wydanie 1.2.2) | Port na zewnątrz |
 |---|---|---|
-| `live` – panel | `ghcr.io/sdorpl/vizrs-live:1.2.1` | 8090 – operatorzy |
+| `live` – panel | `ghcr.io/sdorpl/vizrs-live:1.2.2` | 8090 – operatorzy |
 | `ersatztv` – legacy z mostem | `vizrs-live-legacy:local` – budowany na miejscu na najnowszym `ghcr.io/ersatztv/legacy` + VizRS Bridge, ffmpeg z VAAPI/QSV/NVENC (§2b) | brak (`expose`) |
 | `proxy` – Caddy | `caddy:2.10.2-alpine` | 8409 – widzowie: strumienie, M3U, XMLTV, HDHomeRun |
 
