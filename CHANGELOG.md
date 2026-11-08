@@ -2,6 +2,9 @@
 
 ## Niewydane
 
+## 1.2.3 – wydanie (2026-11-08)
+
+- Wersja panelu i mostu 1.2.3 (obrazy `ghcr.io/sdorpl/vizrs-live:1.2.3`, `ghcr.io/sdorpl/vizrs-live-legacy:1.2.3` – amd64 + arm64); działa z VizRS CG Playout 2.12.0 (wejścia studia ustawiane z panelu).
 - **Wejścia studia ustawiane w panelu**: Sloty na żywo → „Ustaw wejścia…” (i „+ Dodaj wejście” przy kanale bez wejścia) – kanał, RTMP/SRT, port, klucz albo hasło („Losuj”); zapis przez API VizRS CG Playout (`/api/live/inputs`, pośrednik `live/inputs`), odbiorniki przejmują zmianę w kilka sekund bez restartu. Wymaga VizRS CG Playout z `/api/live/inputs` (2026-11-08); `VIZRS_INGEST` zostaje pierwszym wypełnieniem.
 - **Na antenie wg makiety UI**: licznik „N/M kanałów w ramówce” i „Otwórz Trio ↗” w nagłówku; karta kanału ze stanem NA ANTENIE / ZASTĘPCZY / BRAK PLAYOUTU, plakietką „NA ŻYWO” na ramce VizRS, gdy studio jest na antenie, pigułką „wypełniacz” i wierszem stanu studia z CG Playout (sygnał, wstrzymane, poza audycjami, najbliższy slot LIVE); przerwa w ramówce opisana jak w makiecie („Wypełniacz zapasowy” z tym, co następne); „Najbliższe zdarzenia” z sekundami i dopiskiem wypełniacza / audycji na żywo.
 

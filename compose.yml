@@ -41,7 +41,7 @@ services:
     build:
       context: .
       dockerfile: docker/live.Dockerfile
-    image: ${LIVE_IMAGE:-ghcr.io/sdorpl/vizrs-live:1.2.2}
+    image: ${LIVE_IMAGE:-ghcr.io/sdorpl/vizrs-live:1.2.3}
     restart: unless-stopped
     depends_on: [ersatztv]
     environment:
