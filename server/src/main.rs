@@ -858,6 +858,7 @@ pub fn cg_path(method: &str, rest: &str) -> Option<String> {
         ("GET", ["live", "state"]) => "/api/live/state".into(),
         ("GET" | "PUT", ["live", "graphics"]) => "/api/live/graphics".into(),
         ("PUT", ["live", "settings"]) => "/api/live/settings".into(),
+        ("GET" | "PUT", ["live", "inputs"]) => "/api/live/inputs".into(),
         ("GET", ["live", "shows"]) | ("POST", ["live", "shows"]) => "/api/live/shows".into(),
         ("POST", ["live", "shows", "scan"]) => "/api/live/shows/scan".into(),
         ("PUT" | "DELETE", ["live", "shows", id]) => format!("/api/live/shows/{id}"),
@@ -1391,6 +1392,11 @@ mod tests {
             Some("/api/live/settings")
         );
         assert_eq!(cg_path("GET", "live/settings"), None);
+        assert_eq!(
+            cg_path("PUT", "live/inputs").as_deref(),
+            Some("/api/live/inputs")
+        );
+        assert_eq!(cg_path("DELETE", "live/inputs"), None);
         assert_eq!(operator_name(None), "VizRS Live");
         assert_eq!(operator_name(Some("  ")), "VizRS Live");
         assert_eq!(

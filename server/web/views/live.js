@@ -35,7 +35,7 @@ function tick() {
 }
 
 // ---------- Sloty na żywo: dane nadawania ----------
-// Dane nadawania z CG Playout (`inputs` kanału, z VIZRS_INGEST): RTMP – serwer i klucz jak w OBS, SRT – adres z hasłem.
+// Dane nadawania z CG Playout (`inputs` kanału: wejścia z panelu albo VIZRS_INGEST): RTMP – serwer i klucz jak w OBS, SRT – adres z hasłem.
 // Host nieznany (VIZRS_INGEST_PUBLIC puste) = host, z którego operator otwiera panel.
 const copyBtn = (label, text) => btn('Kopiuj', async () => {
   try { await navigator.clipboard.writeText(text); toast(`Skopiowano: ${label}`); } catch { toast('Przeglądarka nie pozwoliła skopiować – zaznacz i skopiuj ręcznie.', 'bad'); }
@@ -64,8 +64,8 @@ function plainField(label, value, aria) {
 function inputsBox(c) {
   const list = c.inputs || [];
   if (!list.length) {
-    return h('div', { class: 'note', 'data-inputs': c.number }, 'Ten kanał nie ma wejścia studia. Wejścia ustawia się w VizRS CG Playout: VIZRS_INGEST (np. „' + c.number +
-      '=rtmp://0.0.0.0:1936/live/<klucz>”) w usługach ingest i cg, adres dla nadawców w VIZRS_INGEST_PUBLIC.');
+    return h('div', { class: 'note', 'data-inputs': c.number }, 'Ten kanał nie ma wejścia studia. ',
+      btn('+ Dodaj wejście', () => editInputs(c.number)));
   }
   return h('div', { class: 'inputs', 'data-inputs': c.number }, list.map((i, n) => {
     const host = i.host || location.hostname;
@@ -83,6 +83,74 @@ function inputsBox(c) {
         ...(i.passphrase ? secretField('Hasło (passphrase)', i.passphrase, `Hasło SRT ${id}`) : [])),
       h('p', { class: 'dim' }, 'Nadawca w trybie caller; w OBS: Serwer = cały adres SRT, Klucz pusty.'));
   }));
+}
+
+// ---------- Sloty na żywo: ustawianie wejść ----------
+// Lista wejść CG Playout (/api/live/inputs, plik inputs.json); odbiorniki CG przejmują ją w ciągu kilku sekund, bez restartu.
+// Adres odbiornika: rtmp://0.0.0.0:<port>/live/<klucz> albo srt://0.0.0.0:<port>?passphrase=<hasło>; porty tylko z zakresu wystawionego przez compose CG.
+const randomKey = () => Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => b.toString(16).padStart(2, '0')).join('');
+
+function parseInput(l) {
+  const m = /^(rtmp|srt):\/\/[^/:?]*:(\d+)([^?]*)\??(.*)$/i.exec(l.url) || [];
+  const kind = (m[1] || 'rtmp').toLowerCase();
+  const path = m[3] || '';
+  const params = new URLSearchParams(m[4] || '');
+  const secret = kind === 'rtmp' ? path.split('/').pop() : params.get('passphrase') || '';
+  params.delete('passphrase');
+  return { channel: l.channel, kind, port: +m[2] || 0, app: kind === 'rtmp' ? path.slice(0, path.length - secret.length - 1) || '/live' : '', secret, rest: params.toString() };
+}
+
+function inputUrl(r) {
+  if (r.kind === 'rtmp') return `rtmp://0.0.0.0:${r.port}${r.app || '/live'}/${r.secret}`;
+  const q = [r.secret ? `passphrase=${r.secret}` : '', r.rest].filter(Boolean).join('&');
+  return `srt://0.0.0.0:${r.port}` + (q ? `?${q}` : '');
+}
+
+async function editInputs(forChannel) {
+  let data;
+  try { data = await cg('live/inputs'); } catch (e) {
+    toast(/nie ma takiego adresu|brak tej funkcji/.test(e.message) ? 'Ten VizRS CG Playout nie pozwala ustawiać wejść z panelu – zaktualizuj go (VIZRS_INGEST w jego .env działa nadal).' : e.message, 'bad');
+    return;
+  }
+  const ports = data.ports || { rtmp: [1936, 1943], srt: [9000, 9007] };
+  const range = (k) => { const [a, b] = ports[k]; return Array.from({ length: b - a + 1 }, (_, i) => a + i); };
+  const rows = (data.listeners || []).map(parseInput);
+  const freePort = (kind) => range(kind).find((p) => !rows.some((r) => r.kind === kind && r.port === p)) || ports[kind][0];
+  const channels = [...new Set([...(view?.state.channels || []).map((c) => c.number), ...rows.map((r) => r.channel)])];
+  const nameOf = (n) => (view?.state.channels || []).find((c) => c.number === n)?.name || '';
+  if (forChannel != null) rows.push({ channel: forChannel, kind: 'rtmp', port: freePort('rtmp'), app: '/live', secret: randomKey(), rest: '' });
+  const list = h('div', { class: 'inputs-edit', 'data-inputs-edit': '' });
+  const opt = (v, t, sel) => h('option', { value: String(v), selected: sel }, t);
+  function draw() {
+    list.replaceChildren(...(rows.length ? rows.map((r, n) => {
+      const ch = h('select', { 'aria-label': `Kanał wejścia ${n + 1}` }, channels.map((c) => opt(c, `${c} ${nameOf(c)}`.trim(), c === r.channel)));
+      ch.addEventListener('change', () => { r.channel = ch.value; });
+      const kind = h('select', { 'aria-label': `Rodzaj wejścia ${n + 1}` }, opt('rtmp', 'RTMP', r.kind === 'rtmp'), opt('srt', 'SRT', r.kind === 'srt'));
+      kind.addEventListener('change', () => { r.kind = kind.value; r.port = freePort(r.kind); r.app = '/live'; draw(); });
+      const port = h('select', { 'aria-label': `Port wejścia ${n + 1}` }, range(r.kind).map((p) => opt(p, String(p), p === r.port)));
+      if (!range(r.kind).includes(r.port)) port.prepend(opt(r.port, `${r.port} (spoza zakresu)`, true));
+      port.addEventListener('change', () => { r.port = +port.value; });
+      const secret = h('input', { value: r.secret, class: 'mono grow', placeholder: r.kind === 'rtmp' ? 'klucz strumienia' : 'hasło 10–79 znaków (puste = bez hasła)', 'aria-label': `${r.kind === 'rtmp' ? 'Klucz' : 'Hasło'} wejścia ${n + 1}` });
+      secret.addEventListener('input', () => { r.secret = secret.value.trim(); });
+      return h('div', { class: 'bar' }, ch, kind, port, secret,
+        btn('Losuj', () => { r.secret = randomKey(); draw(); }),
+        btn('×', () => { rows.splice(n, 1); draw(); }, 'danger'));
+    }) : [h('div', { class: 'empty' }, 'Brak wejść – żaden kanał nie przyjmie sygnału ze studia.')]),
+    btn('+ Wejście', () => { rows.push({ channel: channels[0] || '1', kind: 'rtmp', port: freePort('rtmp'), app: '/live', secret: randomKey(), rest: '' }); draw(); }));
+  }
+  draw();
+  const body = h('div', null,
+    h('p', { class: 'dim' }, `Każde wejście to osobny port: RTMP ${ports.rtmp[0]}–${ports.rtmp[1]}, SRT ${ports.srt[0]}–${ports.srt[1]} (UDP). ` +
+      'Klucz RTMP i hasło SRT to hasła nadawcy – po zmianie podaj je nadawcy na nowo. Zapis działa w ciągu kilku sekund, bez restartu; trwający sygnał na zmienionym wejściu zostanie przerwany.'),
+    data.from === 'env' ? h('p', { class: 'dim' }, 'Teraz obowiązuje VIZRS_INGEST z konfiguracji CG Playout; po zapisie – lista z panelu.') : null,
+    data.ingest ? null : h('div', { class: 'note warn' }, 'Odbiór sygnałów w CG Playout jest wyłączony (brak VIZRS_INGEST_TOKEN) – wejścia zapiszą się, ale nie zadziałają.'),
+    list);
+  if (!await dialog('Wejścia studia', body, [['Anuluj', false], ['Zapisz', true, 'acc']])) return;
+  try {
+    await cg('live/inputs', 'PUT', { listeners: rows.map((r) => ({ channel: r.channel, url: inputUrl(r) })) });
+    toast('Wejścia zapisane w CG Playout – odbiorniki przejmą je w ciągu kilku sekund');
+  } catch (e) { toast(e.message, 'bad'); }
+  route(true);
 }
 
 // ---------- Sloty na żywo: karta kanału ----------
@@ -170,7 +238,7 @@ function inputsTable(list) {
     [({ i }) => { const [a, extra] = inputAddr(i); return h('span', null, h('span', { class: 'mono' }, a), h('span', { class: 'dim' }, extra)); }, 'Adres'],
     [({ c }) => (c.hold ? pill('wstrzymany', 'warn') : c.source?.live ? pill(c.on_air ? 'nadaje · na antenie' : 'nadaje', c.on_air ? 'on' : 'ok') : pill('czeka')), 'Stan'],
     [({ c }) => (c.source?.live ? `${c.source.video || '?'} · ${c.source.audio ? 'z dźwiękiem' : 'bez dźwięku'}` : h('span', { class: 'dim' }, 'brak sygnału')), 'Obraz'],
-  ], { empty: 'Żaden kanał nie ma wejścia studia (VIZRS_INGEST w VizRS CG Playout).' });
+  ], { empty: 'Żaden kanał nie ma wejścia studia – „Ustaw wejścia…”.' });
 }
 
 // ---------- Sloty na żywo: ramówka i zdarzenia ----------
@@ -274,7 +342,8 @@ VIEWS.live = async () => {
       'Gdy sygnał dojdzie, kanał przechodzi na studio od pierwszej klatki kluczowej: zawsze („studio także poza audycjami”) albo tylko w czasie audycji LIVE z ramówki. ' +
       'Grafika VizRS zostaje na wierzchu. Koniec nadawania = powrót do ramówki. ZDEJMIJ (dwa kliknięcia) odcina studio mimo sygnału, aż do WPUŚĆ.'),
     root,
-    panel('Wejścia studia', h('span', { class: 'dim' }, 'stan sygnału; klucze i hasła – „Jak nadawać na ten kanał” w karcie kanału'), view.inputs, cmdNote('CG Playout /api/live/state (inputs, source)')),
+    panel('Wejścia studia', h('span', { class: 'bar' }, h('span', { class: 'dim' }, 'stan sygnału; klucze i hasła – „Jak nadawać na ten kanał” w karcie kanału'),
+      btn('Ustaw wejścia…', () => editInputs())), view.inputs, cmdNote('CG Playout /api/live/state (inputs, source), /api/live/inputs')),
   ];
 };
 

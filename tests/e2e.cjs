@@ -81,6 +81,10 @@ function check(cond, msg) {
       if ((m = u.match(/^\/api\/live\/shows\/([\w.-]+)$/)) && q.method === 'DELETE') { CG.shows = CG.shows.filter((x) => x.id !== m[1]); return send(200, { ok: true }); }
       if ((m = u.match(/^\/api\/live\/channels\/24\/(hold|release)$/))) { CG.hold = m[1] === 'hold'; return send(200, { ok: true }); }
       if (u === '/api/live/channels/24' && q.method === 'PUT') { CG.anytime = body.anytime; return send(200, { ok: true }); }
+      if (u === '/api/live/inputs' && q.method === 'GET') {
+        return send(200, { listeners: CG.inputs || [{ channel: '24', url: 'rtmp://0.0.0.0:1936/live/studio-klucz' }], from: CG.inputs ? 'panel' : 'env', store: true, ingest: true, ports: { rtmp: [1936, 1943], srt: [9000, 9007] } });
+      }
+      if (u === '/api/live/inputs' && q.method === 'PUT') { CG.inputs = body.listeners; return send(200, { listeners: CG.inputs, from: 'panel' }); }
       if (u === '/api/live/graphics' && q.method === 'GET') return send(200, CG.graphics);
       if (u === '/api/live/graphics' && q.method === 'PUT') {
         // jak CG Playout: wyrażenie, które się nie kompiluje, = 400 i nic się nie zmienia
@@ -1208,6 +1212,17 @@ function check(cond, msg) {
   const inTab = await page.textContent('[data-inputs-table]');
   check(inTab.includes('rtmp://tv.example.pl:1936/live') && /nadaje/.test(inTab) && /h264 · z dźwiękiem/.test(inTab) && !inTab.includes('studio-klucz') && !inTab.includes('tajne'),
     'sloty: tabela wejść – adres bez klucza i hasła, stan, obraz');
+  // wejścia studia ustawiane z panelu (CG Playout GET/PUT /api/live/inputs)
+  await page.click('button:has-text("Ustaw wejścia…")');
+  await page.waitForSelector('[data-inputs-edit]');
+  check(await page.inputValue('input[aria-label="Klucz wejścia 1"]') === 'studio-klucz', 'wejścia: bieżące z CG Playout (klucz RTMP)');
+  await page.click('[data-inputs-edit] button:has-text("+ Wejście")');
+  await page.selectOption('select[aria-label="Rodzaj wejścia 2"]', 'srt');
+  await page.fill('input[aria-label="Hasło wejścia 2"]', 'haslo-studia-2');
+  await page.click('#dlg-buttons button:has-text("Zapisz")');
+  await page.waitForSelector('#overlay', { state: 'hidden' });
+  const saved = JSON.stringify(CG.inputs || []);
+  check(saved.includes('rtmp://0.0.0.0:1936/live/studio-klucz') && saved.includes('srt://0.0.0.0:9000?passphrase=haslo-studia-2'), 'wejścia: zapis listy do CG Playout (RTMP 1936, SRT 9000 z hasłem)');
   // M9: logi ze źródłem – zdarzenia VizRS CG Playout
   await page.goto(`${BASE}/#logi`);
   await page.waitForSelector('main[data-view="logi"] #log-src');
