@@ -369,6 +369,10 @@ function check(cond, msg) {
   check(await page.$eval(cardFrame, (f) => f.dataset.mark) === '1', 'antena: odświeżenie nie przeładowuje ramki VizRS');
   check(/nie ma playoutu/.test(await page.textContent('[data-notes]')), 'antena: uwaga – kanał bez playoutu');
   check(/Poranek na żywo/.test(await page.textContent('main .panel:has(h2:text-is("Najbliższe zdarzenia"))')), 'antena: audycja LIVE z CG w najbliższych zdarzeniach');
+  check(/LIVE \d\d:\d\d · Poranek na żywo/.test(await page.textContent('.panel:has(h2:text-is("24 · INFO24")) [data-cg-state]') || ''),
+    'antena: stan studia z CG na karcie kanału (najbliższy slot LIVE)');
+  check(/\d+\/\d+ kanał(ów)? w ramówce/.test(await page.textContent('main .head')), 'antena: licznik kanałów w ramówce w nagłówku');
+  check(/^\d\d:\d\d:\d\d$/.test(await page.textContent('main .panel:has(h2:text-is("Najbliższe zdarzenia")) .ev .num')), 'antena: zdarzenia z sekundami');
 
   // harmonogram zastępczy na sobotę + codzienna przebudowa
   await page.goto(`${BASE}/#playouty`);

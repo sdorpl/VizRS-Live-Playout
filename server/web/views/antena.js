@@ -1,7 +1,7 @@
 // Widoki grupy „Antena”: Na antenie, Przewodnik EPG.
 
 import { openMonitor } from '../player.js';
-import { S, VIEWS, h, btn, pill, head, panel, cmdNote, toast, confirmDlg, cmd, api, route, pl, hm, dur, isFiller, trioLink, vizrsPreview, vizrsUrl, onChannel } from '../core.js';
+import { S, VIEWS, h, btn, pill, head, panel, cmdNote, toast, confirmDlg, cmd, api, route, pl, hm, hms, dur, isFiller, trioLink, vizrsPreview, vizrsUrl, onChannel } from '../core.js';
 
 /** Przebudowa playoutu przez kolejkę legacy (też w widoku Playouty). */
 export async function build(p, mode) {
@@ -33,49 +33,68 @@ VIEWS.antena = async () => {
   };
   let d = await load();
   const key = (x) => x.channels.map((c) => c.Number).join(',');
+  // Bez anten kanałów główna antena VizRS idzie na każdy kanał: przy jednej karcie ramka w karcie (jak w makiecie),
+  // przy wielu – jedna wspólna po prawej, żeby nie renderować tej samej grafiki kilka razy.
+  const inCard = !!S.status?.vizrsUrl && (multi || d.channels.length === 1);
+  const cgOf = (c) => (d.cgState instanceof Error ? null : d.cgState?.channels?.find((x) => String(x.number) === String(c.Number))) || null;
 
   // karty: szkielet (z ramką VizRS) raz, treść podmieniana przy odświeżeniu
   let progressEls = [];
   const slots = d.channels.map((c) => {
     const state = h('span');
     const body = h('div', { class: 'chan-dyn' });
-    const frame = multi ? h('iframe', { class: 'preview', title: `Grafika VizRS kanału ${c.Number}`, 'data-vizrs-output': '', src: vizrsUrl('/output', c.Number) }) : null;
-    return { c, state, body, el: panel(`${c.Number} · ${c.Name}`, state, h('div', { class: 'chan' }, frame, body)) };
+    const badge = h('span', { class: 'live', hidden: '' }, 'NA ŻYWO');
+    const frame = inCard ? h('div', { class: 'vframe' },
+      h('iframe', { class: 'preview', title: multi ? `Grafika VizRS kanału ${c.Number}` : 'Grafika VizRS (antena główna)', 'data-vizrs-output': '', src: vizrsUrl('/output', c.Number) }), badge) : null;
+    return { c, state, body, badge, el: panel(`${c.Number} · ${c.Name}`, state, h('div', { class: 'chan' }, frame, body)) };
   });
+  const summary = h('span');
   const eventsBox = h('div');
   const notesBox = h('div');
 
   const fill = () => {
     const now = Date.now();
     progressEls = [];
-    slots.forEach(({ c, state, body }, i) => {
+    let airing = 0;
+    slots.forEach(({ c, state, body, badge }, i) => {
       const p = d.byNumber.get(c.Number);
       const list = d.items[i];
+      const cg = cgOf(c);
       const cur = list.find((it) => new Date(it.Start) <= now && now < new Date(it.Finish));
       const next = list.filter((it) => new Date(it.Start) > now).slice(0, 3);
+      if (cur) airing++;
+      badge.hidden = !cg?.on_air;
       const bar = h('i');
       const left = h('span', { class: 'num' });
       if (cur) progressEls.push({ bar, left, start: +new Date(cur.Start), finish: +new Date(cur.Finish) });
-      state.replaceChildren(!p ? pill('brak playoutu', 'warn') : cur ? pill('W RAMÓWCE', 'on') : pill('przerwa w ramówce', 'warn'));
+      state.replaceChildren(!p ? pill('BRAK PLAYOUTU', 'warn') : cur ? pill('NA ANTENIE', 'on') : pill('ZASTĘPCZY', 'warn'));
       const stream = S.status.streamUrl ? h('a', { href: `${S.status.streamUrl}/iptv/channel/${encodeURIComponent(c.Number)}.m3u8`, target: '_blank', rel: 'noopener' }, 'Strumień ↗') : null;
+      const nextLine = next.length ? h('div', { class: 'dim' }, 'Następnie: ', next.map((n, j) => [j ? ' · ' : '', h('span', { class: 'num' }, hm(new Date(n.Start))), ' ', n.Title])) : null;
       body.replaceChildren(
         cur
           ? h('div', { class: 'np' },
-            h('div', { class: 'now' }, h('b', null, cur.Title), h('span', { class: 'dim num' }, `${hm(new Date(cur.Start))}–${hm(new Date(cur.Finish))}`), h('span', { class: 'grow' }), left),
-            h('div', { class: 'prog' }, bar))
-          : h('div', { class: 'dim' }, p ? 'Teraz nic nie jest zaplanowane – leci wypełniacz zapasowy kanału.' : 'Kanał nie ma playoutu – załóż go w widoku Playouty.'),
-        next.length ? h('div', { class: 'dim' }, 'Następnie: ', next.map((n, j) => [j ? ' · ' : '', h('span', { class: 'num' }, hm(new Date(n.Start))), ' ', n.Title])) : null,
+            h('div', { class: 'now' }, h('b', null, cur.Title), isFiller(cur) ? pill('wypełniacz') : null,
+              h('span', { class: 'dim num' }, `${hm(new Date(cur.Start))}–${hm(new Date(cur.Finish))}`), h('span', { class: 'grow' }), left),
+            h('div', { class: 'prog' }, bar), nextLine)
+          : h('div', { class: 'np' },
+            h('div', { class: 'now' }, h('b', null, p ? 'Wypełniacz zapasowy' : 'Brak ramówki'),
+              h('span', { class: 'dim' }, p ? 'teraz nic nie jest zaplanowane' : 'kanał nie ma playoutu – załóż go w widoku Playouty')),
+            nextLine),
+        cgPills(cg, now),
         h('div', { class: 'bar' },
           btn('Podgląd ▶', () => openMonitor(c.Number)),
-          p ? btn('Przebuduj', () => build(p, 'Refresh')) : null,
+          p ? btn('Przebuduj playout', () => build(p, 'Refresh')) : null,
           p ? btn('Od nowa', () => build(p, 'Reset'), 'danger') : null,
           stream,
           trioLink(c.Number)));
     });
+    const total = slots.length;
+    summary.replaceChildren(total ? pill(`${airing}/${total} ${total === 1 ? 'kanał' : 'kanałów'} w ramówce`, airing === total ? 'on' : 'warn') : null);
     const ev = upcoming(d);
     eventsBox.replaceChildren(ev.length
-      ? h('div', { class: 'tl' }, ev.map((e) => h('div', { class: 'ev' }, h('span', { class: 'num' }, hm(new Date(e.t))), pill(e.ch),
-        h('span', null, e.live ? [pill('LIVE', 'on'), ' '] : null, e.title, e.filler ? h('span', { class: 'dim' }, ' (wypełniacz)') : null))))
+      ? h('div', { class: 'tl' }, ev.map((e) => h('div', { class: 'ev' }, h('span', { class: 'num' }, hms(new Date(e.t))), pill(e.ch),
+        h('span', null, e.live ? [pill('LIVE', 'on'), ' '] : null, e.title,
+          e.live ? h('span', { class: 'dim k' }, ' · audycja na żywo – studio przez CG Playout') : e.filler ? h('span', { class: 'dim k' }, ' · wypełniacz') : null))))
       : h('div', { class: 'empty' }, 'Brak zaplanowanych pozycji.'));
     const ns = notes(d);
     notesBox.replaceChildren(ns.length
@@ -102,17 +121,32 @@ VIEWS.antena = async () => {
   S.timers.push(setInterval(tick, 1000), setInterval(refresh, 30000));
 
   return [
-    head('Na antenie', 'Co teraz idzie w ramówce każdego kanału, co następne i na co uważać. Dane z playoutów legacy i VizRS CG Playout, odświeżane co 30 s.',
-      btn('Odśwież', () => refresh())),
+    h('div', { class: 'head' }, h('h1', null, 'Na antenie'), summary, h('span', { class: 'grow' }),
+      multi ? null : trioLink('', 'Otwórz Trio ↗'),
+      btn('Odśwież', () => refresh()),
+      h('p', null, 'Co teraz leci w ramówce każdego kanału, co następne, jaka grafika VizRS jest na wizji i czy studio jest na antenie. Dane z playoutów legacy i VizRS CG Playout, odświeżane co 30 s.')),
     h('div', { class: 'split wide' },
       h('div', { class: 'cols' }, slots.length ? slots.map((x) => x.el) : h('div', { class: 'note' }, 'Brak włączonych kanałów. Dodaj kanał w widoku Kanały.')),
       h('div', { class: 'cols' },
-        multi ? null : vizrsPreview('Grafika VizRS (/output)', d.channels.map((c) => [String(c.Number), `${c.Number} · ${c.Name}`])),
+        inCard ? null : vizrsPreview('Grafika VizRS (/output)', d.channels.map((c) => [String(c.Number), `${c.Number} · ${c.Name}`])),
         panel('Najbliższe zdarzenia', null, eventsBox),
         panel('Uwagi', null, notesBox))),
     panel('Most', null, cmdNote('GetAllChannels', 'GetPagedPlayouts', 'GetFuturePlayoutItemsById', 'BuildPlayout', 'CG Playout GET /api/live/state')),
   ];
 };
+
+/** Wiersz stanu studia z CG Playout pod „teraz” (w makiecie – warstwy grafiki; CG nie podaje warstw, więc tylko to, co wie). */
+function cgPills(cg, now) {
+  if (!cg) return null;
+  const out = [];
+  if (cg.on_air) out.push(pill('studio NA ANTENIE', 'on'));
+  else if (cg.source?.live) out.push(pill('sygnał studia', 'ok'));
+  if (cg.hold) out.push(pill('studio wstrzymane', 'warn'));
+  if (cg.anytime) out.push(pill('studio także poza audycjami'));
+  const nl = cg.next_live;
+  if (nl && nl.start > now) out.push(pill(`LIVE ${hm(new Date(nl.start))} · ${nl.title}`, 'info'));
+  return out.length ? h('div', { class: 'layers', 'data-cg-state': '' }, out) : null;
+}
 
 /** Najbliższe zdarzenia: pozycje ramówki legacy wszystkich kanałów + najbliższe audycje LIVE z CG Playout. */
 function upcoming(d) {

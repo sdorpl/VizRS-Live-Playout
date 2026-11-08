@@ -106,11 +106,17 @@ pre.out { margin: 0; font: 12px/1.5 var(--mono); background: #0e0f12; border: 1p
 .np .now b { font-size: 14px; }
 .prog { height: 5px; background: #2a2e35; border-radius: 3px; overflow: hidden; }
 .prog i { display: block; height: 100%; width: 0; background: var(--acc); }
-.preview { aspect-ratio: 16 / 9; width: 100%; border: 1px solid var(--line); border-radius: 4px; background: repeating-conic-gradient(#26282d 0 25%, #1c1e22 0 50%) 0 0 / 20px 20px; }
+/* color-scheme jak w dokumencie VizRS (bez własnego) – inaczej przeglądarka maluje pod przezroczystym /output białe tło */
+.preview { color-scheme: normal; aspect-ratio: 16 / 9; width: 100%; border: 1px solid var(--line); border-radius: 4px; background: repeating-conic-gradient(#26282d 0 25%, #1c1e22 0 50%) 0 0 / 20px 20px; }
 .chan-dyn { display: grid; gap: 10px; }
+.vframe { position: relative; }
+.vframe .preview { display: block; }
+.vframe .live { position: absolute; top: 6%; left: 4%; background: var(--red); color: #fff; font: 700 10px var(--sans); padding: 2px 6px; border-radius: 2px; letter-spacing: .06em; pointer-events: none; }
+.layers { display: flex; gap: 4px; flex-wrap: wrap; }
 .alert { display: flex; gap: 8px; padding: 8px 10px; border-bottom: 1px solid #23262c; align-items: baseline; }
 .alert .pill { flex: none; }
-.tl .ev { display: grid; grid-template-columns: 52px 92px minmax(0, 1fr); gap: 8px; padding: 6px 10px; border-bottom: 1px solid #23262c; align-items: baseline; }
+.tl .ev .k { font-size: 11px; }
+.tl .ev { display: grid; grid-template-columns: 64px 92px minmax(0, 1fr); gap: 8px; padding: 6px 10px; border-bottom: 1px solid #23262c; align-items: baseline; }
 
 /* EPG */
 .epg { display: grid; grid-template-columns: 130px minmax(760px, 1fr); }
