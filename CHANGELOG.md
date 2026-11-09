@@ -2,6 +2,10 @@
 
 ## Niewydane
 
+## 1.2.5 – wydanie (2026-11-09)
+
+- **Sterowanie anteną w Na antenie**: emisja kanału – „Uruchom emisję”, „Restart emisji”, „Zatrzymaj emisję” z pigułką stanu sesji legacy (most: `GET /vizrs-bridge/sessions`, `POST /vizrs-bridge/session/{kanał}/stop`; panel: `/api/sessions`, `/api/session/{kanał}/{start|stop|restart}`); **„Zdejmij grafikę” / „Przywróć grafikę”** – cała grafika VizRS ze wszystkich kanałów (pośrednik `live/graphics/off|on`). Wymaga mostu z tej wersji i VizRS CG Playout z `/api/live/graphics/off|on` (2026-11-09).
+
 ## 1.2.4 – wydanie (2026-11-09)
 
 - **Optymalizacja pod Oracle Ampere A1 (ARM64, Neoverse-N1):**

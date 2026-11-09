@@ -17,6 +17,8 @@ Pasek górny: **wybór kanału** (obok nazwy panelu – Na antenie, EPG, Playout
 | Chcę… | Ekran | Jak |
 |---|---|---|
 | zobaczyć, co leci teraz i dalej | **Na antenie** | teraz / następnie z postępem, najbliższe pozycje każdego kanału; w nagłówku ile kanałów ma bieżącą pozycję, na karcie stan (NA ANTENIE / ZASTĘPCZY – przerwa w ramówce), grafika VizRS kanału z plakietką „NA ŻYWO”, gdy studio jest na antenie, i stan studia z CG Playout (sygnał, wstrzymane, najbliższy slot LIVE) |
+| zatrzymać, uruchomić albo zrestartować emisję kanału | **Na antenie**, karta kanału | **Uruchom emisję** (gdy kanał nie nadaje), **Restart emisji**, **Zatrzymaj emisję** (oba z potwierdzeniem); pigułka „emisja: …” pokazuje stan sesji legacy. Zatrzymany kanał ruszy znowu, gdy ktoś poprosi o strumień – na dłużej wyłącz kanał w **Kanałach** |
+| zdjąć albo przywrócić całą grafikę | **Na antenie**, nagłówek | **Zdejmij grafikę** (z potwierdzeniem) zdejmuje grafikę VizRS ze wszystkich kanałów od razu; pigułka „GRAFIKA ZDJĘTA” i uwaga przypominają o tym, **Przywróć grafikę** ją wraca. Wymaga VizRS CG Playout |
 | obejrzeć kanał | **Podgląd** (pasek górny) albo **Podgląd ▶** na karcie kanału w Na antenie | okno w prawym dolnym rogu, zostaje przy zmianie ekranów; obraz idzie równo z zegarem anteny (stan „NA ŻYWO”); dźwięk domyślnie wyłączony („Dźwięk”), „Większy”, „Pełny” (pełny ekran), × zamyka. Gdy kanału nikt nie ogląda, start trwa do kilkunastu sekund |
 | sprawdzić przewodnik | **Przewodnik EPG** | oś 4 h wszystkich kanałów |
 | dodać / zmienić kanał | **Kanały** | „+ Nowy kanał”, formularz, „Załóż kanał”; zmiana → „Zapisz”; logo: wgraj obraz albo podaj adres |

@@ -13,14 +13,41 @@ export async function build(p, mode) {
   } catch (e) { toast(e.message, 'bad'); }
 }
 
+const SESSION_PL = { start: 'uruchomiona', stop: 'zatrzymana', restart: 'zrestartowana' };
+
+/** Emisja kanału w legacy: start, stop, restart sesji nadawania (POST /api/session/{kanał}/…). */
+async function session(c, action, after) {
+  if (action !== 'start' && !(await confirmDlg(action === 'stop' ? 'Zatrzymaj emisję' : 'Restart emisji',
+    action === 'stop'
+      ? `Zatrzymać emisję kanału ${c.Number} · ${c.Name}? Widzowie stracą obraz. Legacy uruchomi kanał znowu, gdy widz poprosi o strumień.`
+      : `Zrestartować emisję kanału ${c.Number} · ${c.Name}? Obraz u widzów przerwie się na kilka sekund.`,
+    action === 'stop' ? 'Zatrzymaj' : 'Restartuj'))) return;
+  try {
+    await api(`/api/session/${encodeURIComponent(c.Number)}/${action}`, { method: 'POST', body: '{}' });
+    toast(`Kanał ${c.Number}: emisja ${SESSION_PL[action]}.`, 'ok');
+  } catch (e) { toast(`Emisja kanału ${c.Number}: ${e.message}`, 'bad'); }
+  after();
+}
+
+/** Cała grafika VizRS na wszystkich kanałach: zdjęcie albo przywrócenie (CG Playout /api/live/graphics/off|on). */
+async function graphicsSwitch(off, after) {
+  if (off && !(await confirmDlg('Zdejmij grafikę', 'Zdjąć całą grafikę VizRS ze wszystkich kanałów? Od następnej klatki wizja idzie bez grafiki, aż do „Przywróć grafikę”.', 'Zdejmij grafikę'))) return;
+  try {
+    await api(`/api/cg/live/graphics/${off ? 'off' : 'on'}`, { method: 'POST', body: '{}' });
+    toast(off ? 'Grafika zdjęta z anteny na wszystkich kanałach.' : 'Grafika przywrócona.', off ? 'bad' : 'ok');
+  } catch (e) { toast('Grafika: ' + e.message, 'bad'); }
+  after();
+}
+
 VIEWS.antena = async () => {
   // Ramka VizRS w karcie kanału tylko przy antenach kanałów (--vizrs-channels); inaczej jedna wspólna po prawej.
   const multi = !!(S.status?.vizrsUrl && S.status.vizrsChannels);
   const load = async () => {
-    const [allChannels, playouts, cgState] = await Promise.all([
+    const [allChannels, playouts, cgState, sessions] = await Promise.all([
       cmd('GetAllChannels', { ShowDisabled: false }),
       cmd('GetPagedPlayouts', { Query: '', PageNum: 0, PageSize: 500 }),
-      S.status?.cg ? api('/api/cg/live/state').then((r) => r.result).catch((e) => e) : null]);
+      S.status?.cg ? api('/api/cg/live/state').then((r) => r.result).catch((e) => e) : null,
+      api('/api/sessions').then((r) => r.result || []).catch((e) => e)]);
     const channels = allChannels.filter((c) => onChannel(c.Number));
     const byNumber = new Map((playouts?.Page || []).map((p) => [p.ChannelNumber, p]));
     const items = await Promise.all(channels.map(async (c) => {
@@ -29,13 +56,14 @@ VIEWS.antena = async () => {
       try { return (await cmd('GetFuturePlayoutItemsById', { PlayoutId: p.PlayoutId, ShowFiller: true, PageNum: 0, PageSize: 8 }))?.Page || []; }
       catch { return []; }
     }));
-    return { channels, byNumber, items, cgState };
+    return { channels, byNumber, items, cgState, sessions };
   };
   let d = await load();
   const key = (x) => x.channels.map((c) => c.Number).join(',');
   // Bez anten kanałów główna antena VizRS idzie na każdy kanał: przy jednej karcie ramka w karcie (jak w makiecie),
   // przy wielu – jedna wspólna po prawej, żeby nie renderować tej samej grafiki kilka razy.
   const inCard = !!S.status?.vizrsUrl && (multi || d.channels.length === 1);
+  const sessionOf = (c) => (d.sessions instanceof Error ? undefined : d.sessions.find((x) => String(x.ChannelNumber) === String(c.Number)) || null);
   const cgOf = (c) => (d.cgState instanceof Error ? null : d.cgState?.channels?.find((x) => String(x.number) === String(c.Number))) || null;
 
   // karty: szkielet (z ramką VizRS) raz, treść podmieniana przy odświeżeniu
@@ -49,6 +77,7 @@ VIEWS.antena = async () => {
     return { c, state, body, badge, el: panel(`${c.Number} · ${c.Name}`, state, h('div', { class: 'chan' }, frame, body)) };
   });
   const summary = h('span');
+  const gfx = h('span', { class: 'bar', 'data-graphics': '' });
   const eventsBox = h('div');
   const notesBox = h('div');
 
@@ -67,7 +96,9 @@ VIEWS.antena = async () => {
       const bar = h('i');
       const left = h('span', { class: 'num' });
       if (cur) progressEls.push({ bar, left, start: +new Date(cur.Start), finish: +new Date(cur.Finish) });
-      state.replaceChildren(!p ? pill('BRAK PLAYOUTU', 'warn') : cur ? pill('NA ANTENIE', 'on') : pill('ZASTĘPCZY', 'warn'));
+      const ses = sessionOf(c);
+      state.replaceChildren(...[!p ? pill('BRAK PLAYOUTU', 'warn') : cur ? pill('NA ANTENIE', 'on') : pill('ZASTĘPCZY', 'warn'),
+        ses === undefined ? null : ses ? pill(`emisja: ${ses.State}`, 'on') : pill('emisja zatrzymana')].filter(Boolean));
       const stream = S.status.streamUrl ? h('a', { href: `${S.status.streamUrl}/iptv/channel/${encodeURIComponent(c.Number)}.m3u8`, target: '_blank', rel: 'noopener' }, 'Strumień ↗') : null;
       const nextLine = next.length ? h('div', { class: 'dim' }, 'Następnie: ', next.map((n, j) => [j ? ' · ' : '', h('span', { class: 'num' }, hm(new Date(n.Start))), ' ', n.Title])) : null;
       body.replaceChildren(
@@ -83,11 +114,21 @@ VIEWS.antena = async () => {
         cgPills(cg, now),
         h('div', { class: 'bar' },
           btn('Podgląd ▶', () => openMonitor(c.Number)),
+          ses ? null : btn('Uruchom emisję', () => session(c, 'start', refresh)),
+          ses === null ? null : btn('Restart emisji', () => session(c, 'restart', refresh)),
+          ses === null ? null : btn('Zatrzymaj emisję', () => session(c, 'stop', refresh), 'danger'),
           p ? btn('Przebuduj playout', () => build(p, 'Refresh')) : null,
           p ? btn('Od nowa', () => build(p, 'Reset'), 'danger') : null,
           stream,
           trioLink(c.Number)));
     });
+    // starsze CG Playout (bez /api/live/graphics/off|on) nie podaje graphics_off – przełącznika wtedy nie ma
+    const cgOk = S.status?.cg && d.cgState && !(d.cgState instanceof Error) && typeof d.cgState.settings?.graphics_off === 'boolean';
+    const off = !!d.cgState?.settings?.graphics_off;
+    gfx.replaceChildren(...(cgOk
+      ? [off ? pill('GRAFIKA ZDJĘTA', 'bad') : pill('grafika na antenie', 'on'),
+        off ? btn('Przywróć grafikę', () => graphicsSwitch(false, refresh), 'acc') : btn('Zdejmij grafikę', () => graphicsSwitch(true, refresh), 'danger')]
+      : []));
     const total = slots.length;
     summary.replaceChildren(total ? pill(`${airing}/${total} ${total === 1 ? 'kanał' : 'kanałów'} w ramówce`, airing === total ? 'on' : 'warn') : null);
     const ev = upcoming(d);
@@ -121,17 +162,17 @@ VIEWS.antena = async () => {
   S.timers.push(setInterval(tick, 1000), setInterval(refresh, 30000));
 
   return [
-    h('div', { class: 'head' }, h('h1', null, 'Na antenie'), summary, h('span', { class: 'grow' }),
+    h('div', { class: 'head' }, h('h1', null, 'Na antenie'), summary, h('span', { class: 'grow' }), gfx,
       multi ? null : trioLink('', 'Otwórz Trio ↗'),
       btn('Odśwież', () => refresh()),
-      h('p', null, 'Co teraz leci w ramówce każdego kanału, co następne, jaka grafika VizRS jest na wizji i czy studio jest na antenie. Dane z playoutów legacy i VizRS CG Playout, odświeżane co 30 s.')),
+      h('p', null, 'Co teraz leci w ramówce każdego kanału, co następne, jaka grafika VizRS jest na wizji i czy studio jest na antenie. Tu też uruchomisz, zrestartujesz albo zatrzymasz emisję kanału i zdejmiesz całą grafikę. Dane z playoutów legacy i VizRS CG Playout, odświeżane co 30 s.')),
     h('div', { class: 'split wide' },
       h('div', { class: 'cols' }, slots.length ? slots.map((x) => x.el) : h('div', { class: 'note' }, 'Brak włączonych kanałów. Dodaj kanał w widoku Kanały.')),
       h('div', { class: 'cols' },
         inCard ? null : vizrsPreview('Grafika VizRS (/output)', d.channels.map((c) => [String(c.Number), `${c.Number} · ${c.Name}`])),
         panel('Najbliższe zdarzenia', null, eventsBox),
         panel('Uwagi', null, notesBox))),
-    panel('Most', null, cmdNote('GetAllChannels', 'GetPagedPlayouts', 'GetFuturePlayoutItemsById', 'BuildPlayout', 'CG Playout GET /api/live/state')),
+    panel('Most', null, cmdNote('GetAllChannels', 'GetPagedPlayouts', 'GetFuturePlayoutItemsById', 'BuildPlayout', 'most: sesje (GET /api/sessions, start · stop · restart)', 'CG Playout GET /api/live/state · POST /api/live/graphics/off|on')),
   ];
 };
 
@@ -177,8 +218,10 @@ function notes(d) {
       out.push(['warn', c.Name, 'przerwa w ramówce – leci wypełniacz zapasowy kanału.', link('#playouty', 'Przebuduj w Playoutach')]);
     }
   });
+  if (d.sessions instanceof Error) out.push(['warn', 'Emisja', 'stan sesji niedostępny: ' + d.sessions.message, null]);
   if (d.cgState instanceof Error) out.push(['bad', 'CG Playout', 'nie odpowiada: ' + d.cgState.message, null]);
   else {
+    if (d.cgState?.settings?.graphics_off) out.push(['bad', 'Grafika', 'cała grafika VizRS zdjęta z anteny (ZDEJMIJ GRAFIKĘ) – przywróć przyciskiem u góry.', null]);
     for (const ch of (d.cgState?.channels || []).filter((x) => onChannel(x.number))) {
       const who = ch.name || `kanał ${ch.number}`;
       const nl = ch.next_live;

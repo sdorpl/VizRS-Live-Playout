@@ -65,7 +65,7 @@ function check(cond, msg) {
           inputs: [{ kind: 'rtmp', host: 'tv.example.pl', port: 1936, app: '/live', key: 'studio-klucz', passphrase: '', streamid: '' },
             { kind: 'srt', host: '', port: 9000, app: '', key: '', passphrase: 'tajne haslo', streamid: '' }] }],
         events: [{ at: T0 - 5000, channel: '24', text: 'nadawca połączony' }],
-        version: '0.9.0-test', etv: { configured: true, ok: true, error: null },
+        version: '0.9.0-test', etv: { configured: true, ok: true, error: null }, settings: { library: null, store: true, graphics_off: !!CG.graphicsOff },
         guide: { 24: [{ title: 'Wiadomosci', start: T0 - 60000, stop: T0 + 60000, live: false }, { title: 'Poranek na żywo', start: T0 + 3600000, stop: T0 + 7200000, live: true }] },
       });
       if (u === '/api/live/shows' && q.method === 'GET') return send(200, { shows: CG.shows, error: null, channels: [{ number: '24', name: 'INFO24' }], guide_known: true, max: 50,
@@ -85,6 +85,10 @@ function check(cond, msg) {
         return send(200, { listeners: CG.inputs || [{ channel: '24', url: 'rtmp://0.0.0.0:1936/live/studio-klucz' }], from: CG.inputs ? 'panel' : 'env', store: true, ingest: true, ports: { rtmp: [1936, 1943], srt: [9000, 9007] } });
       }
       if (u === '/api/live/inputs' && q.method === 'PUT') { CG.inputs = body.listeners; return send(200, { listeners: CG.inputs, from: 'panel' }); }
+      if ((u === '/api/live/graphics/off' || u === '/api/live/graphics/on') && q.method === 'POST') {
+        CG.graphicsOff = u.endsWith('/off');
+        return send(200, { library: null, store: true, graphics_off: CG.graphicsOff });
+      }
       if (u === '/api/live/graphics' && q.method === 'GET') return send(200, CG.graphics);
       if (u === '/api/live/graphics' && q.method === 'PUT') {
         // jak CG Playout: wyrażenie, które się nie kompiluje, = 400 i nic się nie zmienia
@@ -1173,6 +1177,22 @@ function check(cond, msg) {
   check(await page.isVisible('button:has-text("Wczytaj pliki elementów")'), 'grafika: przycisk RefreshGraphicsElements (komenda na liście mostu)');
   await rerender(() => page.click('button:has-text("Wczytaj pliki elementów")'));
   check(/wczytał/.test(await page.textContent('#toast')), 'grafika: RefreshGraphicsElements wykonane w legacy');
+  // Na antenie: emisja kanału (sesje legacy przez most) i cała grafika (CG Playout /api/live/graphics/off|on)
+  await page.goto(`${BASE}/#antena`);
+  await page.waitForSelector('main[data-view="antena"] [data-graphics] button');
+  check(/emisja/.test(await page.textContent('main .cols')), 'antena: stan emisji kanału (sesje legacy)');
+  const ses = await page.evaluate(() => fetch('/api/sessions').then((r) => r.json()));
+  check(ses.ok && Array.isArray(ses.result), `antena: GET /api/sessions przez most (${JSON.stringify(ses).slice(0, 120)})`);
+  await page.click('[data-graphics] button:has-text("Zdejmij grafikę")');
+  await page.click('#dlg-buttons button:has-text("Zdejmij grafikę")');
+  await page.waitForSelector('[data-graphics] button:has-text("Przywróć grafikę")');
+  check(CG.graphicsOff === true && /GRAFIKA ZDJĘTA/.test(await page.textContent('[data-graphics]')), 'antena: Zdejmij grafikę → CG Playout graphics/off');
+  await page.click('[data-graphics] button:has-text("Przywróć grafikę")');
+  await page.waitForSelector('[data-graphics] button:has-text("Zdejmij grafikę")');
+  check(CG.graphicsOff === false, 'antena: Przywróć grafikę → CG Playout graphics/on');
+  const badSes = await page.evaluate(() => fetch('/api/session/24/kill', { method: 'POST', headers: { 'X-VizRS-Live': '1' } }).then((r) => r.status));
+  check(badSes === 404, 'antena: sesja – tylko start, stop, restart');
+
   // reguły grafiki (CG Playout GET/PUT /api/live/graphics)
   await page.waitForSelector('[data-rules] #gr-on_clip');
   check(await page.inputValue('#gr-on_clip') === 'TAKE 4001 headline={title}' && await page.inputValue('input[aria-label="on_end 1"]') === '-', 'reguły grafiki: odczyt z CG Playout („-” = wyłączone)');
@@ -1342,7 +1362,7 @@ function check(cond, msg) {
   }
 
   // ---------- R11: wydanie 1.0 – przegląd bezpieczeństwa (osobny panel z tokenem na 18091) ----------
-  check(st10.panel === '1.2.4' && st10.bridge?.result?.bridge === '1.2.4', `wersja 1.2.4: panel ${st10.panel}, most ${st10.bridge?.result?.bridge}`);
+  check(st10.panel === '1.2.5' && st10.bridge?.result?.bridge === '1.2.5', `wersja 1.2.5: panel ${st10.panel}, most ${st10.bridge?.result?.bridge}`);
   const SEC = 'http://127.0.0.1:18091', PTOK = 'e2e-panel-token-0123456789';
   const secProc = require('child_process').spawn(path.join(__dirname, '..', 'server', 'target', 'release', 'vizrs-live'),
     ['--port', '18091', '--bridge', 'http://127.0.0.1:18409', '--bridge-token', 'test-token-0123456789', '--token', PTOK], { stdio: 'ignore' });

@@ -591,6 +591,8 @@ fn route(app: &App, req: &Request) -> Response {
             stream_proxy(app, &p["/api/stream/".len()..])
         }
         ("GET", "/api/commands") => forward(app.bridge.get("/commands"), "commands"),
+        ("GET", "/api/sessions") => forward(app.bridge.get("/sessions"), "sessions"),
+        ("POST", p) if p.starts_with("/api/session/") => session(app, &p["/api/session/".len()..]),
         ("POST", p) if p.starts_with(http::UPLOAD_PREFIX) => {
             upload(app, req, &p[http::UPLOAD_PREFIX.len()..])
         }
@@ -745,6 +747,55 @@ fn forward(r: Result<bridge::Reply, String>, what: &str) -> Response {
     }
 }
 
+/// `POST /api/session/{kanał}/{start|stop|restart}` – emisja kanału w legacy (Na antenie).
+/// Stop: most (`StopChannel`, jak przycisk Stop legacy). Start: to samo żądanie, którym widz
+/// uruchamia kanał (`/iptv/channel/{kanał}.m3u8`, segmenter). Restart: stop, potem start.
+fn session(app: &App, rest: &str) -> Response {
+    let Some((ch, action)) = rest
+        .split_once('/')
+        .filter(|(ch, a)| channel_number(ch) && matches!(*a, "start" | "stop" | "restart"))
+    else {
+        return Response::error(404, "nieznany adres sesji (start, stop, restart)");
+    };
+    let mut stopped = false;
+    if action != "start" {
+        match app.bridge.post(&format!("/session/{ch}/stop"), b"") {
+            Ok(r) if r.status == 200 => {
+                stopped = r.body.windows(13).any(|w| w == br#""result":true"#)
+            }
+            Ok(r) => return forward(Ok(r), "session stop"),
+            Err(e) => return Response::error(502, &e),
+        }
+        eprintln!("session {ch} stop -> {stopped}");
+    }
+    if action != "stop" {
+        if stopped {
+            std::thread::sleep(std::time::Duration::from_millis(500));
+        }
+        match app
+            .bridge
+            .get_plain(&format!("/iptv/channel/{ch}.m3u8?mode=segmenter&subtitles=false"))
+        {
+            Ok(r) if r.status == 200 => eprintln!("session {ch} start -> ok"),
+            Ok(r) if r.status == 404 => {
+                return Response::error(
+                    200,
+                    "legacy nie uruchomił kanału (kanał wyłączony, bez playoutu albo błąd kodowania – Logi legacy)",
+                )
+            }
+            Ok(r) => return Response::error(502, &format!("legacy: odpowiedź {} przy starcie kanału", r.status)),
+            Err(e) => return Response::error(502, &e),
+        }
+    }
+    Response::json(
+        200,
+        format!(
+            "{{\"ok\":true,\"result\":{{\"stopped\":{stopped},\"started\":{}}}}}",
+            action != "stop"
+        ),
+    )
+}
+
 /// Numer kanału ErsatzTV w adresie strumienia: cyfry z kropkami (`24`, `1.1`), bez `..`.
 fn channel_number(s: &str) -> bool {
     (1..=16).contains(&s.len())
@@ -857,6 +908,7 @@ pub fn cg_path(method: &str, rest: &str) -> Option<String> {
         ("GET", ["pages", ch]) => format!("/etv/pages?channel={ch}"),
         ("GET", ["live", "state"]) => "/api/live/state".into(),
         ("GET" | "PUT", ["live", "graphics"]) => "/api/live/graphics".into(),
+        ("POST", ["live", "graphics", a @ ("off" | "on")]) => format!("/api/live/graphics/{a}"),
         ("PUT", ["live", "settings"]) => "/api/live/settings".into(),
         ("GET" | "PUT", ["live", "inputs"]) => "/api/live/inputs".into(),
         ("GET", ["live", "shows"]) | ("POST", ["live", "shows"]) => "/api/live/shows".into(),
@@ -1388,6 +1440,11 @@ mod tests {
         );
         assert_eq!(cg_path("DELETE", "live/graphics"), None);
         assert_eq!(
+            cg_path("POST", "live/graphics/off").as_deref(),
+            Some("/api/live/graphics/off")
+        );
+        assert_eq!(cg_path("POST", "live/graphics/x"), None);
+        assert_eq!(
             cg_path("PUT", "live/settings").as_deref(),
             Some("/api/live/settings")
         );
@@ -1421,6 +1478,18 @@ mod tests {
         assert_eq!(route(&a, &req("GET", "/api/cg/health", &[])).status, 409);
         assert_eq!(
             route(&a, &req("PUT", "/api/cg/live/channels/1", &[])).status,
+            403
+        );
+        let csrf = [("x-vizrs-live", "1")];
+        for bad in [
+            "/api/session/1/kill",
+            "/api/session/../stop",
+            "/api/session/1",
+        ] {
+            assert_eq!(route(&a, &req("POST", bad, &csrf)).status, 404, "{bad}");
+        }
+        assert_eq!(
+            route(&a, &req("POST", "/api/session/1/stop", &[])).status,
             403
         );
     }

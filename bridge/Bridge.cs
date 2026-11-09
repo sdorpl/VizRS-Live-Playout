@@ -8,6 +8,8 @@
 //   GET  /vizrs-bridge/health            stan mostu i legacy
 //   GET  /vizrs-bridge/commands          dozwolone komendy z parametrami
 //   POST /vizrs-bridge/command/{Nazwa}   argumenty komendy w JSON -> {"ok":true,"result":…} | {"ok":false,"error":…}
+//   GET  /vizrs-bridge/sessions          sesje nadawania legacy (IFFmpegSegmenterService.Workers -> HlsSessionModel)
+//   POST /vizrs-bridge/session/{Kanał}/stop  zatrzymanie sesji kanału, jak przycisk Stop w Channels.razor -> {"ok":true,"result":true|false}
 //   POST /vizrs-bridge/upload/{Rodzaj}    obraz (Logo|Watermark, treść = bajty pliku) -> SaveArtworkToDisk -> {"ok":true,"result":"<nazwa w pamięci legacy>"}
 //
 // Biała lista: plik VIZRS_BRIDGE_COMMANDS (domyślnie commands.txt obok DLL). Komendy spoza listy -> 403.
@@ -74,7 +76,7 @@ namespace VizRS.Bridge
         private const int MaxBody = 1 << 20;
         private const int MaxUpload = 10 << 20;
         private static readonly string[] UploadKinds = ["Logo", "Watermark"];
-        public const string Version = "1.2.4";
+        public const string Version = "1.2.5";
 
         private readonly RequestDelegate _next;
         private readonly byte[]? _token;
@@ -129,6 +131,14 @@ namespace VizRS.Bridge
                 else if (r.StartsWith("/command/", StringComparison.Ordinal) && HttpMethods.IsPost(ctx.Request.Method))
                 {
                     await Command(ctx, r["/command/".Length..]);
+                }
+                else if (r == "/sessions" && HttpMethods.IsGet(ctx.Request.Method))
+                {
+                    await Sessions(ctx);
+                }
+                else if (r.StartsWith("/session/", StringComparison.Ordinal) && r.EndsWith("/stop", StringComparison.Ordinal) && HttpMethods.IsPost(ctx.Request.Method))
+                {
+                    await StopSession(ctx, r["/session/".Length..^"/stop".Length]);
                 }
                 else if (r.StartsWith("/upload/", StringComparison.Ordinal) && HttpMethods.IsPost(ctx.Request.Method))
                 {
@@ -315,6 +325,56 @@ namespace VizRS.Bridge
             object? result = await sender.Send(request, ctx.RequestAborted);
             Console.WriteLine($"[vizrs-bridge] upload {kind} {ct} {ms.Length} B");
             await Json(ctx, 200, Results.Unwrap(result));
+        }
+
+        /// <summary>Usługa sesji nadawania legacy (singleton z DI), szukana po nazwie typu – most nie odwołuje się do zestawów legacy.</summary>
+        private static object? Segmenter(HttpContext ctx)
+        {
+            Type? type = AppDomain.CurrentDomain.GetAssemblies()
+                .Select(a => a.GetType("ErsatzTV.Core.Interfaces.FFmpeg.IFFmpegSegmenterService", false))
+                .FirstOrDefault(t => t is not null);
+            return type is null ? null : ctx.RequestServices.GetService(type);
+        }
+
+        /// <summary>Sesje nadawania: to, co legacy pokazuje w Channels (Stop) i w GET /api/sessions.</summary>
+        private static async Task Sessions(HttpContext ctx)
+        {
+            object? service = Segmenter(ctx);
+            if (service?.GetType().GetProperty("Workers")?.GetValue(service) is not System.Collections.IEnumerable workers)
+            {
+                await Json(ctx, 500, new { ok = false, error = "legacy bez usługi sesji (IFFmpegSegmenterService)" });
+                return;
+            }
+
+            var list = new List<object?>();
+            foreach (object w in workers.Cast<object>().ToList())
+            {
+                list.Add(w.GetType().GetMethod("GetModel", Type.EmptyTypes)?.Invoke(w, null));
+            }
+
+            await Json(ctx, 200, new { ok = true, result = list });
+        }
+
+        /// <summary>Zatrzymanie sesji kanału (StopChannel); następne żądanie widza uruchomi ją znowu.</summary>
+        private static async Task StopSession(HttpContext ctx, string channel)
+        {
+            if (channel.Length is 0 or > 20 || !channel.All(c => char.IsAsciiLetterOrDigit(c) || c is '.' or '-' or '_'))
+            {
+                await Json(ctx, 400, new { ok = false, error = "zły numer kanału" });
+                return;
+            }
+
+            object? service = Segmenter(ctx);
+            MethodInfo? stop = service?.GetType().GetMethod("StopChannel", [typeof(string), typeof(CancellationToken)]);
+            if (stop?.Invoke(service, [channel, ctx.RequestAborted]) is not Task<bool> task)
+            {
+                await Json(ctx, 500, new { ok = false, error = "legacy bez StopChannel (IFFmpegSegmenterService)" });
+                return;
+            }
+
+            bool stopped = await task;
+            Console.WriteLine($"[vizrs-bridge] session {channel} stop -> {stopped}");
+            await Json(ctx, 200, new { ok = true, result = stopped });
         }
 
         /// <summary>Typ zawartości obrazu zgodny z sygnaturą pliku.</summary>
