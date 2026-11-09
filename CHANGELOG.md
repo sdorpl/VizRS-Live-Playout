@@ -2,6 +2,8 @@
 
 ## Niewydane
 
+- **K3 – numeracja kanałów naraz** (Kanały → „Numeracja…”): tabela numerów wszystkich kanałów, kontrola duplikatów w przeglądarce, zapis jednym `UpdateChannelNumbers` (na białej liście z `GetAllChannelsForSort`). Zamyka LUKI #23.
+
 - **K2 – CSP zawężone:** `img-src` i `frame-src` tylko z originów `--stream-url` i `--vizrs-url` (bez opcji – brak źródła) zamiast `http:`/`https:`; `prod-smoke.cjs` oblewa przebieg przy naruszeniu CSP. Zamyka LUKI #6.
 
 - **K1 – sesje panelu:** ciasteczko `vizrs_live` niesie losowy identyfikator sesji zamiast tokenu panelu; „Wyloguj” unieważnia sesję, sesje wygasają po 30 dniach bezczynności (limit 256), restart panelu wymaga ponownego logowania. Token w nagłówku `Authorization: Bearer` dla skryptów bez zmian. Zamyka LUKI #2.

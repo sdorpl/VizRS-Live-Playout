@@ -75,7 +75,7 @@ Przebieg łączy [LUKI.md](../LUKI.md) i punkty z §2–§3 w jedną kolejkę: n
 |---|---|---|---|
 | K1 | Sesje panelu: losowy identyfikator sesji zamiast tokenu w ciasteczku, wylogowanie, wygasanie (LUKI #2, G1) | – | zrobione (2026-11-09) |
 | K2 | CSP zawężone do znanych źródeł obrazów i ramek zamiast `http:`/`https:` (LUKI #6, G1) | – | zrobione (2026-11-09) |
-| K3 | Numeracja kanałów naraz (LUKI #23) | – | do zrobienia |
+| K3 | Numeracja kanałów naraz (LUKI #23) | – | zrobione (2026-11-09) |
 | K4 | Własne rozdzielczości w Profilach (LUKI #24) | – | do zrobienia |
 | K5 | Silnik Next w Profilach i Diagnostyce, paczka diagnostyczna (LUKI #11, #27) | – | do zrobienia |
 | K6 | Wyniki zadań w tle (nakładanie pozycji, konserwacja) w panelu, nie tylko w Logach (LUKI #10) | – | do zrobienia |

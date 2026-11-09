@@ -22,6 +22,7 @@ Pasek górny: **wybór kanału** (obok nazwy panelu – Na antenie, EPG, Playout
 | obejrzeć kanał | **Podgląd** (pasek górny) albo **Podgląd ▶** na karcie kanału w Na antenie | okno w prawym dolnym rogu, zostaje przy zmianie ekranów; obraz idzie równo z zegarem anteny (stan „NA ŻYWO”); dźwięk domyślnie wyłączony („Dźwięk”), „Większy”, „Pełny” (pełny ekran), × zamyka. Gdy kanału nikt nie ogląda, start trwa do kilkunastu sekund |
 | sprawdzić przewodnik | **Przewodnik EPG** | oś 4 h wszystkich kanałów |
 | dodać / zmienić kanał | **Kanały** | „+ Nowy kanał”, formularz, „Załóż kanał”; zmiana → „Zapisz”; logo: wgraj obraz albo podaj adres |
+| zmienić numerację wielu kanałów | **Kanały** | „Numeracja…”, wpisz nowe numery (można zamieniać miejscami), „Zapisz numerację” |
 | dodać nowe pliki | **Biblioteki** → „Skanuj” | pliki muszą leżeć w katalogu mediów serwera; po skanie widać je w **Przeglądarce** |
 | zgrupować treść | **Kolekcje** (zwykłe, inteligentne, wielo-, powtórki), **Playlisty** | treść dobiera się „wyborem treści” z wyszukiwaniem; w **Przeglądarce** zapytanie można od razu zapisać jako kolekcję inteligentną, a wyniki oglądać jako kafle |
 | ułożyć ramówkę klasyczną | **Harmonogramy** | pozycje: start stały (godzina) albo dynamiczny, tryb (jedna, kilka, czas, do pełna), treść; „Podgląd 24 h” pokazuje szkielet doby z godzin stałych; „Zapisz” zapisuje całą listę |

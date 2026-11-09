@@ -8,6 +8,9 @@ GetChannelById
 CreateChannel
 UpdateChannel
 DeleteChannel
+# numeracja wielu kanałów naraz (K3, ekran legacy /channels/numbers)
+GetAllChannelsForSort
+UpdateChannelNumbers
 GetAllLanguageCodes
 
 # --- profile kodowania, znaki wodne, rozdzielczości (R5)

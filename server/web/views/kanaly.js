@@ -1,6 +1,6 @@
 // Widok „Kanały” (lista + edytor). Profile kodowania i znaki wodne: views/profile.js, views/znaki.js.
 
-import { S, VIEWS, h, pill, cmd, pl, legacyUrl } from '../core.js';
+import { S, VIEWS, h, pill, btn, cmd, pl, legacyUrl, dialog, toast, route, has } from '../core.js';
 import { form } from '../form.js';
 import { crudView } from '../parts.js';
 import { imageField } from './znaki.js';
@@ -38,6 +38,58 @@ function logoField(logo) {
     return cur.Path === before.Path ? before : cur;
   };
   return { el: h('div', { class: 'picker' }, img.el, url), read, peek: read };
+}
+
+/** Numer kanału w legacy: liczba z kropką dziesiętną (legacy liczy z niego SortNumber; „1.5” – podkanał). */
+export const validNumber = (n) => /^\d+(\.\d+)?$/.test(n);
+
+/**
+ * Sprawdza nową numerację przed wysłaniem (K3). `rows` = [{Id, Name, OriginalNumber, Number}].
+ * Zwraca { errors: [tekst], changed: [wiersze ze zmianą] } – duplikaty i złe numery blokują zapis.
+ */
+export function checkNumbers(rows) {
+  const errors = [];
+  const seen = new Map();
+  for (const r of rows) {
+    const n = String(r.Number).trim();
+    if (!validNumber(n)) errors.push(`„${r.Name}”: zły numer „${n}” (liczba, np. 12 albo 12.1)`);
+    if (seen.has(n)) errors.push(`numer ${n} mają „${seen.get(n)}” i „${r.Name}”`);
+    else seen.set(n, r.Name);
+  }
+  const changed = rows.filter((r) => String(r.Number).trim() !== r.OriginalNumber).map((r) => ({ ...r, Number: String(r.Number).trim() }));
+  return { errors, changed };
+}
+
+/** Okno „Numeracja kanałów” – odpowiednik Edit Channel Numbers legacy (`GetAllChannelsForSort`, `UpdateChannelNumbers`). */
+async function renumber() {
+  let list;
+  try { list = await cmd('GetAllChannelsForSort'); } catch (e) { toast('Legacy nie podał listy kanałów: ' + e.message, 'bad'); return; }
+  const rows = list.map((c) => ({ Id: c.Id, Name: c.Name, OriginalNumber: c.OriginalNumber ?? c.Number, Number: c.Number }));
+  const err = h('div', { class: 'note err', hidden: true, id: 'renumber-errors' });
+  const body = h('div', { class: 'renumber' },
+    h('p', { class: 'dim' }, 'Zmień numery w polach. Zapis idzie jednym wywołaniem – legacy zamienia numery w jednej transakcji, więc można je zamieniać miejscami. Zmiana trafia do channels.m3u i EPG bez przebudowy playoutów.'),
+    h('div', { class: 'tw' }, h('table', null,
+      h('thead', null, h('tr', null, h('th', null, 'Nr'), h('th', null, 'Kanał'), h('th', null, 'Był'))),
+      h('tbody', null, rows.map((r, i) => {
+        const was = h('td', { class: 'dim num' });
+        const inp = h('input', { class: 'num-in', id: `renumber-${i}`, value: r.Number, 'aria-label': `Numer kanału ${r.Name}`, inputmode: 'decimal' });
+        inp.addEventListener('input', () => { r.Number = inp.value; was.textContent = inp.value.trim() !== r.OriginalNumber ? r.OriginalNumber : ''; });
+        return h('tr', null, h('td', null, inp), h('td', null, r.Name), was);
+      })))),
+    err);
+  for (;;) {
+    const ok = await dialog('Numeracja kanałów', body, [['Anuluj', false], ['Zapisz numerację', true, 'acc']]);
+    if (!ok) return;
+    const { errors, changed } = checkNumbers(rows);
+    if (errors.length) { err.hidden = false; err.textContent = 'Popraw przed zapisem: ' + errors.join('; '); continue; }
+    if (!changed.length) { toast('Numeracja bez zmian'); return; }
+    try {
+      await cmd('UpdateChannelNumbers', { Channels: changed.map((r) => ({ Id: r.Id, Number: r.Number, Name: r.Name, OriginalNumber: r.OriginalNumber })) });
+      toast(`Zmieniono numery ${changed.length} kanałów`, 'ok');
+      route(true);
+      return;
+    } catch (e) { err.hidden = false; err.textContent = 'Legacy odrzucił numerację: ' + e.message; }
+  }
 }
 
 VIEWS.kanaly = crudView({
@@ -89,5 +141,7 @@ VIEWS.kanaly = crudView({
   createdId: (r) => r?.ChannelId,
   del: (ch) => ({ ChannelId: ch.Id }),
   confirmDelete: (ch) => `Usunąć kanał ${ch.Number} · ${ch.Name} razem z jego playoutem? Tego nie da się cofnąć.`,
-  headExtra: () => (S.status.streamUrl ? h('a', { href: S.status.streamUrl + '/iptv/channels.m3u', target: '_blank', rel: 'noopener' }, 'channels.m3u ↗') : null),
+  headExtra: () => [
+    has('GetAllChannelsForSort') && has('UpdateChannelNumbers') ? btn('Numeracja…', renumber) : null,
+    S.status.streamUrl ? h('a', { href: S.status.streamUrl + '/iptv/channels.m3u', target: '_blank', rel: 'noopener' }, 'channels.m3u ↗') : null],
 });

@@ -170,6 +170,22 @@ function check(cond, msg) {
   const idle = await page.inputValue('#f-IdleBehavior');
   check(idle === 'KeepRunning', `zmiana zapisana w legacy (IdleBehavior=${idle})`);
 
+  // K3: numeracja kanałów naraz – duplikat zatrzymany w przeglądarce, potem zapis jednym UpdateChannelNumbers
+  await page.click('main .head button:has-text("Numeracja")');
+  await page.waitForSelector('.renumber');
+  const rnRows = await page.$$eval('.renumber tbody tr', (trs) => trs.map((tr) => tr.children[1].textContent));
+  const rnIdx = rnRows.indexOf(name + ' zm');
+  const rnOther = rnIdx === 0 ? 1 : 0;
+  const otherNum = await page.inputValue(`#renumber-${rnOther}`);
+  await page.fill(`#renumber-${rnIdx}`, otherNum);
+  await page.click('#dlg-buttons button:has-text("Zapisz numerację")');
+  await page.waitForSelector('#renumber-errors:not([hidden])');
+  check(/numer .* mają/.test(await page.textContent('#renumber-errors')), 'K3: zdublowany numer zatrzymany przed wysłaniem');
+  await page.fill(`#renumber-${rnIdx}`, '900');
+  await page.click('#dlg-buttons button:has-text("Zapisz numerację")');
+  await page.waitForSelector('td.num:has-text("900")');
+  check(true, 'K3: numeracja zapisana w legacy (UpdateChannelNumbers)');
+
   await page.click('button:has-text("Usuń")');
   await page.click('#dlg-buttons button:has-text("Usuń")');
   await page.waitForSelector(`td:has-text("${name}")`, { state: 'detached' });

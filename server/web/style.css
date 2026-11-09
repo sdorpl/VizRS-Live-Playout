@@ -331,3 +331,5 @@ dl.kv dd { flex-wrap: wrap; }
 .mc .tx .dim { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; }
 .mc .tx .bar { flex-wrap: nowrap; min-width: 0; }
 .panel > header button.on { border-color: var(--acc); color: var(--acc); }
+.renumber .num-in { width: 7em; }
+.renumber .tw { max-height: 55vh; overflow: auto; }
