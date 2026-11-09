@@ -19,4 +19,7 @@ FROM ${LEGACY_IMAGE}
 COPY --from=build /out/VizRS.Bridge.dll /vizrs-bridge/VizRS.Bridge.dll
 COPY bridge/commands.txt /vizrs-bridge/commands.txt
 ENV DOTNET_STARTUP_HOOKS=/vizrs-bridge/VizRS.Bridge.dll \
-    ASPNETCORE_HOSTINGSTARTUPASSEMBLIES=VizRS.Bridge
+    ASPNETCORE_HOSTINGSTARTUPASSEMBLIES=VizRS.Bridge \
+    DOTNET_gcServer=0 \
+    DOTNET_GCHeapHardLimit=0x60000000 \
+    DOTNET_EnableWriteXorExecute=0

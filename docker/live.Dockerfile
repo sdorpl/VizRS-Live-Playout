@@ -9,9 +9,13 @@ WORKDIR /src
 COPY server/Cargo.toml server/Cargo.lock ./
 COPY server/src ./src
 COPY server/web ./web
-RUN case "$TARGETARCH" in amd64) T=x86_64;; arm64) T=aarch64;; *) echo "nieobsługiwana architektura: $TARGETARCH"; exit 1;; esac \
+RUN case "$TARGETARCH" in \
+      amd64) T=x86_64; OPTS="" ;; \
+      arm64) T=aarch64; OPTS="-C target-cpu=neoverse-n1 -C opt-level=3" ;; \
+      *) echo "nieobsługiwana architektura: $TARGETARCH"; exit 1 ;; \
+    esac \
  && T=$T-unknown-linux-musl && rustup target add $T \
- && CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=rust-lld CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER=rust-lld \
+ && RUSTFLAGS="$OPTS" CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=rust-lld CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER=rust-lld \
     cargo build --release --locked --target $T \
  && cp target/$T/release/vizrs-live /vizrs-live \
  && if [ "$TARGETARCH" = "$BUILDARCH" ]; then /vizrs-live --version; fi

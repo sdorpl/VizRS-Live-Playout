@@ -95,15 +95,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: ubuntu-22.04, name: linux-x86_64, musl: x86_64-unknown-linux-musl }
-          - { os: ubuntu-22.04-arm, name: linux-arm64, musl: aarch64-unknown-linux-musl }
+          - { os: ubuntu-22.04, name: linux-x86_64, musl: x86_64-unknown-linux-musl, rustflags: "" }
+          - { os: ubuntu-22.04-arm, name: linux-arm64, musl: aarch64-unknown-linux-musl, rustflags: "-C target-cpu=neoverse-n1 -C opt-level=3" }
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.musl }}
-      - run: cargo build --release --locked --target ${{ matrix.musl }}
+      - run: RUSTFLAGS="${{ matrix.rustflags }}" cargo build --release --locked --target ${{ matrix.musl }}
         working-directory: server
       - name: Paczka
         env:

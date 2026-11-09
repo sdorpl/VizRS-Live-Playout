@@ -2,6 +2,13 @@
 
 ## Niewydane
 
+## 1.2.4 – wydanie (2026-11-09)
+
+- **Optymalizacja pod Oracle Ampere A1 (ARM64, Neoverse-N1):**
+  - Panel `vizrs-live` w `docker/live.Dockerfile`: kompilacja dla `linux/arm64` z flagami mikroarchitektury `RUSTFLAGS="-C target-cpu=neoverse-n1 -C opt-level=3"`.
+  - Obraz mostu `vizrs-live-legacy` w `docker/legacy-bridge.Dockerfile`: konfiguracja środowiska .NET CLR z lżejszym Workstation GC (`DOTNET_gcServer=0`) i limitem sterty (`DOTNET_GCHeapHardLimit=0x60000000`), eliminującymi zatrzymania wątków i przycięcia enkodera wideo na maszynach 4 OCPU ARM.
+  - Zaktualizowane domyślne obrazy w `compose.yml` i `compose.cg-playout.yml` na wersję 1.2.4.
+
 ## 1.2.3 – wydanie (2026-11-08)
 
 - Wersja panelu i mostu 1.2.3 (obrazy `ghcr.io/sdorpl/vizrs-live:1.2.3`, `ghcr.io/sdorpl/vizrs-live-legacy:1.2.3` – amd64 + arm64); działa z VizRS CG Playout 2.12.0 (wejścia studia ustawiane z panelu).
