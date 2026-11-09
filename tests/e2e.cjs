@@ -1342,7 +1342,7 @@ function check(cond, msg) {
   }
 
   // ---------- R11: wydanie 1.0 – przegląd bezpieczeństwa (osobny panel z tokenem na 18091) ----------
-  check(st10.panel === '1.2.3' && st10.bridge?.result?.bridge === '1.2.3', `wersja 1.2.3: panel ${st10.panel}, most ${st10.bridge?.result?.bridge}`);
+  check(st10.panel === '1.2.4' && st10.bridge?.result?.bridge === '1.2.4', `wersja 1.2.4: panel ${st10.panel}, most ${st10.bridge?.result?.bridge}`);
   const SEC = 'http://127.0.0.1:18091', PTOK = 'e2e-panel-token-0123456789';
   const secProc = require('child_process').spawn(path.join(__dirname, '..', 'server', 'target', 'release', 'vizrs-live'),
     ['--port', '18091', '--bridge', 'http://127.0.0.1:18409', '--bridge-token', 'test-token-0123456789', '--token', PTOK], { stdio: 'ignore' });
