@@ -31,10 +31,10 @@ async function session(c, action, after) {
 
 /** Cała grafika VizRS na wszystkich kanałach: zdjęcie albo przywrócenie (CG Playout /api/live/graphics/off|on). */
 async function graphicsSwitch(off, after) {
-  if (off && !(await confirmDlg('Zdejmij grafikę', 'Zdjąć całą grafikę VizRS ze wszystkich kanałów? Od następnej klatki wizja idzie bez grafiki, aż do „Przywróć grafikę”.', 'Zdejmij grafikę'))) return;
+  if (off && !(await confirmDlg('Zdejmij grafikę', 'Zdjąć całą grafikę VizRS ze wszystkich kanałów? VizRS zagra animacje wyjścia (OUT), potem wizja idzie bez grafiki aż do „Przywróć grafikę”, które wprowadzi strony z animacją wejścia (TAKE).', 'Zdejmij grafikę'))) return;
   try {
     await api(`/api/cg/live/graphics/${off ? 'off' : 'on'}`, { method: 'POST', body: '{}' });
-    toast(off ? 'Grafika zdjęta z anteny na wszystkich kanałach.' : 'Grafika przywrócona.', off ? 'bad' : 'ok');
+    toast(off ? 'Grafika schodzi z anteny (animacje wyjścia) na wszystkich kanałach.' : 'Grafika wraca na antenę (animacje wejścia).', off ? 'bad' : 'ok');
   } catch (e) { toast('Grafika: ' + e.message, 'bad'); }
   after();
 }

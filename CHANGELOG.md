@@ -2,6 +2,8 @@
 
 ## Niewydane
 
+- **Zdejmij · Przywróć grafikę z animacjami** (Na antenie): VizRS gra animacje wyjścia (`OUT`) i wejścia (`TAKE`) zamiast natychmiastowego cięcia; wymaga VizRS CG Playout z sekwencją OUT/TAKE (po 2.12.3).
+
 ## 1.2.7 – wydanie (2026-11-09)
 
 - **Obrazy zawsze najnowsze:** domyślne `LIVE_IMAGE=ghcr.io/sdorpl/vizrs-live:latest` i `PROXY_IMAGE=caddy:alpine` w `compose.yml`, `compose.cg-playout.yml` i `.env.example` (wcześniej przypięte wersje); przypięcie – własna wartość w `.env`.
