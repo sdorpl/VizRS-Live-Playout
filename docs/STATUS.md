@@ -28,7 +28,7 @@
 
 ## Następne zadanie
 
-Plan [PLAN-makieta.md](plany/PLAN-makieta.md) zrobiony w całości (M0–M9). Nowy plan: [PLAN-mcr.md](plany/PLAN-mcr.md) (2026-11-09) – braki wobec web GUI legacy i panel kanału na wzór Viz Channel Branding; następne zadanie: **K1** (numeracja kanałów naraz). Punkty K7–K11 wymagają zmian w API VizRS CG Playout. Do decyzji użytkownika: **N0** – legacy czy Next (PLAN-mcr §6; zalecenie: zostać na legacy, przygotować hybrydę). Poza planem: [LUKI.md](LUKI.md) G1 → G2 → G3.
+**Jeden przebieg** luk i planu rozwoju: [PLAN-mcr.md](plany/PLAN-mcr.md) §4 (K1–K18 + Q1 ręcznie), realizacja na gałęzi **`next-v`**. Następne zadanie: **K1** – sesje panelu (LUKI #2). Decyzja użytkownika 2026-11-09: **zostajemy przy ErsatzTV legacy** (wariant A, PLAN-mcr §6). Punkty K12–K17 wymagają zmian w API VizRS CG Playout.
 
 ## Kroki ręczne (czekają na użytkownika)
 
