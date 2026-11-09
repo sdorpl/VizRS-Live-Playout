@@ -1374,6 +1374,7 @@ function check(cond, msg) {
     const csp = root.headers.get('content-security-policy') || '';
     check(/script-src 'self'/.test(csp) && /frame-ancestors 'none'/.test(csp) && /object-src 'none'/.test(csp) && root.headers.get('x-frame-options') === 'DENY',
       'bezpieczeństwo: CSP bez inline, bez ramek i obiektów; X-Frame-Options');
+    check(/frame-src 'none'/.test(csp) && !/ https?:[ ;]/.test(csp), 'K2: CSP bez ogólnych http:/https: – panel bez --stream-url/--vizrs-url nie dopuszcza obcych obrazów ani ramek');
     const apiCsp = (await fetch(`${SEC}/api/status`)).headers.get('content-security-policy');
     check(!!apiCsp, 'bezpieczeństwo: CSP także w odpowiedziach API');
     check((await fetch(`${SEC}/api/status`)).status === 401, 'bezpieczeństwo: API bez logowania = 401');

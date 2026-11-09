@@ -41,6 +41,8 @@ const check = (ok, msg) => { console.log(`${ok ? 'ok  ' : 'BŁĄD'} ${msg}`); if
     return route.abort('blockedbyclient');
   });
   page.on('pageerror', (e) => errors.push('wyjątek JS: ' + e.message));
+  // K2: CSP zawężone do znanych originów – naruszenie (obraz, ramka spoza konfiguracji) = błąd przebiegu
+  page.on('console', (m) => { if (m.type() === 'error' && /Content Security Policy/i.test(m.text())) errors.push('CSP: ' + m.text()); });
   page.on('response', (r) => { if (r.status() >= 500) errors.push(`${r.status()} ${new URL(r.url()).pathname}`); });
 
   try {

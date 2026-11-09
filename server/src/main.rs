@@ -482,6 +482,10 @@ fn main() {
         cfg,
     });
 
+    http::set_csp(
+        &http::csp_origin(&app.cfg.stream_url),
+        &http::csp_origin(&app.cfg.vizrs_url),
+    );
     let addr = format!("{}:{}", app.cfg.bind, app.cfg.port);
     let listener = match TcpListener::bind(&addr) {
         Ok(l) => l,
@@ -1808,6 +1812,33 @@ mod tests {
         Response::json(200, "{}").write_to(&mut out).unwrap();
         let head = String::from_utf8_lossy(&out);
         assert!(head.contains("frame-ancestors 'none'") && head.contains("X-Frame-Options: DENY"));
+    }
+
+    #[test]
+    fn csp_known_origins() {
+        assert_eq!(
+            http::csp_origin("http://tv.lan:8409/base"),
+            vec!["http://tv.lan:8409"]
+        );
+        assert_eq!(
+            http::csp_origin("https://[::1]:8788"),
+            vec!["https://[::1]:8788"]
+        );
+        assert_eq!(
+            http::csp_origin(":8788"),
+            vec!["http://*:8788", "https://*:8788"]
+        );
+        assert!(http::csp_origin("").is_empty() && http::csp_origin("ftp://x").is_empty());
+        assert!(http::csp_origin("http://a b").is_empty());
+        let bare = http::build_csp(&[], &[]);
+        assert!(bare.contains("img-src 'self' data:;") && bare.contains("frame-src 'none'"));
+        assert!(!bare.contains(" http:") && !bare.contains(" https:"));
+        let full = http::build_csp(
+            &http::csp_origin("http://tv.lan:8409"),
+            &http::csp_origin(":8788"),
+        );
+        assert!(full.contains("img-src 'self' data: http://tv.lan:8409;"));
+        assert!(full.contains("frame-src http://*:8788 https://*:8788;"));
     }
 
     #[test]

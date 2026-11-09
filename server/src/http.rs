@@ -5,7 +5,58 @@ use std::net::TcpStream;
 use std::time::Duration;
 
 /// CSP każdej odpowiedzi (też UI z `--web` i API): bez skryptów i stylów inline, bez osadzania panelu w ramce.
-pub const CSP: &str = "default-src 'self'; img-src 'self' data: http: https:; frame-src http: https:; connect-src 'self'; media-src 'self' blob:; style-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
+/// Źródła obrazów i ramek tylko ze znanych originów (K2): ustawia je [`set_csp`] przy starcie z konfiguracji;
+/// bez wywołania (testy) – najwęższa wersja: obrazy `'self' data:`, ramki `'none'`.
+static CSP: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+pub fn csp() -> &'static str {
+    CSP.get_or_init(|| build_csp(&[], &[]))
+}
+
+/// Ustala CSP raz, przy starcie (kolejne wywołania nic nie zmieniają).
+pub fn set_csp(img: &[String], frame: &[String]) {
+    let _ = CSP.set(build_csp(img, frame));
+}
+
+pub fn build_csp(img: &[String], frame: &[String]) -> String {
+    let mut img_src = String::from("'self' data:");
+    for o in img {
+        img_src.push(' ');
+        img_src.push_str(o);
+    }
+    let frame_src = if frame.is_empty() {
+        "'none'".to_string()
+    } else {
+        frame.join(" ")
+    };
+    format!("default-src 'self'; img-src {img_src}; frame-src {frame_src}; connect-src 'self'; media-src 'self' blob:; style-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
+}
+
+/// Origin adresu do CSP: `http(s)://host[:port]` (bez ścieżki); sam port `:N` (VizRS pod hostem panelu)
+/// → `http://*:N https://*:N`; inny zapis – brak źródła.
+pub fn csp_origin(url: &str) -> Vec<String> {
+    if let Some(p) = url.strip_prefix(':') {
+        return match p.parse::<u16>() {
+            Ok(n) if n > 0 => vec![format!("http://*:{n}"), format!("https://*:{n}")],
+            _ => vec![],
+        };
+    }
+    for scheme in ["http://", "https://"] {
+        if let Some(rest) = url.strip_prefix(scheme) {
+            let host = rest.split(['/', '?', '#']).next().unwrap_or("");
+            let ok = !host.is_empty()
+                && host
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || "-.:[]".contains(c));
+            return if ok {
+                vec![format!("{scheme}{host}")]
+            } else {
+                vec![]
+            };
+        }
+    }
+    vec![]
+}
 pub const MAX_HEAD: usize = 16 * 1024;
 pub const MAX_BODY: usize = 1024 * 1024;
 /// Limit treści dla wgrywania obrazów (`/api/upload/…`).
@@ -164,7 +215,7 @@ impl Response {
             reason(self.status),
             self.content_type,
             self.body.len(),
-            CSP
+            csp()
         );
         for (k, v) in &self.headers {
             head.push_str(k);
