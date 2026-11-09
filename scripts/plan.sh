@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Automat planu (PLAN_FILE, domyślnie docs/plany/PLAN-rozbudowy.md; punkty R0, M1… – litera i numer):
+# Automat planu (PLAN_FILE, domyślnie docs/plany/PLAN-mcr.md – jedyny plan rozwoju; punkty K1, Q1… – litera i numer):
 # jeden punkt = jedna świeża sesja Claude Code bez operatora.
 #
 #   scripts/plan.sh status                 # tabela planu i następny punkt
 #   scripts/plan.sh next                   # tylko identyfikator następnego punktu (pusty, gdy nie ma)
-#   scripts/plan.sh run [-n N] [-p Rk] [--dry-run]
+#   scripts/plan.sh run [-n N] [-p Kn] [--dry-run]
 #        -n N       ile punktów po kolei (domyślnie 1); zatrzymuje się na pierwszym niepowodzeniu
-#        -p Rk      ten punkt zamiast następnego z tabeli
+#        -p Kn      ten punkt zamiast następnego z tabeli
 #        --dry-run  pokaż punkt i polecenie sesji, nic nie uruchamiaj
 #
 # Każdy punkt: czyste drzewo git → `claude -p` w nowej sesji (realizacja wg CLAUDE.md, lokalny commit, bez push)
@@ -15,15 +15,19 @@
 #   PLAN_CHECK=tests/gate.sh – pełna bramka ze stosem testowym i e2e, jak w CI).
 # Dziennik sesji: .plan-logs/<punkt>-<czas>.log
 #
+# Automat pomija punkty, których nie zrobi sam: Stan inny niż „do zrobienia” (np. „ręcznie (z użytkownikiem)”)
+# i punkty ze znacznikiem „CG” w zakresie (zmiana API VizRS CG Playout = drugie repozytorium, ten sam cykl –
+# robi się je w sesji z operatorem). Commit trafia na bieżącą gałąź (realizacja PLAN-mcr: next-v).
+#
 # Zmienne: PLAN_PERMISSION_MODE (domyślnie auto), PLAN_MODEL, PLAN_BUDGET_USD (limit kosztu sesji),
 #          PLAN_TIMEOUT (np. 4h), PLAN_CLAUDE_ARGS (dodatkowe argumenty claude).
 set -euo pipefail
 cd "$(dirname "$0")/.."
-PLAN=${PLAN_FILE:-docs/plany/PLAN-rozbudowy.md}
+PLAN=${PLAN_FILE:-docs/plany/PLAN-mcr.md}
 LOGS=.plan-logs
 CHECK=${PLAN_CHECK:-tests/deploy.sh}
 
-# Wiersze tabeli: punkt<TAB>wymaga(rozwinięte, spacjami)<TAB>stan<TAB>zakres
+# Wiersze tabeli: punkt<TAB>wymaga(rozwinięte, spacjami; „-” = brak)<TAB>stan<TAB>zakres
 table() {
   python3 -I - "$PLAN" <<'PY'
 import re, sys
@@ -40,7 +44,8 @@ for line in open(sys.argv[1], encoding='utf-8'):
             deps += [f'{r[1]}{i}' for i in range(int(r[2]), int(r[3]) + 1)]
         elif re.match(r'^[A-Z]\d+$', part):
             deps.append(part)
-    print(f"{pid}\t{' '.join(deps)}\t{state}\t{scope}")
+    # „-” przy braku wymagań: read z IFS=tab skleja puste pola (tab to biały znak IFS)
+    print(f"{pid}\t{' '.join(deps) or '-'}\t{state}\t{scope}")
 PY
 }
 
@@ -50,20 +55,24 @@ next_point() {
   local done; done=" $(done_points | tr '\n' ' ') "
   table | while IFS=$'\t' read -r id deps state _; do
     [[ "$state" == do\ zrobienia* ]] || continue
+    needs_cg "$id" && continue
     local ok=1
-    for d in $deps; do [[ "$done" == *" $d "* ]] || ok=0; done
+    for d in $deps; do [ "$d" = - ] || [[ "$done" == *" $d "* ]] || ok=0; done
     if [ $ok = 1 ]; then echo "$id"; break; fi
   done
 }
 
 state_of() { table | awk -F'\t' -v p="$1" '$1 == p {print $3}'; }
 
+# Punkt zmienia API VizRS CG Playout (znacznik „CG” w zakresie) – automat go nie robi
+needs_cg() { table | awk -F'\t' -v p="$1" '$1 == p {print $4}' | grep -qE '(^|[^[:alnum:]])CG([^[:alnum:]]|$)'; }
+
 prompt_for() {
   cat <<P
-Zrealizuj punkt $1 planu docs/plany/PLAN-rozbudowy.md – cały i tylko ten punkt.
+Zrealizuj punkt $1 planu $PLAN – cały i tylko ten punkt (gałąź: $(git branch --show-current)).
 
 Działasz bez operatora (automat scripts/plan.sh). Zasady tej sesji:
-- Postępuj wg CLAUDE.md i sekcji „Jak pracować z tym planem”: przeczytaj CLAUDE.md, plan (tabelę i punkt $1), docs/DOKUMENTACJA.md, git log -5. Testy: $CHECK (tests/deploy.sh = szybkie testy + wdrożenie panelu na lokalny stos + przejście po ekranach tylko do odczytu; stosu testowego nie stawiaj, chyba że to tests/gate.sh).
+- Postępuj wg CLAUDE.md i zasad „Jak pracować” z planu: przeczytaj CLAUDE.md, docs/STATUS.md, plan $PLAN (zasady pracy, tabelę i opis punktu $1), docs/LUKI.md (gdy punkt zamyka lukę – usuń jej wiersz), docs/DOKUMENTACJA.md, git log -5. Testy: $CHECK (tests/deploy.sh = szybkie testy + wdrożenie panelu na lokalny stos + przejście po ekranach tylko do odczytu; stosu testowego nie stawiaj, chyba że to tests/gate.sh).
 - Nie zadawaj pytań – nikt nie odpowie. Decyzje „do sprawdzenia” podejmij sam, zachowawczo, i zapisz je z uzasadnieniem w docs/DOKUMENTACJA.md (i krótko pod punktem w planie).
 - Legacy bez zmian, C# tylko w moście, serwer bez zależności, UI bez bibliotek i bez inline (CSP), lokalny stos (virtrs-*) zmieniaj tylko przez tests/deploy.sh (podmienia sam panel) – bez zapisów do legacy i CG Playout, bez restartu innych usług.
 - Nie zmieniaj innych repozytoriów, nie publikuj niczego (bez git push, bez wypychania obrazów, bez zakładania issue/PR). Czego punkt wymaga poza tym repozytorium, opisz w docs/DOKUMENTACJA.md jako krok ręczny.
@@ -79,6 +88,8 @@ run_point() {
   local st; st=$(state_of "$p")
   [ -n "$st" ] || { echo "nie ma punktu $p w $PLAN" >&2; return 1; }
   [[ "$st" == zrobione* ]] && { echo "$p już zrobiony ($st)" >&2; return 1; }
+  [[ "$st" == do\ zrobienia* || "$st" == przerwane* ]] || { echo "$p ma Stan „$st” – automat go nie robi" >&2; return 1; }
+  needs_cg "$p" && { echo "$p zmienia API VizRS CG Playout (znacznik CG) – zrób go w sesji z operatorem, razem z repo CG Playout" >&2; return 1; }
   local args=(-p "$(prompt_for "$p")" --permission-mode "${PLAN_PERMISSION_MODE:-auto}" --output-format text)
   [ -n "${PLAN_MODEL:-}" ] && args+=(--model "$PLAN_MODEL")
   [ -n "${PLAN_BUDGET_USD:-}" ] && args+=(--max-budget-usd "$PLAN_BUDGET_USD")
@@ -123,8 +134,11 @@ run_point() {
 
 case "${1:-status}" in
   status)
+    echo "plan: $PLAN, gałąź: $(git branch --show-current)"
     table | awk -F'\t' '{printf "%-4s %-28s %s\n", $1, $3, $4}'
     n=$(next_point); echo; echo "następny: ${n:-brak (wszystko zrobione albo zablokowane)}"
+    cg=$(table | awk -F'\t' '$3 ~ /^do zrobienia/ {print $1}' | while read -r i; do if needs_cg "$i"; then printf '%s ' "$i"; fi; done)
+    [ -z "$cg" ] || echo "z operatorem (API CG Playout): $cg"
     ;;
   next) next_point ;;
   run)
