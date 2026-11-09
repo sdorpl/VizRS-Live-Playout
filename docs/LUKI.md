@@ -25,6 +25,11 @@ Ograniczenia samego legacy, których panel nie obejdzie bez zmiany legacy (np. j
 | 11 | Stan silnika Next w Profilach (`GetNextProbe`, `RefreshNextProbe`, `GetNextDescribe`) | dostępne od legacy v26.12.0, nie na białej liście (DOKUMENTACJA §4 R5, §6) |
 | 12 | Plex: panel nie wie, czy konto jest zalogowane | legacy trzyma to w `IPlexSecretStore` poza MediatR; „Wyloguj” tylko, gdy są serwery |
 | 13 | Historia bloku w edytorze playoutu blokowego (`GetBlockPlayoutHistory`) | pominięte świadomie (DOKUMENTACJA §4 „Playouty”) |
+| 23 | Numeracja kanałów naraz (`GetAllChannelsForSort`, `UpdateChannelNumbers` – ekran legacy `/channels/numbers`) | brak na białej liście; PLAN-mcr K1 |
+| 24 | Własne rozdzielczości (`CreateCustomResolution`, `DeleteCustomResolution`) | brak na białej liście; PLAN-mcr K2 |
+| 25 | Walidator YAML harmonogramu sekwencyjnego i diagnostyka playoutu blokowego (`DecodePlayoutHistory`) | walidator poza MediatR (`ISequentialScheduleValidator`); razem z #13 i #14 (PLAN-mcr §2) |
+| 26 | Wyodrębnianie napisów osadzonych (`ExtractEmbeddedSubtitles`, `ExtractEmbeddedShowSubtitles`) | zadanie w tle legacy (PLAN-mcr §2) |
+| 27 | Paczka diagnostyczna legacy (`ArchiveTroubleshootingResults`, `ArchiveMediaSample`) | przydatna przy zgłoszeniu awarii (PLAN-mcr §2) |
 
 ## G3 – funkcje
 

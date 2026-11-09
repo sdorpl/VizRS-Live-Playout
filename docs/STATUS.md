@@ -2,7 +2,7 @@
 
 > Aktualizuj w tym samym commicie, który zmienia stan. Plan: [plany/PLAN-rozbudowy.md](plany/PLAN-rozbudowy.md), znane braki: [LUKI.md](LUKI.md), opis działania: [DOKUMENTACJA.md](DOKUMENTACJA.md).
 >
-> **Ostatnia aktualizacja:** 2026-11-07
+> **Ostatnia aktualizacja:** 2026-11-09
 
 ## Bieżący etap
 
@@ -28,7 +28,7 @@
 
 ## Następne zadanie
 
-Plan [PLAN-makieta.md](plany/PLAN-makieta.md) (panel na wzór makiety UI) zrobiony w całości (M0–M9). Następne zadanie: z [LUKI.md](LUKI.md) pozycja o najwyższym priorytecie (G1 → G2 → G3) albo nowy plan w [plany/](plany/README.md) (wzór: „Jak pracować” w PLAN-rozbudowy).
+Plan [PLAN-makieta.md](plany/PLAN-makieta.md) zrobiony w całości (M0–M9). Nowy plan: [PLAN-mcr.md](plany/PLAN-mcr.md) (2026-11-09) – braki wobec web GUI legacy i panel kanału na wzór Viz Channel Branding; następne zadanie: **K1** (numeracja kanałów naraz). Punkty K7–K11 wymagają zmian w API VizRS CG Playout. Do decyzji użytkownika: **N0** – legacy czy Next (PLAN-mcr §6; zalecenie: zostać na legacy, przygotować hybrydę). Poza planem: [LUKI.md](LUKI.md) G1 → G2 → G3.
 
 ## Kroki ręczne (czekają na użytkownika)
 
