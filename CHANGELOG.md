@@ -2,6 +2,8 @@
 
 ## Niewydane
 
+- **K1 – sesje panelu:** ciasteczko `vizrs_live` niesie losowy identyfikator sesji zamiast tokenu panelu; „Wyloguj” unieważnia sesję, sesje wygasają po 30 dniach bezczynności (limit 256), restart panelu wymaga ponownego logowania. Token w nagłówku `Authorization: Bearer` dla skryptów bez zmian. Zamyka LUKI #2.
+
 ## 1.2.8 – wydanie (2026-11-09)
 
 - **Zdejmij · Przywróć grafikę z animacjami** (Na antenie): VizRS gra animacje wyjścia (`OUT`) i wejścia (`TAKE`) zamiast natychmiastowego cięcia; wymaga VizRS CG Playout z sekwencją OUT/TAKE (2.12.4).

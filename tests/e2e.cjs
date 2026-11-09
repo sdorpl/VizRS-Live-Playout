@@ -1396,6 +1396,15 @@ function check(cond, msg) {
     await sp.waitForSelector('main[data-view="antena"] .head h1');
     const ck = (await sp.context().cookies(SEC)).find((c) => c.name === 'vizrs_live');
     check(ck && ck.httpOnly && ck.sameSite === 'Strict', 'logowanie: ciasteczko HttpOnly, SameSite=Strict');
+    check(ck && ck.value !== PTOK && /^[0-9a-f]{64}$/.test(ck.value), 'K1: ciasteczko niesie losowy identyfikator sesji, nie token panelu');
+    const withTokCookie = await fetch(`${SEC}/api/status`, { headers: { Cookie: `vizrs_live=${PTOK}` } });
+    check(withTokCookie.status === 401, 'K1: token panelu w ciasteczku nie wpuszcza');
+    check((await fetch(`${SEC}/api/status`, { headers: { Authorization: `Bearer ${PTOK}` } })).status === 200, 'K1: token panelu w nagłówku (skrypty) działa');
+    const sid = `vizrs_live=${ck.value}`;
+    check((await fetch(`${SEC}/api/status`, { headers: { Cookie: sid } })).status === 200, 'K1: sesja działa');
+    await sp.click('#logout');
+    await sp.waitForSelector('#login-token');
+    check((await fetch(`${SEC}/api/status`, { headers: { Cookie: sid } })).status === 401, 'K1: po „Wyloguj” sesja unieważniona');
     await sp.close();
     // limit nieudanych logowań (10 na minutę, wspólny)
     const tries = await Promise.all(Array.from({ length: 10 }, () => fetch(`${SEC}/api/login`, { method: 'POST', headers: { 'X-VizRS-Live': '1' }, body: 'zle' }).then((r) => r.status)));

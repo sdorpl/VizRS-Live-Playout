@@ -150,10 +150,11 @@ Potem: Diagnostyka (most zielony), **Playouty → Resetuj wszystkie** (ramówka 
 | panel nie startuje | `docker compose logs live` – brak/za krótki token (min. 16 znaków, litery, cyfry, `-._~`) |
 | widzowie bez strumieni | `curl -I http://<serwer>:8409/iptv/channels.m3u`; `docker compose logs proxy` |
 | dysk pełny | `etv-config/cache/transcode`, `ffmpeg-reports`, `logs`; Diagnostyka → konserwacja |
+| po aktualizacji / restarcie panelu okno logowania | zamierzone – sesje są w pamięci panelu (K1); zaloguj się ponownie |
 | 429 przy logowaniu | odczekaj minutę; w dzienniku panelu »login: zły token (adres)« |
 | potrzebne web GUI legacy (wyjątkowo) | tunel SSH albo tymczasowo `ports: ["127.0.0.1:8410:8409"]` przy `ersatztv` (DOKUMENTACJA §8); cofnij po pracy |
 
-**Wymiana tokenu panelu** (np. odejście operatora): nowy `VIZRS_LIVE_TOKEN` w `.env`, `docker compose up -d live` – wszystkie sesje tracą ważność (ciasteczko = token). Token mostu: nowy `VIZRS_BRIDGE_TOKEN`, `docker compose up -d` (obie usługi).
+**Wymiana tokenu panelu** (np. odejście operatora): nowy `VIZRS_LIVE_TOKEN` w `.env`, `docker compose up -d live` – restart panelu unieważnia wszystkie sesje (magazyn sesji jest w pamięci, DOKUMENTACJA §3); skrypty z `Authorization: Bearer` muszą dostać nowy token. Token mostu: nowy `VIZRS_BRIDGE_TOKEN`, `docker compose up -d` (obie usługi).
 
 ## 7. Wydanie nowej wersji (opiekun repozytorium)
 

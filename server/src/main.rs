@@ -319,6 +319,72 @@ struct App {
     cg: Option<Bridge>,
     /// nieudane logowania w bieżących oknach: na adres klienta i łącznie
     login_fails: std::sync::Mutex<LoginFails>,
+    /// sesje przeglądarek (K1): losowy identyfikator w ciasteczku → ostatnie użycie
+    sessions: std::sync::Mutex<Sessions>,
+}
+
+/// Sesja wygasa po tylu sekundach bezczynności (30 dni – jak dawne `Max-Age` ciasteczka).
+pub const SESSION_IDLE: std::time::Duration = std::time::Duration::from_secs(2_592_000);
+/// Najwyżej tyle sesji naraz; przy nadmiarze najpierw wygasłe, potem najdawniej używana.
+pub const SESSION_MAX: usize = 256;
+
+/// Magazyn sesji w pamięci (K1). Restart panelu = ponowne logowanie wszystkich przeglądarek.
+#[derive(Default)]
+pub struct Sessions {
+    map: std::collections::HashMap<String, std::time::Instant>,
+}
+
+impl Sessions {
+    /// Nowa sesja o identyfikatorze `id` (64 znaki szesnastkowe z [`random_id`]).
+    pub fn create(&mut self, id: String, now: std::time::Instant) {
+        if self.map.len() >= SESSION_MAX {
+            self.map
+                .retain(|_, t| now.duration_since(*t) < SESSION_IDLE);
+        }
+        if self.map.len() >= SESSION_MAX {
+            if let Some(old) = self
+                .map
+                .iter()
+                .min_by_key(|(_, t)| **t)
+                .map(|(k, _)| k.clone())
+            {
+                self.map.remove(&old);
+            }
+        }
+        self.map.insert(id, now);
+    }
+    /// `true` = sesja istnieje i nie wygasła; odświeża czas ostatniego użycia.
+    pub fn touch(&mut self, id: &str, now: std::time::Instant) -> bool {
+        let Some(key) = self.map.keys().find(|k| eq_ct(k, id)).cloned() else {
+            return false;
+        };
+        let t = self.map.get_mut(&key).expect("klucz z mapy");
+        if now.duration_since(*t) >= SESSION_IDLE {
+            self.map.remove(&key);
+            return false;
+        }
+        *t = now;
+        true
+    }
+    pub fn remove(&mut self, id: &str) {
+        if let Some(key) = self.map.keys().find(|k| eq_ct(k, id)).cloned() {
+            self.map.remove(&key);
+        }
+    }
+    #[cfg(test)]
+    fn len(&self) -> usize {
+        self.map.len()
+    }
+}
+
+/// 32 losowe bajty z `/dev/urandom` jako 64 znaki szesnastkowe (bez crate'ów).
+pub fn random_id() -> Result<String, String> {
+    use std::io::Read;
+    let mut b = [0u8; 32];
+    std::fs::File::open("/dev/urandom")
+        .and_then(|mut f| f.read_exact(&mut b))
+        .map_err(|e| format!("/dev/urandom: {e}"))?;
+    Ok(b.iter().map(|x| format!("{x:02x}")).collect())
 }
 
 /// Okna nieudanych logowań: `(początek okna, liczba)` na adres IP klienta i łącznie (bezpiecznik).
@@ -412,6 +478,7 @@ fn main() {
         },
         cg: cg_client(&cfg),
         login_fails: std::sync::Mutex::new(LoginFails::default()),
+        sessions: std::sync::Mutex::new(Sessions::default()),
         cfg,
     });
 
@@ -508,12 +575,20 @@ fn authorized(app: &App, req: &Request) -> bool {
     let Some(token) = &app.cfg.token else {
         return true;
     };
-    let bearer = req
+    // skrypty: token panelu w nagłówku; przeglądarka: identyfikator sesji w ciasteczku (K1)
+    if req
         .header("authorization")
-        .and_then(|h| h.strip_prefix("Bearer "));
-    bearer
-        .or(req.cookie(COOKIE))
+        .and_then(|h| h.strip_prefix("Bearer "))
         .is_some_and(|t| eq_ct(t, token))
+    {
+        return true;
+    }
+    req.cookie(COOKIE).is_some_and(|id| {
+        app.sessions
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .touch(id, std::time::Instant::now())
+    })
 }
 
 /// Zapytanie legacy tylko do odczytu (bezpieczne do ponowienia): `Get…`, `Query…`, `Search…`, `Count…`.
@@ -561,8 +636,23 @@ fn route(app: &App, req: &Request) -> Response {
                 return Response::error(429, "za dużo nieudanych logowań – odczekaj minutę");
             }
             match &app.cfg.token {
-                Some(t) if eq_ct(&given, t) => Response::json(200, "{\"ok\":true}")
-                    .with_header("Set-Cookie", session_cookie(req, t, 2_592_000)),
+                Some(t) if eq_ct(&given, t) => {
+                    let id = match random_id() {
+                        Ok(id) => id,
+                        Err(e) => {
+                            eprintln!("login: {e}");
+                            return Response::error(500, "brak źródła losowości dla sesji");
+                        }
+                    };
+                    app.sessions
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .create(id.clone(), std::time::Instant::now());
+                    Response::json(200, "{\"ok\":true}").with_header(
+                        "Set-Cookie",
+                        session_cookie(req, &id, SESSION_IDLE.as_secs() as u32),
+                    )
+                }
                 Some(_) => {
                     login_limited(app, req.peer, true);
                     match req.peer {
@@ -575,8 +665,16 @@ fn route(app: &App, req: &Request) -> Response {
                 None => Response::json(200, "{\"ok\":true}"),
             }
         }
-        ("POST", "/api/logout") => Response::json(200, "{\"ok\":true}")
-            .with_header("Set-Cookie", session_cookie(req, "", 0)),
+        ("POST", "/api/logout") => {
+            if let Some(id) = req.cookie(COOKIE) {
+                app.sessions
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .remove(id);
+            }
+            Response::json(200, "{\"ok\":true}")
+                .with_header("Set-Cookie", session_cookie(req, "", 0))
+        }
         _ if !authorized(app, req) => Response::error(401, "zaloguj się tokenem panelu"),
         ("GET", "/api/status") => status(app),
         ("GET", "/api/exposure") => exposure(app),
@@ -1517,6 +1615,7 @@ mod tests {
             },
             cg: None,
             login_fails: std::sync::Mutex::new(LoginFails::default()),
+            sessions: std::sync::Mutex::new(Sessions::default()),
             cfg: c,
         }
     }
@@ -1579,6 +1678,10 @@ mod tests {
     #[test]
     fn routes_and_guards() {
         let a = app(Some(T));
+        a.sessions
+            .lock()
+            .unwrap()
+            .create(T.into(), std::time::Instant::now());
         assert_eq!(route(&a, &req("GET", "/", &[])).status, 200);
         assert_eq!(
             route(&a, &req("GET", "/health", &[])).status,
@@ -1705,6 +1808,98 @@ mod tests {
         Response::json(200, "{}").write_to(&mut out).unwrap();
         let head = String::from_utf8_lossy(&out);
         assert!(head.contains("frame-ancestors 'none'") && head.contains("X-Frame-Options: DENY"));
+    }
+
+    #[test]
+    fn sessions_expire_limit_logout() {
+        let t0 = std::time::Instant::now();
+        let mut s = Sessions::default();
+        s.create("a".into(), t0);
+        assert!(s.touch("a", t0 + std::time::Duration::from_secs(10)));
+        assert!(!s.touch("b", t0));
+        // bezczynność liczona od ostatniego użycia
+        assert!(s.touch("a", t0 + SESSION_IDLE));
+        assert!(!s.touch(
+            "a",
+            t0 + SESSION_IDLE * 2 + std::time::Duration::from_secs(11)
+        ));
+        assert_eq!(s.len(), 0, "wygasła sesja usunięta");
+        for n in 0..SESSION_MAX + 5 {
+            s.create(
+                format!("s{n}"),
+                t0 + std::time::Duration::from_secs(n as u64),
+            );
+        }
+        assert_eq!(s.len(), SESSION_MAX, "limit sesji");
+        assert!(!s.touch("s0", t0), "najdawniej używana wypada pierwsza");
+        s.remove("s10");
+        assert!(!s.touch("s10", t0 + std::time::Duration::from_secs(1000)));
+        let id = random_id().unwrap();
+        assert_eq!(id.len(), 64);
+        assert!(id.chars().all(|c| c.is_ascii_hexdigit()));
+        assert_ne!(id, random_id().unwrap());
+    }
+
+    #[test]
+    fn login_session_logout_flow() {
+        let tok = "0123456789abcdef";
+        let a = app(Some(tok));
+        let mut l = req("POST", "/api/login", &[("X-VizRS-Live", "1")]);
+        l.body = tok.as_bytes().to_vec();
+        let ok = route(&a, &l);
+        let c = &ok.headers.iter().find(|h| h.0 == "Set-Cookie").unwrap().1;
+        let id = c
+            .strip_prefix("vizrs_live=")
+            .and_then(|r| r.split(';').next())
+            .unwrap()
+            .to_string();
+        assert!(!c.contains(tok), "token panelu nie trafia do ciasteczka");
+        assert_eq!(id.len(), 64);
+        let cookie = format!("vizrs_live={id}");
+        assert_eq!(
+            route(&a, &req("GET", "/api/exposure", &[("Cookie", &cookie)])).status,
+            200
+        );
+        assert_eq!(
+            route(
+                &a,
+                &req(
+                    "GET",
+                    "/api/exposure",
+                    &[("Cookie", &format!("vizrs_live={tok}"))]
+                )
+            )
+            .status,
+            401,
+            "sam token w ciasteczku już nie wpuszcza"
+        );
+        assert_eq!(
+            route(
+                &a,
+                &req(
+                    "GET",
+                    "/api/exposure",
+                    &[("Authorization", &format!("Bearer {tok}"))]
+                )
+            )
+            .status,
+            200,
+            "token w nagłówku dla skryptów"
+        );
+        let out = route(
+            &a,
+            &req(
+                "POST",
+                "/api/logout",
+                &[("X-VizRS-Live", "1"), ("Cookie", &cookie)],
+            ),
+        );
+        assert_eq!(out.status, 200);
+        assert_eq!(
+            route(&a, &req("GET", "/api/exposure", &[("Cookie", &cookie)])).status,
+            401,
+            "po wylogowaniu sesja nie działa"
+        );
     }
 
     #[test]

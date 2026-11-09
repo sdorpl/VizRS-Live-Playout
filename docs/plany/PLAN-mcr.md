@@ -73,7 +73,7 @@ Przebieg łączy [LUKI.md](../LUKI.md) i punkty z §2–§3 w jedną kolejkę: n
 
 | Punkt | Zakres | Wymaga | Stan |
 |---|---|---|---|
-| K1 | Sesje panelu: losowy identyfikator sesji zamiast tokenu w ciasteczku, wylogowanie, wygasanie (LUKI #2, G1) | – | do zrobienia |
+| K1 | Sesje panelu: losowy identyfikator sesji zamiast tokenu w ciasteczku, wylogowanie, wygasanie (LUKI #2, G1) | – | zrobione (2026-11-09) |
 | K2 | CSP zawężone do znanych źródeł obrazów i ramek zamiast `http:`/`https:` (LUKI #6, G1) | – | do zrobienia |
 | K3 | Numeracja kanałów naraz (LUKI #23) | – | do zrobienia |
 | K4 | Własne rozdzielczości w Profilach (LUKI #24) | – | do zrobienia |
