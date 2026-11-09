@@ -2,7 +2,9 @@
 
 ## Niewydane
 
-- **Zdejmij · Przywróć grafikę z animacjami** (Na antenie): VizRS gra animacje wyjścia (`OUT`) i wejścia (`TAKE`) zamiast natychmiastowego cięcia; wymaga VizRS CG Playout z sekwencją OUT/TAKE (po 2.12.3).
+## 1.2.8 – wydanie (2026-11-09)
+
+- **Zdejmij · Przywróć grafikę z animacjami** (Na antenie): VizRS gra animacje wyjścia (`OUT`) i wejścia (`TAKE`) zamiast natychmiastowego cięcia; wymaga VizRS CG Playout z sekwencją OUT/TAKE (2.12.4).
 
 ## 1.2.7 – wydanie (2026-11-09)
 
