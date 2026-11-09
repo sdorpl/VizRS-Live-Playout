@@ -1193,7 +1193,8 @@ function check(cond, msg) {
   const badSes = await page.evaluate(() => fetch('/api/session/24/kill', { method: 'POST', headers: { 'X-VizRS-Live': '1' } }).then((r) => r.status));
   check(badSes === 404, 'antena: sesja – tylko start, stop, restart');
 
-  // reguły grafiki (CG Playout GET/PUT /api/live/graphics)
+  // reguły grafiki (CG Playout GET/PUT /api/live/graphics) – z powrotem na ekranie Grafika kanału
+  await page.goto(`${BASE}/#grafika`);
   await page.waitForSelector('[data-rules] #gr-on_clip');
   check(await page.inputValue('#gr-on_clip') === 'TAKE 4001 headline={title}' && await page.inputValue('input[aria-label="on_end 1"]') === '-', 'reguły grafiki: odczyt z CG Playout („-” = wyłączone)');
   // M8: streszczenie „Kiedy / Co / Ile” – globalne, reklama wyłączona = OUT, reguła kanału 24 („-”); klik w wiersz → pole edytora
@@ -1362,7 +1363,7 @@ function check(cond, msg) {
   }
 
   // ---------- R11: wydanie 1.0 – przegląd bezpieczeństwa (osobny panel z tokenem na 18091) ----------
-  check(st10.panel === '1.2.5' && st10.bridge?.result?.bridge === '1.2.5', `wersja 1.2.5: panel ${st10.panel}, most ${st10.bridge?.result?.bridge}`);
+  check(st10.panel === '1.2.6' && st10.bridge?.result?.bridge === '1.2.6', `wersja 1.2.6: panel ${st10.panel}, most ${st10.bridge?.result?.bridge}`);
   const SEC = 'http://127.0.0.1:18091', PTOK = 'e2e-panel-token-0123456789';
   const secProc = require('child_process').spawn(path.join(__dirname, '..', 'server', 'target', 'release', 'vizrs-live'),
     ['--port', '18091', '--bridge', 'http://127.0.0.1:18409', '--bridge-token', 'test-token-0123456789', '--token', PTOK], { stdio: 'ignore' });

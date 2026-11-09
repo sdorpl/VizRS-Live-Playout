@@ -2,7 +2,10 @@
 
 ## Niewydane
 
+## 1.2.6 – wydanie (2026-11-09)
+
 - **Obrazy zawsze najnowsze:** domyślne `LIVE_IMAGE=ghcr.io/sdorpl/vizrs-live:latest` i `PROXY_IMAGE=caddy:alpine` w `compose.yml`, `compose.cg-playout.yml` i `.env.example` (wcześniej przypięte wersje); przypięcie – własna wartość w `.env`.
+- Wydanie 1.2.5 nie zostało opublikowane (bramka CI padła na teście e2e); jego zmiany wchodzą w 1.2.6.
 
 ## 1.2.5 – wydanie (2026-11-09)
 
