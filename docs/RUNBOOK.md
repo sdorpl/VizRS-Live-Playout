@@ -8,7 +8,7 @@ Wdrożenie, kopie, aktualizacja legacy, odtworzenie. Praca operatora: [INSTRUKCJ
 |---|---|---|
 | `live` – panel | `ghcr.io/sdorpl/vizrs-live:1.2.3` | 8090 – operatorzy |
 | `ersatztv` – legacy z mostem | `vizrs-live-legacy:local` – budowany na miejscu na najnowszym `ghcr.io/ersatztv/legacy` + VizRS Bridge, ffmpeg z VAAPI/QSV/NVENC (§2b) | brak (`expose`) |
-| `proxy` – Caddy | `caddy:2.10.2-alpine` | 8409 – widzowie: strumienie, M3U, XMLTV, HDHomeRun |
+| `proxy` – Caddy | `caddy:alpine` | 8409 – widzowie: strumienie, M3U, XMLTV, HDHomeRun |
 
 Dane: `ETV_CONFIG` (domyślnie `./etv-config`, cała baza i stan legacy) i `MEDIA_DIR` (media, tylko do odczytu). Panel nie trzyma żadnych danych.
 
@@ -118,7 +118,7 @@ docker compose start ersatztv
 
 ## 4. Aktualizacja
 
-**Panel** (nowe wydanie VizRS Live): zmień `LIVE_IMAGE` w `.env` na nowy tag z CHANGELOG, `docker compose pull live && docker compose up -d` (most dobuduje się z repozytorium – najpierw `git pull`).
+**Panel** (nowe wydanie VizRS Live): domyślnie `LIVE_IMAGE` to `:latest`, więc wystarczy `docker compose pull live && docker compose up -d` (przypięcie wersji: `LIVE_IMAGE=ghcr.io/sdorpl/vizrs-live:<wersja>` w `.env`) (most dobuduje się z repozytorium – najpierw `git pull`).
 
 **Legacy** – zawsze najnowsze `ghcr.io/ersatztv/legacy` (decyzja 2026-11-07, jak w CG Playout): każde `docker compose up -d` pobiera nowsze legacy, jeśli jest, i buduje na nim most. Nowsze legacy migruje bazę bez pytania, więc:
 1. Przed `up`, które może przynieść nowe legacy, zrób kopię `etv-config` (§3). Wcześniejsze sprawdzenie: `tests/stack.sh up && tests/stack.sh seed && tests/stack.sh test` na maszynie testowej (DOKUMENTACJA §6) – stos testowy też bierze najnowsze.

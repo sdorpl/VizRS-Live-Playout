@@ -2,6 +2,8 @@
 
 ## Niewydane
 
+- **Obrazy zawsze najnowsze:** domyślne `LIVE_IMAGE=ghcr.io/sdorpl/vizrs-live:latest` i `PROXY_IMAGE=caddy:alpine` w `compose.yml`, `compose.cg-playout.yml` i `.env.example` (wcześniej przypięte wersje); przypięcie – własna wartość w `.env`.
+
 ## 1.2.5 – wydanie (2026-11-09)
 
 - **Sterowanie anteną w Na antenie**: emisja kanału – „Uruchom emisję”, „Restart emisji”, „Zatrzymaj emisję” z pigułką stanu sesji legacy (most: `GET /vizrs-bridge/sessions`, `POST /vizrs-bridge/session/{kanał}/stop`; panel: `/api/sessions`, `/api/session/{kanał}/{start|stop|restart}`); **„Zdejmij grafikę” / „Przywróć grafikę”** – cała grafika VizRS ze wszystkich kanałów (pośrednik `live/graphics/off|on`). Wymaga mostu z tej wersji i VizRS CG Playout z `/api/live/graphics/off|on` (2026-11-09).

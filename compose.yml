@@ -27,7 +27,7 @@ services:
 
   proxy:
     # na zewnątrz tylko /iptv/*, /artwork/* (GET) i HDHomeRun; reszta 403 (docker/proxy.Caddyfile)
-    image: ${PROXY_IMAGE:-caddy:2.10.2-alpine}
+    image: ${PROXY_IMAGE:-caddy:alpine}
     restart: unless-stopped
     depends_on: [ersatztv]
     environment:
@@ -41,7 +41,7 @@ services:
     build:
       context: .
       dockerfile: docker/live.Dockerfile
-    image: ${LIVE_IMAGE:-ghcr.io/sdorpl/vizrs-live:1.2.5}
+    image: ${LIVE_IMAGE:-ghcr.io/sdorpl/vizrs-live:latest}
     restart: unless-stopped
     depends_on: [ersatztv]
     environment:
