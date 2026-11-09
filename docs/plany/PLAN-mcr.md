@@ -1,8 +1,8 @@
-# PLAN-mcr – panel kanału na wzór Viz Channel Branding; legacy czy Next
+# Plan rozwoju VizRS Live (PLAN-mcr) – braki wobec legacy, wzorzec Viz Channel Branding, legacy czy Next
 
 > **Stan:** projekt (2026-11-09), żaden punkt niezaczęty. Stan prac: [../STATUS.md](../STATUS.md), znane braki: [../LUKI.md](../LUKI.md), opis działania: [../DOKUMENTACJA.md](../DOKUMENTACJA.md).
 >
-> **Jedyny dokument planów panelu VizRS Live** (decyzja użytkownika 2026-11-09): nowe plany i punkty panelu dopisuj tutaj – nowy punkt w tabeli §4 i opis w §5, nowe analizy jako kolejne sekcje – zamiast zakładać nowe pliki `PLAN-*.md`. Zakończone plany [PLAN-rozbudowy.md](PLAN-rozbudowy.md) i [PLAN-makieta.md](PLAN-makieta.md) zostają jako archiwum.
+> **Jedyny dokument planów rozwoju VizRS Live** (decyzja użytkownika 2026-11-09): nowe plany i punkty panelu dopisuj tutaj – nowy punkt w tabeli §4 i opis w §5, nowe analizy jako kolejne sekcje – zamiast zakładać nowe pliki `PLAN-*.md`. Zakończone plany [PLAN-rozbudowy.md](PLAN-rozbudowy.md) i [PLAN-makieta.md](PLAN-makieta.md) zostają jako archiwum.
 >
 > Treść: §1 skąd wiadomo, §2 czego jeszcze brakuje wobec web GUI legacy, §3 czego uczy Vizrt (tabela A–J), §4 tabela punktów, §5 punkty, §6 legacy czy Next – opcje i zalecenie.
 
