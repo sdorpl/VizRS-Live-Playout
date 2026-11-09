@@ -2,7 +2,9 @@
 
 > **Stan:** projekt (2026-11-09), żaden punkt niezaczęty. Stan prac: [../STATUS.md](../STATUS.md), znane braki: [../LUKI.md](../LUKI.md), opis działania: [../DOKUMENTACJA.md](../DOKUMENTACJA.md).
 >
-> Treść: §1 skąd wiadomo, §2 czego jeszcze brakuje wobec web GUI legacy, §3 czego uczy Vizrt, §4 tabela punktów, §5 punkty, §6 legacy czy Next – opcje i zalecenie.
+> **Jedyny dokument planów panelu VizRS Live** (decyzja użytkownika 2026-11-09): nowe plany i punkty panelu dopisuj tutaj – nowy punkt w tabeli §4 i opis w §5, nowe analizy jako kolejne sekcje – zamiast zakładać nowe pliki `PLAN-*.md`. Zakończone plany [PLAN-rozbudowy.md](PLAN-rozbudowy.md) i [PLAN-makieta.md](PLAN-makieta.md) zostają jako archiwum.
+>
+> Treść: §1 skąd wiadomo, §2 czego jeszcze brakuje wobec web GUI legacy, §3 czego uczy Vizrt (tabela A–J), §4 tabela punktów, §5 punkty, §6 legacy czy Next – opcje i zalecenie.
 
 ## 1. Źródła i ograniczenia rozpoznania
 
@@ -42,7 +44,24 @@ Model Viz Channel Branding (VCB) i Multichannel, w skrócie:
 - **Kampanie** (5.4): zatwierdzanie stron (Planning → MCR), czas życia (TTL) stron kampanii.
 - **Wyzwalanie**: czasowe przez Media Sequencer albo z automatyki (TCP/IP, Intelligent Interface, VDCP, GPI, REST).
 
-Odpowiedniki w rodzinie VizRS: playlista = ramówka legacy (playout), zdarzenia wtórne = reguły grafiki CG Playout (`/api/live/graphics`: start pozycji ± s, przed końcem, przerwa reklamowa, slot na żywo), Media Sequencer = CG Playout + VizRS (TCP 6100), Clip Bank ≈ Audycje LIVE, Page pool ≈ strony VizRS (`/etv/pages`), Channel Deck ≈ Na antenie. Braki są w kolumnie „Punkt” tabeli niżej.
+Odpowiedniki w rodzinie VizRS: playlista = ramówka legacy (playout), zdarzenia wtórne = reguły grafiki CG Playout (`/api/live/graphics`: start pozycji ± s, przed końcem, przerwa reklamowa, slot na żywo), Media Sequencer = CG Playout + VizRS (TCP 6100), Clip Bank ≈ Audycje LIVE, Page pool ≈ strony VizRS (`/etv/pages`), Channel Deck ≈ Na antenie.
+
+### Funkcje Vizrt, których brakuje w panelu (A–J)
+
+Sprawdzone w `server/web` (2026-11-09). Kolumna „Punkt” wskazuje punkt tabeli w §4.
+
+| # | Funkcja (Vizrt) | Co by to było w VizRS | Gdzie zmiana | Punkt |
+|---|---|---|---|---|
+| A | **Zdarzenia wtórne** przy pozycji ramówki – strony i akcje z przesunięciem (offset) względem programu | reguła grafiki przypięta do konkretnej audycji/kolekcji/pozycji, z offsetem od startu albo końca i czasem trwania; kilka zdarzeń na pozycję (np. „Za chwilę” 30 s przed końcem, belka tytułowa po 10 s) | CG Playout (model reguł) + panel; legacy bez zmian | K10 |
+| B | **Kontrola playlisty** – nakładające się animacje, niezgodności z ramówką, błąd na czerwono z opisem | „Sprawdź ramówkę”: dziury, playout za krótki, pliki w koszu, audycja LIVE bez wejścia studia, zdjęta grafika – czerwone znaczniki w EPG, Playoutach i na karcie kanału | panel (dane z legacy i CG) | K4 |
+| C | **Run Status / as-run** – stan wykonania każdego zdarzenia | dziennik emisji: co faktycznie poszło na antenę (pozycja, start, koniec, strony grafiki, przejęcia live), eksport CSV | CG Playout (zapis, `GET /api/live/asrun`) + panel (ekran, CSV) | K9 |
+| D | **Channel Deck** – jeden widok „czy branding gra poprawnie” na wszystkich kanałach | „Na antenie” z warstwami grafiki VizRS (pigułki „W10 · belka 101”) i lampką zgodności grafiki z regułą | najpierw API CG Playout (`/api/live/state`), potem panel | K7 (LUKI #22) |
+| E | **Import ramówki z systemu traffic** (CSV, XML, Excel, Harris, Omnibus; folder obserwowany, `.done`/`.fail`; pełna aktualizacja albo tylko czasy) | import CSV/XML do playlisty legacy z podglądem dopasowania do mediów; dokładne godziny – Scripted Schedule (§6, C2) | panel (`CreatePlaylist`, `ReplacePlaylistItems` już na białej liście) | K6 |
+| F | **Dane w stronach** z bazy, RSS albo pliku; reguły aktywacji (pozycja aktywna tylko, gdy dane są) | pola stron VizRS z EPG legacy (CG Playout ma już `{title}`, `{next_*}`); źródło RSS/JSON dla tickera; reguła „pomiń stronę, gdy pole puste” | VizRS CG System i CG Playout | poza planem panelu (do planów CG) |
+| G | **Kampanie** (VCB 5.4): zatwierdzanie stron (Planning → MCR) i czas życia (TTL) stron kampanii | strona promo z datami „od–do” i znacznikiem „zatwierdzona”; reguła gaśnie po terminie | CG Playout (reguły) + panel | K11 |
+| H | **Take / Continue / Take Out** i **Quick Take** z page pool przy automatyce | na karcie kanału: wprowadź stronę, dalej, zdejmij jedną warstwę (dziś jest tylko „Zdejmij całą grafikę”) | CG Playout (TCP VizRS: `TAKE`/`CONTINUE`/`OUT`) + panel | K8 |
+| I | **Wyzwalanie z automatyki** (REST, TCP/IP, GPI, VDCP) | REST już jest (`/api/live/*`); dodać webhook i alarm przy utracie sygnału, pustej ramówce, zatrzymanej emisji, długo zdjętej grafice | panel (banner, dźwięk) + CG Playout (webhook) | K12 |
+| J | **Monitorowanie wszystkich kanałów** z jednego klienta (obraz NDI w Channel Deck) | mozaika podglądów (multiview) w „Na antenie”; uwaga: każdy podgląd to sesja Next, która transkoduje – limit albo miniatury | panel (`player.js`, `mux.js`) | K5 |
 
 ## 4. Jak pracować i tabela
 

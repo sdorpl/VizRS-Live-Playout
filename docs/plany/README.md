@@ -8,7 +8,7 @@ Dokumenty projektowe: zakres punktów, decyzje i ich uzasadnienie. Bieżący sta
 | [PLAN-makieta.md](PLAN-makieta.md) | wdrożony (M0–M9, niewydany) | panel na wzór artefaktu „Makieta UI VizRS Live”: ekran po ekranie to, co ma pokrycie w danych (M0–M9) |
 | [PLAN-mcr.md](PLAN-mcr.md) | projekt (2026-11-09) | braki wobec web GUI legacy (K1–K3), panel kanału na wzór Viz Channel Branding (K4–K12: kontrola ramówki, mozaika, import ramówki, warstwy, TAKE/OUT, as-run, zdarzenia wtórne, alarmy), legacy czy Next – opcje i zalecenie (§6, N0) |
 
-Nowy plan: plik `PLAN-<temat>.md` w tym katalogu (punkty opisane tak, żeby każdy dało się zrobić w świeżej sesji, tabela z kolumnami „Wymaga” i „Stan”) + wiersz w tej tabeli. Automat: `PLAN_FILE=docs/plany/PLAN-<temat>.md scripts/plan.sh run`.
+**Plany panelu – jeden dokument** (decyzja użytkownika 2026-11-09): [PLAN-mcr.md](PLAN-mcr.md). Nowe punkty i analizy dopisuj tam (tabela z kolumnami „Punkt | Zakres | Wymaga | Stan”, opis punktu tak, żeby dało się go zrobić w świeżej sesji); nowych plików `PLAN-*.md` nie zakładaj. PLAN-rozbudowy i PLAN-makieta to archiwum zakończonych planów. Automat: `PLAN_FILE=docs/plany/PLAN-mcr.md scripts/plan.sh run`.
 
 ## Poza repozytorium
 
