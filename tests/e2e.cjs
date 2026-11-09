@@ -1190,7 +1190,8 @@ function check(cond, msg) {
   await page.click('[data-graphics] button:has-text("Przywróć grafikę")');
   await page.waitForSelector('[data-graphics] button:has-text("Zdejmij grafikę")');
   check(CG.graphicsOff === false, 'antena: Przywróć grafikę → CG Playout graphics/on');
-  const badSes = await page.evaluate(() => fetch('/api/session/24/kill', { method: 'POST', headers: { 'X-VizRS-Live': '1' } }).then((r) => r.status));
+  // poza stroną (page.request – te same ciasteczka): odrzucone 404 nie trafia do konsoli przeglądarki
+  const badSes = (await page.request.post(`${BASE}/api/session/24/kill`, { headers: { 'X-VizRS-Live': '1' } })).status();
   check(badSes === 404, 'antena: sesja – tylko start, stop, restart');
 
   // reguły grafiki (CG Playout GET/PUT /api/live/graphics) – z powrotem na ekranie Grafika kanału
@@ -1363,7 +1364,7 @@ function check(cond, msg) {
   }
 
   // ---------- R11: wydanie 1.0 – przegląd bezpieczeństwa (osobny panel z tokenem na 18091) ----------
-  check(st10.panel === '1.2.6' && st10.bridge?.result?.bridge === '1.2.6', `wersja 1.2.6: panel ${st10.panel}, most ${st10.bridge?.result?.bridge}`);
+  check(st10.panel === '1.2.7' && st10.bridge?.result?.bridge === '1.2.7', `wersja 1.2.7: panel ${st10.panel}, most ${st10.bridge?.result?.bridge}`);
   const SEC = 'http://127.0.0.1:18091', PTOK = 'e2e-panel-token-0123456789';
   const secProc = require('child_process').spawn(path.join(__dirname, '..', 'server', 'target', 'release', 'vizrs-live'),
     ['--port', '18091', '--bridge', 'http://127.0.0.1:18409', '--bridge-token', 'test-token-0123456789', '--token', PTOK], { stdio: 'ignore' });
