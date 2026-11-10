@@ -7,6 +7,7 @@
 // o najwyższym Index jako harmonogram główny. Panel pokazuje harmonogram główny jako osobne pole edytora.
 
 import { VIEWS, h, btn, panel, pill, cmd, pl, table, toast, confirmDlg, route, dateTime, isFiller, cmdNote, onChannel, S, api } from '../core.js';
+import { followTask } from '../tasks.js';
 import { form } from '../form.js';
 import { crudView, itemsEditor } from '../parts.js';
 import { build } from './antena.js';
@@ -46,6 +47,17 @@ async function maintenance(p, command, title, text, done) {
     toast(r?.queued ? `${chanName(p)}: ${done} (zlecone – legacy robi to w tle).` : `${chanName(p)}: ${done}.`, 'ok');
     setTimeout(() => route(true), 1500);
   } catch (e) { toast(`Legacy odrzucił: ${e.message}`, 'bad'); }
+}
+
+/** K6: sprawdzanie nakładania – zadanie w tle legacy; wynik z logu (legacy loguje tylko znalezione nakładanie). */
+export async function checkOverlap(p) {
+  try { await cmd('CheckForOverlappingPlayoutItems', { PlayoutId: p.PlayoutId }); } catch (e) { toast(`Legacy odrzucił: ${e.message}`, 'bad'); return; }
+  const esc = p.ChannelName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  await followTask({
+    label: `Nakładanie pozycji · ${chanName(p)}`, filter: 'overlapping playout items',
+    match: new RegExp(`Playout for channel ${esc} has overlapping playout items`), timeoutMs: 20000,
+    empty: `Legacy nie zgłosił nakładania pozycji w kanale ${chanName(p)} – ramówka bez nakładania (legacy zapisuje wpis tylko wtedy, gdy je znajdzie).`,
+  });
 }
 
 const KIND_PILL = { Block: 'info', Sequential: 'warn', Scripted: 'warn', ExternalJson: 'warn' };
@@ -169,7 +181,7 @@ VIEWS.playouty = crudView({
           `Usunąć przyszłe pozycje playoutu kanału ${chanName(p)}? Historia odtwarzania do teraz zostaje; kanał będzie bez ramówki do przebudowy.`, 'wyczyszczono pozycje'), 'danger') : null,
         k !== 'ExternalJson' ? btn('Wyczyść pozycje i historię', () => maintenance(p, 'ErasePlayoutHistory', 'Wyczyść pozycje i historię',
           `Usunąć pozycje i całą historię playoutu kanału ${chanName(p)}? Następna budowa ułoży ramówkę od zera (nowe losowanie).`, 'wyczyszczono pozycje i historię'), 'danger') : null,
-        btn('Sprawdź nakładanie pozycji', () => maintenance(p, 'CheckForOverlappingPlayoutItems', null, null, 'sprawdzanie nakładania; wynik w logach legacy'))));
+        btn('Sprawdź nakładanie pozycji', () => checkOverlap(p))));
   },
   below: (p, ctx) => {
     if (!p) return null;

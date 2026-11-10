@@ -7,6 +7,7 @@ import { contentPicker } from '../parts.js';
 import { openMonitor } from '../player.js';
 import { cg } from './grafika.js';
 import { accels, accelCodecs } from './profile.js';
+import { followTask } from '../tasks.js';
 
 // ---------- Ustawienia ----------
 
@@ -259,12 +260,19 @@ const MAINT = [
   ['ReleaseMemory', { ForceAggressive: true }, 'Zwolnij pamięć', 'Wymusić odśmiecanie pamięci legacy? Nadawanie może na chwilę zwolnić.'],
 ];
 
+/** K6: wzorce wpisów legacy dla zadań konserwacji (większość na poziomie Debug – widać je przy takim progu logów). */
+const MAINT_LOG = {
+  EmptyTrash: /trash|deleted .*items?/i, DeleteOrphanedArtwork: /orphaned (artwork|actors)|artwork file|cache folder/i,
+  DeleteOrphanedSubtitles: /subtitle/i, ReleaseMemory: /garbage collection/i,
+};
+
 async function maintenance(name, args, label, text) {
   if (!(await confirmDlg(label, text, label))) return;
-  try {
-    const r = await cmd(name, args);
-    toast(r?.queued ? `${label}: zlecone w tle legacy (wynik w logach).` : `${label}: zrobione.`, 'ok');
-  } catch (e) { toast(`${label}: legacy odrzucił – ${e.message}`, 'bad'); }
+  let r;
+  try { r = await cmd(name, args); } catch (e) { toast(`${label}: legacy odrzucił – ${e.message}`, 'bad'); return; }
+  if (!r?.queued) { toast(`${label}: zrobione.`, 'ok'); return; }
+  await followTask({ label, match: MAINT_LOG[name], timeoutMs: 20000,
+    empty: 'Legacy nie zapisał wpisu o tym zadaniu na bieżącym progu logów (wpisy konserwacji są na poziomie Debug – Ustawienia → Poziomy logów). Zadanie poszło w tle.' });
 }
 
 function playbackTest(channels) {

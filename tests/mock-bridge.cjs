@@ -105,9 +105,9 @@ const DB = {
     IdleBehavior: 'StopOnDisconnect', IsEnabled: true, ShowInEpg: true,
   })),
   playouts: [
-    { PlayoutId: 1, ScheduleKind: 'Classic', ChannelName: 'INFO24', ChannelNumber: '24', PlayoutMode: 'Continuous', ScheduleName: 'INFO24 – dzień', ScheduleFile: null, DbDailyRebuildTime: null, BuildStatus: { Success: true, Message: '' } },
-    { PlayoutId: 2, ScheduleKind: 'Block', ChannelName: 'Muzyka VizRS', ChannelNumber: '25', PlayoutMode: 'Continuous', ScheduleName: '', ScheduleFile: null, DbDailyRebuildTime: '04:00:00', BuildStatus: { Success: true, Message: '' } },
-    { PlayoutId: 3, ScheduleKind: 'Classic', ChannelName: 'Kino Klasyka', ChannelNumber: '26', PlayoutMode: 'Continuous', ScheduleName: 'Kino – wieczór', ScheduleFile: null, DbDailyRebuildTime: null, BuildStatus: { Success: false, Message: 'Collection "Westerny" is empty' } },
+    { PlayoutId: 1, ScheduleKind: 'Classic', ChannelName: 'INFO24', ChannelNumber: '24', PlayoutMode: 'Continuous', ScheduleName: 'INFO24 – dzień', ScheduleFile: null, DbDailyRebuildTime: null, BuildStatus: { LastBuild: iso(now - 7200e3), Success: true, Message: '' } },
+    { PlayoutId: 2, ScheduleKind: 'Block', ChannelName: 'Muzyka VizRS', ChannelNumber: '25', PlayoutMode: 'Continuous', ScheduleName: '', ScheduleFile: null, DbDailyRebuildTime: '04:00:00', BuildStatus: { LastBuild: iso(now - 7200e3), Success: true, Message: '' } },
+    { PlayoutId: 3, ScheduleKind: 'Classic', ChannelName: 'Kino Klasyka', ChannelNumber: '26', PlayoutMode: 'Continuous', ScheduleName: 'Kino – wieczór', ScheduleFile: null, DbDailyRebuildTime: null, BuildStatus: { LastBuild: iso(now - 600e3), Success: false, Message: 'Collection "Westerny" is empty' } },
   ],
   watermarks: [{ Id: 1, Name: 'Logo INFO24', Image: '', ImageSource: 'ChannelLogo', Mode: 'Permanent', Location: 'TopRight', Size: 'Scaled', WidthPercent: 12, HorizontalMarginPercent: 4, VerticalMarginPercent: 5, FrequencyMinutes: 15, DurationSeconds: 15, Opacity: 90, PlaceWithinSourceContent: false, ZIndex: 0 }],
   fillers: [{ Id: 1, Name: 'Plansza zapasowa', FillerKind: 'Fallback', FillerMode: 'None' }, { Id: 2, Name: 'Zapowiedzi', FillerKind: 'MidRoll', FillerMode: 'Count' }],
@@ -139,9 +139,10 @@ const probe = {
   },
   Json: '{}', FFmpegPath: '/usr/local/bin/ffmpeg', ProbedAt: iso(now - 3600e3),
 };
-const logs = () => [
+const LOGS = []; // wpisy dopisywane przez zadania w tle atrapy (K6)
+const logs = () => [...LOGS,
   { Timestamp: iso(now - 20e3), Level: 'Information', Message: 'Checking for overlapping playout items in 3 playouts', Properties: '' },
-  { Timestamp: iso(now - 18e3), Level: 'Warning', Message: 'Playout 3 has overlapping playout items: "Miś (1981)" and "Zapowiedzi"', Properties: '' },
+  { Timestamp: iso(now - 18e3), Level: 'Warning', Message: 'Playout for channel Kino Klasyka has overlapping playout items; this may be a bug.', Properties: '' },
   { Timestamp: iso(now - 60e3), Level: 'Information', Message: 'Building playout 1 for channel 24 - INFO24', Properties: '' },
 ];
 
@@ -166,7 +167,7 @@ const H = {
   GetAllBlockPlayouts: () => DB.playouts.filter((p) => p.ScheduleKind === 'Block'),
   GetFuturePlayoutItemsById: (a) => { const it = items(a.PlayoutId, a.PageSize || 8); return { TotalCount: it.length, Page: it }; },
   GetPlayoutWarningsCount: () => 1,
-  GetRecentLogEntries: () => ({ TotalCount: 3, Page: logs() }),
+  GetRecentLogEntries: (a) => { const l = logs().filter((e) => !a.Filter || e.Message.toLowerCase().includes(String(a.Filter).toLowerCase())); return { TotalCount: l.length, Page: l }; },
   GetAllHealthCheckResults: () => [
     { Title: 'FFmpeg Version', Status: 'Pass', Message: 'FFmpeg 7.1.1', BriefMessage: 'FFmpeg 7.1.1' },
     { Title: 'Hardware Acceleration', Status: 'Warning', Message: 'VAAPI probe failed', BriefMessage: 'VAAPI: test nieudany' },
@@ -201,6 +202,8 @@ http.createServer((req, res) => {
       if (!allowed.includes(name)) return reply(res, 403, { ok: false, error: `komenda '${name}' nie jest dozwolona (biała lista mostu)` });
       let args = {};
       try { args = body ? JSON.parse(body) : {}; } catch { return reply(res, 400, { ok: false, error: 'zły JSON' }); }
+      if (name === 'CheckForOverlappingPlayoutItems' && args.PlayoutId === 3) setTimeout(() => LOGS.unshift({ Timestamp: iso(Date.now()), Level: 'Warning', Message: 'Playout for channel Kino Klasyka has overlapping playout items; this may be a bug.' }), 1500);
+      if (name === 'ReleaseMemory') setTimeout(() => LOGS.unshift({ Timestamp: iso(Date.now()), Level: 'Debug', Message: 'Completed garbage collection' }), 1000);
       if (/^(Build|Queue|Extract|Check|Refresh(?!NextProbe)|EmptyTrash|DeleteOrphaned|ReleaseMemory|Synchronize)/.test(name)) return reply(res, 202, { ok: true, queued: 'atrapa' });
       const fn = H[name];
       const result = fn ? fn(args) : /^(Get|Query|Search)/.test(name) ? [] : /^Count/.test(name) ? 0 : null;

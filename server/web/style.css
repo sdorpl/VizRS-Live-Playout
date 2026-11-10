@@ -334,3 +334,4 @@ dl.kv dd { flex-wrap: wrap; }
 .renumber .num-in { width: 7em; }
 .renumber .tw { max-height: 55vh; overflow: auto; }
 .res-add input { width: 7em; flex: none; }
+.task-result { max-width: 80ch; max-height: 50vh; overflow: auto; }

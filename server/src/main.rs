@@ -50,6 +50,11 @@ const STATIC: &[(&str, &str, &str)] = &[
         include_str!("../web/when.js"),
     ),
     (
+        "/tasks.js",
+        "text/javascript; charset=utf-8",
+        include_str!("../web/tasks.js"),
+    ),
+    (
         "/player.js",
         "text/javascript; charset=utf-8",
         include_str!("../web/player.js"),

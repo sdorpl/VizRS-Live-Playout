@@ -1098,6 +1098,10 @@ function check(cond, msg) {
   await page.click('#dlg-buttons button:has-text("Zwolnij pamięć")');
   // czeka na komunikat tej akcji (poprzedni zielony toast może jeszcze wisieć)
   check(await page.waitForFunction(() => /w tle/.test(document.querySelector('#toast.ok')?.textContent || '')).then(() => true, () => false), 'konserwacja: zadanie zlecone w tle legacy');
+  // K6: po zleceniu panel czyta log legacy i pokazuje wynik w oknie (wpis albo opis braku wpisu)
+  await page.waitForSelector('#dlg-title:has-text("Zwolnij pamięć – wynik")', { timeout: 30000 });
+  check(await page.isVisible('.task-result'), 'K6: wynik zadania konserwacji w oknie (z logu legacy)');
+  await page.click('#dlg-buttons button:has-text("Zamknij")');
   await shot('r7-diagnostyka');
   await tab('logi');
   await page.selectOption('#log-level', 'Debug');

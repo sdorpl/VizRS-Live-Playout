@@ -2,6 +2,8 @@
 
 ## Niewydane
 
+- **K6 – wyniki zadań w tle:** po „Sprawdź nakładanie pozycji” (Playouty) i zadaniach konserwacji (Diagnostyka) panel czyta log legacy do 20–60 s i pokazuje wynik w oknie (wpis legacy albo opis, co znaczy brak wpisu). Zamyka LUKI #10.
+
 - **K4 – własne rozdzielczości** (Profile kodowania → „Rozdzielczości”): dodawanie (`CreateCustomResolution`, kontrola parzystości i duplikatu) i usuwanie własnych (`DeleteCustomResolution`). Zamyka LUKI #24.
 - **K5 – silnik Next:** podpowiedź akceleracji w edytorze profilu wg `GetNextProbe` (ta sama logika co edytor legacy 26.12), karta „Silnik Next” w Diagnostyce (wersja, schematy, akceleracje z kodekami, „Sprawdź ponownie” – `RefreshNextProbe`). Zamyka LUKI #11; paczka diagnostyczna (#27) zostaje – plik ZIP powstaje tylko na dysku legacy, pobranie wymagałoby nowego kodu C# (DOKUMENTACJA §4).
 - Atrapa mostu `tests/mock-bridge.cjs` (metadane komend ze źródeł legacy, przykładowe kanały i ramówka) – zrzuty UI bez Dockera i legacy.
