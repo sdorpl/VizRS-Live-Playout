@@ -1007,6 +1007,12 @@ function check(cond, msg) {
   check(histBlocks.some((b) => b.includes(blkA) || b.includes(blkB)), `K7: bloki playoutu w historii (${histBlocks.join(', ')})`);
   await page.waitForSelector('[data-history] table, [data-history] .empty');
   const histBtn = await page.$('[data-history] button:text-is("Pokaż")');
+  // K8: napisy osadzone z pozycji playoutu – przycisk i zadanie w tle; foldery obrazów – zapytanie przez most
+  check(await page.isVisible('main .maint button:has-text("Wyodrębnij napisy")'), 'K8: „Wyodrębnij napisy” w konserwacji playoutu');
+  const subQ = await api('ExtractEmbeddedSubtitles', { PlayoutId: bPo.PlayoutId });
+  check(subQ.ok && subQ.queued, `K8: ExtractEmbeddedSubtitles zlecone w tle (${JSON.stringify(subQ).slice(0, 80)})`);
+  const imgF = await api('GetImageFolders', { LibraryFolderId: null });
+  check(imgF.ok && Array.isArray(imgF.result), 'K8: GetImageFolders przez most (foldery obrazów)');
   if (histBtn) { await histBtn.click(); await page.waitForSelector('.hist-detail:not([hidden])'); check(/Kolejność/.test(await page.textContent('.hist-detail')), 'K7: wpis historii rozszyfrowany (DecodePlayoutHistory)'); }
 
   // sprzątanie R6 (UI: playout, szablony, deco, bloki; reszta przez API)

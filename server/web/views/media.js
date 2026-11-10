@@ -5,7 +5,8 @@
 // Ścieżki bibliotek to ścieżki w kontenerze legacy (np. /config/media/…, /media/…), nie na komputerze operatora.
 // Postępu skanu legacy nie udostępnia zapytaniem (idzie przez zdarzenia Blazora) – panel odświeża liczbę pozycji.
 
-import { VIEWS, h, btn, head, panel, pill, cmd, pl, table, toast, dialog, confirmDlg, route, cmdNote, missing, missingNote, S, legacyUrl } from '../core.js';
+import { VIEWS, h, btn, head, panel, pill, cmd, pl, table, toast, dialog, confirmDlg, route, cmdNote, missing, missingNote, S, legacyUrl, has } from '../core.js';
+import { followTask } from '../tasks.js';
 import { form } from '../form.js';
 import { crudView } from '../parts.js';
 
@@ -118,6 +119,7 @@ VIEWS.media = crudView({
   afterSave: async (id, ctx) => { if (!ctx.current) await scan({ Id: id, Name: 'Nowa biblioteka' }); },
   footer: (l) => (l ? h('div', { class: 'maint' }, h('h3', null, 'Skan'), h('div', { class: 'bar' }, btn('Skanuj teraz', () => scan(l), 'acc'),
     h('span', { class: 'dim' }, 'Legacy skanuje też sam co kilka godzin (Ustawienia → skaner).'))) : null),
+  below: (l, ctx) => (ctx.rows.some((x) => x.MediaKind === 'Images') ? imageFoldersPanel() : null),
   del: (l) => ({ LocalLibraryId: l.Id }),
   confirmDelete: (l) => `Usunąć bibliotekę „${l.Name}”? Legacy usunie ${l.Count ?? 'jej'} pozycji z bazy (pliki na dysku zostają), znikną też z kolekcji i ramówek. Tego nie da się cofnąć.`,
 });
@@ -177,8 +179,63 @@ async function saveSmart(q) {
 
 const FIELDS = 'title:, type:, tag:, genre:, library_name:, state:, minutes:, height:, video_codec:, release_date:, plot:';
 
-/** Karta pozycji: GetMediaItemInfo (strumienie, rozdziały, czas). */
-export async function itemCard(id, title) {
+// ---------- K8: serial – skan jednego serialu, wyodrębnianie napisów osadzonych ----------
+async function scanShow(id, title) {
+  let show;
+  try { show = await cmd('GetTelevisionShowById', { Id: id }); } catch (e) { return toast('Legacy nie podał serialu: ' + e.message, 'bad'); }
+  if (!show?.LibraryId) return toast('Legacy nie podał biblioteki serialu – skanuj całą bibliotekę (Biblioteki).', 'bad');
+  try {
+    const ok = await cmd('QueueShowScanByLibraryId', { LibraryId: show.LibraryId, ShowId: id, ShowTitle: show.Title || title, DeepScan: false });
+    toast(ok === false ? `${title}: legacy nie zlecił skanu (biblioteka zewnętrzna bez synchronizacji pozycji albo skan już trwa).` : `${title}: zlecono skan serialu – nowe odcinki pojawią się po skanie.`, ok === false ? 'bad' : 'ok');
+  } catch (e) { toast('Legacy odrzucił skan serialu: ' + e.message, 'bad'); }
+}
+async function extractShowSubtitles(id, title) {
+  try { await cmd('ExtractEmbeddedShowSubtitles', { ShowId: id }); } catch (e) { return toast('Legacy odrzucił wyodrębnianie: ' + e.message, 'bad'); }
+  await followTask({ label: `Napisy · ${title}`, match: /subtitle/i, timeoutMs: 30000,
+    empty: 'Legacy wyodrębnia napisy w tle; wpis w logu pojawia się zwykle tylko przy błędzie albo na poziomie Debug. Napisy tekstowe trafią do pamięci legacy i będą dostępne dla kanałów.' });
+}
+function showActions(id, title) {
+  const b = [
+    has('GetTelevisionShowById') && has('QueueShowScanByLibraryId') ? btn('Skanuj serial', () => scanShow(id, title)) : null,
+    has('ExtractEmbeddedShowSubtitles') ? btn('Wyodrębnij napisy', () => extractShowSubtitles(id, title)) : null,
+  ].filter(Boolean);
+  return b.length ? h('div', { class: 'bar pad', id: 'show-actions' }, ...b) : null;
+}
+
+// ---------- K8: czas wyświetlania obrazów w folderach (GetImageFolders, UpdateImageFolderDuration) ----------
+const IMG = { parent: null, trail: [] };
+function imageFoldersPanel() {
+  if (!has('GetImageFolders') || !has('UpdateImageFolderDuration')) return null;
+  const box = h('div', { 'data-image-folders': '' }, h('div', { class: 'dim pad' }, 'Wczytuję foldery…'));
+  const load = async () => {
+    let rows;
+    try { rows = await cmd('GetImageFolders', { LibraryFolderId: IMG.parent }); } catch (e) { box.replaceChildren(h('div', { class: 'empty err' }, 'Legacy: ' + e.message)); return; }
+    const save = async (f, input) => {
+      const v = input.value.trim();
+      const n = v === '' ? null : Number(v);
+      if (n != null && (!Number.isFinite(n) || n <= 0 || n > 86400)) return toast('Czas: liczba sekund 0–86400 albo puste (domyślny z ustawień).', 'bad');
+      try { await cmd('UpdateImageFolderDuration', { LibraryFolderId: f.LibraryFolderId, ImageFolderDuration: n }); toast(`${f.Name}: ${n == null ? 'czas domyślny' : n + ' s na obraz'}`, 'ok'); }
+      catch (e) { toast('Legacy odrzucił czas: ' + e.message, 'bad'); }
+    };
+    const crumbs = h('div', { class: 'bar pad' }, btn('Wszystkie', () => { IMG.parent = null; IMG.trail = []; load(); }),
+      IMG.trail.map((t, i) => [h('span', { class: 'dim' }, '›'), btn(t.name, () => { IMG.parent = t.id; IMG.trail = IMG.trail.slice(0, i + 1); load(); })]));
+    box.replaceChildren(crumbs, table(rows, [
+      [(f) => (f.SubfolderCount ? h('a', { href: '#media', onclick: (e) => { e.preventDefault(); IMG.parent = f.LibraryFolderId; IMG.trail.push({ id: f.LibraryFolderId, name: f.Name }); load(); } }, f.Name + ' ›') : f.Name), 'Folder'],
+      [(f) => h('span', { class: 'mono dim' }, f.FullPath), 'Ścieżka', { class: 'w' }],
+      ['SubfolderCount', 'Podfoldery', { class: 'num' }], ['ImageCount', 'Obrazy', { class: 'num' }],
+      [(f) => {
+        const input = h('input', { type: 'number', min: 1, step: 1, value: f.DurationSeconds ?? '', placeholder: 'domyślny', 'aria-label': `Czas obrazu w folderze ${f.Name}`, class: 'img-dur' });
+        return h('span', { class: 'bar' }, input, h('span', { class: 'dim' }, 's'), btn('Zapisz', () => save(f, input)));
+      }, 'Czas obrazu'],
+    ], { empty: 'Brak folderów z obrazami – dodaj bibliotekę rodzaju „Obrazy” i ją zeskanuj.' }));
+  };
+  load();
+  return panel('Foldery obrazów', h('span', { class: 'dim' }, 'jak długo kanał pokazuje jeden obraz; puste = domyślny czas z ustawień legacy'), box,
+    cmdNote('GetImageFolders', 'UpdateImageFolderDuration'));
+}
+
+/** Karta pozycji: GetMediaItemInfo (strumienie, rozdziały, czas); przy serialu – skan i napisy (K8). */
+export async function itemCard(id, title, kind) {
   let info;
   try { info = await cmd('GetMediaItemInfo', { Id: id }); } catch (e) { return toast('Legacy nie zwrócił informacji o pozycji: ' + e.message, 'bad'); }
   const kv = (rows) => h('dl', { class: 'kv' }, rows.filter((r) => r[1] != null && r[1] !== '').flatMap(([k, v]) => [h('dt', null, k), h('dd', null, v instanceof Node ? v : String(v))]));
@@ -190,6 +247,7 @@ export async function itemCard(id, title) {
     kv([['Rodzaj', info.Kind], ['Biblioteka', info.LibraryName], ['Stan', statePill(info.State) || 'OK'], ['Czas', info.Duration],
       ['Obraz', info.Width ? `${info.Width}×${info.Height}, ${info.DisplayAspectRatio || ''} ${info.VideoScanKind === 'Interlaced' ? 'z przeplotem' : ''}`.trim() : null],
       ['Klatki', info.RFrameRate], ['Id', info.Id]]),
+    kind === 'Shows' ? showActions(id, info.Title || title) : null,
     h('h3', null, 'Strumienie'), streams, chapters ? [h('h3', null, 'Rozdziały'), chapters] : null, cmdNote('GetMediaItemInfo')), [['Zamknij', true, 'acc']]);
 }
 
@@ -240,13 +298,13 @@ VIEWS.przegladarka = async () => {
         h('div', { class: 'tx' },
           h('span', { class: 'bar' }, canAdd ? pickCol[0](c) : null, h('b', null, c.Title)),
           h('span', { class: 'dim' }, c.Subtitle || ''), statePill(c.State)));
-      const open = (e) => { if (!e.target.closest('input')) itemCard(c.MediaItemId, c.Title); };
+      const open = (e) => { if (!e.target.closest('input')) itemCard(c.MediaItemId, c.Title, B.tab); };
       tile.addEventListener('click', open);
       tile.addEventListener('keydown', (e) => { if (e.key === 'Enter') open(e); });
       return tile;
     })) : h('div', { class: 'empty' }, empty))
     : table(rows, [...(canAdd ? [pickCol] : []), ['Title', 'Tytuł', { class: 'w' }], ['Subtitle', 'Opis / plik'], [(c) => statePill(c.State), 'Stan'], ['MediaItemId', 'Id', { class: 'num' }]],
-      { onRow: (c) => itemCard(c.MediaItemId, c.Title), empty });
+      { onRow: (c) => itemCard(c.MediaItemId, c.Title, B.tab), empty });
   const modeBtn = (m, t) => { const b = btn(t, () => { viewMode(m); route(true); }); b.classList.toggle('on', m === mode); b.setAttribute('aria-pressed', String(m === mode)); return b; };
   const pager = pages > 1 ? h('div', { class: 'bar pad pager' },
     btn('‹ Poprzednia', () => { B.page--; route(true); }, B.page <= 1 ? 'off' : null), h('span', { class: 'dim' }, `strona ${B.page} z ${pages} · ${total} poz.`),

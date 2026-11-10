@@ -21,7 +21,6 @@ Ograniczenia samego legacy, których panel nie obejdzie bez zmiany legacy (np. j
 | 9 | Brak postępu skanu biblioteki | legacy podaje go tylko zdarzeniami Blazora; panel przez 30 s odświeża liczby pozycji (DOKUMENTACJA §4 „Media”) |
 | 12 | Plex: panel nie wie, czy konto jest zalogowane | legacy trzyma to w `IPlexSecretStore` poza MediatR; „Wyloguj” tylko, gdy są serwery |
 | 25 | Walidator YAML harmonogramu sekwencyjnego | poza MediatR (`ISequentialScheduleValidator`); razem z #14 (diagnostyka playoutu blokowego – zrobiona w K7) |
-| 26 | Wyodrębnianie napisów osadzonych (`ExtractEmbeddedSubtitles`, `ExtractEmbeddedShowSubtitles`) | zadanie w tle legacy (PLAN-mcr K8) |
 | 27 | Paczka diagnostyczna legacy (`ArchiveTroubleshootingResults`, `ArchiveMediaSample`) | ZIP powstaje tylko na dysku legacy, pobranie wymagałoby nowego endpointu C# (DOKUMENTACJA §4, decyzja K5) |
 
 ## G3 – funkcje
@@ -32,7 +31,6 @@ Ograniczenia samego legacy, których panel nie obejdzie bez zmiany legacy (np. j
 | 15 | Pozycję harmonogramu audycji LIVE operator dodaje ręcznie w Harmonogramach | zamierzone (zapis harmonogramu z dwóch miejsc groziłby nadpisaniem); kreator Audycji LIVE prowadzi krok po kroku |
 | 16 | Trakt Lists (`AddTraktList`, `DeleteTraktList`) | wymaga klucza API Trakt; pominięte w liście pokrycia (DOKUMENTACJA §8) |
 | 17 | Własna kolejność kolekcji (`UpdateCollectionCustomOrder`) | legacy pozwala tylko dla kolekcji z samych filmów (DOKUMENTACJA §4 R4) |
-| 18 | Komendy na białej liście bez UI: czas folderów obrazów (`GetImageFolders`, `UpdateImageFolderDuration`), skan jednego serialu (`QueueShowScanByLibraryId`) | do dołożenia w Bibliotekach; PLAN-mcr K8 |
 | 19 | Głęboki skan źródeł zewnętrznych | pominięty (rzadko potrzebny, długo trwa) – DOKUMENTACJA §4 R8 |
 | 20 | Elementy graficzne legacy (YAML): tylko lista i „Wczytaj pliki elementów” | element VizRS zakłada CG Playout; patrz #14 |
 | 21 | Podgląd kanału: HEVC/AV1 tylko przez natywny HLS przeglądarki, dźwięk tylko AAC | `mux.js` przepakowuje H.264 + AAC; HEVC wymagałby `hvcC` (DOKUMENTACJA §3 „UI”); PLAN-mcr K18 |

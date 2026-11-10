@@ -174,7 +174,20 @@ const H = {
     { Title: 'Zero Duration', Status: 'Pass', Message: 'OK', BriefMessage: 'OK' },
   ],
   GetTroubleshootingInfo: () => ({ Version: 'v26.12.0', FFmpegVersion: '7.1.1', NextVersion: '0.2.5', Cpus: [{ Manufacturer: 'ARM', Name: 'Neoverse-N1' }], VideoControllers: [], Channels: DB.channels, FFmpegProfiles: DB.profiles, Watermarks: DB.watermarks }),
-  CountMediaItemsByLibrary: () => 0,
+  GetAllLocalLibraries: () => [{ Id: 1, Name: 'Archiwum INFO24', MediaKind: 'OtherVideos' }, { Id: 2, Name: 'Plansze i grafiki', MediaKind: 'Images' }, { Id: 3, Name: 'Seriale', MediaKind: 'Shows' }],
+  GetLocalLibraryPaths: (a) => [{ Id: a.LocalLibraryId * 10, Path: ['', '/media/info24', '/media/plansze', '/media/seriale'][a.LocalLibraryId] || '/media', LibraryId: a.LocalLibraryId }],
+  CountMediaItemsByLibrary: (a) => [0, 412, 36, 128][a.LibraryId] ?? 0,
+  CountMediaItemsByLibraryPath: (a) => [0, 412, 36, 128][a.LibraryPathId / 10] ?? 0,
+  GetImageFolders: (a) => (a.LibraryFolderId == null
+    ? [{ LibraryFolderId: 21, Name: 'plansze', FullPath: '/media/plansze', SubfolderCount: 2, ImageCount: 12, DurationSeconds: 10 }, { LibraryFolderId: 22, Name: 'pogoda', FullPath: '/media/pogoda', SubfolderCount: 0, ImageCount: 24, DurationSeconds: null }]
+    : [{ LibraryFolderId: 31, Name: 'rano', FullPath: '/media/plansze/rano', SubfolderCount: 0, ImageCount: 6, DurationSeconds: 15 }, { LibraryFolderId: 32, Name: 'wieczor', FullPath: '/media/plansze/wieczor', SubfolderCount: 0, ImageCount: 6, DurationSeconds: null }]),
+  UpdateImageFolderDuration: (a) => a.ImageFolderDuration,
+  QuerySearchIndexAllItems: () => ({ OtherVideoIds: [1, 2, 3], ShowIds: [101, 102], MovieIds: [], SeasonIds: [], EpisodeIds: [], MusicVideoIds: [], ArtistIds: [], SongIds: [], ImageIds: [5, 6], RemoteStreamIds: [] }),
+  QuerySearchIndexShows: () => ({ Count: 2, Cards: [{ TelevisionShowId: 101, MediaItemId: 101, Title: 'Kryminalni', Subtitle: '2004', SortTitle: 'kryminalni', Poster: '', State: 'Normal' }, { TelevisionShowId: 102, MediaItemId: 102, Title: 'Ranczo', Subtitle: '2006', SortTitle: 'ranczo', Poster: '', State: 'Normal' }] }),
+  QuerySearchIndexOtherVideos: () => ({ Count: 3, Cards: [['Serwis 06:00', 1], ['Pogoda – plansza', 2], ['Rozmowa dnia – zapowiedź', 3]].map(([Title, MediaItemId]) => ({ MediaItemId, Title, Subtitle: `/media/info24/${MediaItemId}.mp4`, SortTitle: Title, Poster: '', State: 'Normal' })) }),
+  GetMediaItemInfo: (a) => ({ Id: a.Id, Title: a.Id > 100 ? 'Kryminalni' : 'Serwis 06:00', Kind: a.Id > 100 ? 'Show' : 'OtherVideo', LibraryName: a.Id > 100 ? 'Seriale' : 'Archiwum INFO24', State: 'Normal', Duration: '00:25:00', Width: 1920, Height: 1080, DisplayAspectRatio: '16:9', RFrameRate: '25/1', Streams: [{ Index: 0, Kind: 'Video', Codec: 'h264', Profile: 'High' }, { Index: 1, Kind: 'Audio', Codec: 'aac', Language: 'pol', Channels: 2, Default: true }, { Index: 2, Kind: 'Subtitle', Codec: 'subrip', Language: 'pol' }], Chapters: [] }),
+  GetTelevisionShowById: (a) => ({ Id: a.Id, LibraryId: 3, Title: 'Kryminalni', Year: '2004' }),
+  QueueShowScanByLibraryId: () => true,
   GetAllBlocksForPlayout: () => [{ Id: 4, GroupId: 1, GroupName: 'Muzyka', Name: 'Teledyski 20 min' }, { Id: 5, GroupId: 1, GroupName: 'Muzyka', Name: 'Lista przebojów' }],
   GetBlockPlayoutHistory: () => ({ TotalCount: 2, Page: [
     { Id: 11, When: iso(now - 3 * 3600e3), Finish: iso(now - 2 * 3600e3), Key: '{"b":4,"i":2}', Details: '{"CollectionType":"Collection","Name":"Teledyski"}' },

@@ -124,6 +124,10 @@ CreateFillerPreset
 UpdateFillerPreset
 DeleteFillerPreset
 
+# napisy osadzone (K8; zadania w tle legacy)
+ExtractEmbeddedSubtitles
+ExtractEmbeddedShowSubtitles
+
 # --- wybór treści (komponent w parts.js; pusty tekst = pierwsze 10 wyników)
 SearchCollections
 SearchSmartCollections

@@ -113,6 +113,13 @@ function historyPanel(p) {
     cmdNote(...HISTORY_CMDS));
 }
 
+/** K8: napisy osadzone z pozycji playoutu (ExtractEmbeddedSubtitles, zadanie w tle legacy). */
+async function extractSubtitles(p) {
+  try { await cmd('ExtractEmbeddedSubtitles', { PlayoutId: p.PlayoutId }); } catch (e) { toast(`Legacy odrzucił: ${e.message}`, 'bad'); return; }
+  await followTask({ label: `Napisy · ${chanName(p)}`, match: /subtitle/i, timeoutMs: 30000,
+    empty: 'Legacy wyodrębnia napisy osadzone z pozycji playoutu w tle; wpis w logu zwykle tylko przy błędzie albo na poziomie Debug.' });
+}
+
 const KIND_PILL = { Block: 'info', Sequential: 'warn', Scripted: 'warn', ExternalJson: 'warn' };
 const FILLER_PL = { PreRoll: 'przed (pre-roll)', MidRoll: 'w trakcie (mid-roll)', PostRoll: 'po (post-roll)', Tail: 'ogon', Fallback: 'zapasowy', GuideMode: 'ukryty w EPG' };
 
@@ -234,7 +241,8 @@ VIEWS.playouty = crudView({
           `Usunąć przyszłe pozycje playoutu kanału ${chanName(p)}? Historia odtwarzania do teraz zostaje; kanał będzie bez ramówki do przebudowy.`, 'wyczyszczono pozycje'), 'danger') : null,
         k !== 'ExternalJson' ? btn('Wyczyść pozycje i historię', () => maintenance(p, 'ErasePlayoutHistory', 'Wyczyść pozycje i historię',
           `Usunąć pozycje i całą historię playoutu kanału ${chanName(p)}? Następna budowa ułoży ramówkę od zera (nowe losowanie).`, 'wyczyszczono pozycje i historię'), 'danger') : null,
-        btn('Sprawdź nakładanie pozycji', () => checkOverlap(p))));
+        btn('Sprawdź nakładanie pozycji', () => checkOverlap(p)),
+        has('ExtractEmbeddedSubtitles') ? btn('Wyodrębnij napisy', () => extractSubtitles(p)) : null));
   },
   below: (p, ctx) => {
     if (!p) return null;
