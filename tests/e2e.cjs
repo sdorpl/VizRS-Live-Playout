@@ -1001,6 +1001,13 @@ function check(cond, msg) {
   });
   check(blkCol.some((b) => b === blkA || b === blkB), `playout blokowy: kolumna „Blok” z nazwą bloku (${[...new Set(blkCol)].join(', ')})`);
   await shot('r6-kalendarz');
+  // K7: historia bloków playoutu blokowego (tylko odczyt): lista bloków z szablonów, tabela historii
+  await page.waitForSelector('[data-history] #hist-block', { timeout: 15000 });
+  const histBlocks = await page.$$eval('#hist-block option', (o) => o.map((x) => x.textContent));
+  check(histBlocks.some((b) => b.includes(blkA) || b.includes(blkB)), `K7: bloki playoutu w historii (${histBlocks.join(', ')})`);
+  await page.waitForSelector('[data-history] table, [data-history] .empty');
+  const histBtn = await page.$('[data-history] button:text-is("Pokaż")');
+  if (histBtn) { await histBtn.click(); await page.waitForSelector('.hist-detail:not([hidden])'); check(/Kolejność/.test(await page.textContent('.hist-detail')), 'K7: wpis historii rozszyfrowany (DecodePlayoutHistory)'); }
 
   // sprzątanie R6 (UI: playout, szablony, deco, bloki; reszta przez API)
   await page.click('main .panel header button:has-text("Usuń")');

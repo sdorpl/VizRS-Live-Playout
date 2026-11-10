@@ -175,6 +175,7 @@ const H = {
   ],
   GetTroubleshootingInfo: () => ({ Version: 'v26.12.0', FFmpegVersion: '7.1.1', NextVersion: '0.2.5', Cpus: [{ Manufacturer: 'ARM', Name: 'Neoverse-N1' }], VideoControllers: [], Channels: DB.channels, FFmpegProfiles: DB.profiles, Watermarks: DB.watermarks }),
   CountMediaItemsByLibrary: () => 0,
+  GetAllBlocksForPlayout: () => [{ Id: 4, GroupId: 1, GroupName: 'Muzyka', Name: 'Teledyski 20 min' }, { Id: 5, GroupId: 1, GroupName: 'Muzyka', Name: 'Lista przebojów' }],
   GetBlockPlayoutHistory: () => ({ TotalCount: 2, Page: [
     { Id: 11, When: iso(now - 3 * 3600e3), Finish: iso(now - 2 * 3600e3), Key: '{"b":4,"i":2}', Details: '{"CollectionType":"Collection","Name":"Teledyski"}' },
     { Id: 12, When: iso(now - 2 * 3600e3), Finish: iso(now - 3600e3), Key: '{"b":4,"i":3}', Details: '{"CollectionType":"Collection","Name":"Teledyski"}' }] }),

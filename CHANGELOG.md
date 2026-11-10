@@ -2,6 +2,8 @@
 
 ## Niewydane
 
+- **K7 – historia bloków** w edytorze playoutu blokowego (tylko odczyt): bloki z szablonów, wpisy historii ze stronicowaniem, rozszyfrowanie wpisu (kolejność, kolekcja, ostatnia pozycja). Zamyka LUKI #13; z #25 zostaje walidator YAML (poza MediatR).
+
 - **K6 – wyniki zadań w tle:** po „Sprawdź nakładanie pozycji” (Playouty) i zadaniach konserwacji (Diagnostyka) panel czyta log legacy do 20–60 s i pokazuje wynik w oknie (wpis legacy albo opis, co znaczy brak wpisu). Zamyka LUKI #10.
 
 - **K4 – własne rozdzielczości** (Profile kodowania → „Rozdzielczości”): dodawanie (`CreateCustomResolution`, kontrola parzystości i duplikatu) i usuwanie własnych (`DeleteCustomResolution`). Zamyka LUKI #24.

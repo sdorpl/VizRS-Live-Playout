@@ -213,7 +213,11 @@ CheckForOverlappingPlayoutItems
 GetPlayoutWarningsCount
 GetPlayoutAlternateSchedules
 ReplacePlayoutAlternateScheduleItems
-# GetBlockPlayoutHistory – pominięte: legacy pokazuje je tylko jako podgląd historii w edytorze playoutu blokowego
+# historia playoutu blokowego (K7, ekrany legacy Troubleshooting → Block Playout); wyniki to proste rekordy (bez obiektów wewnętrznych)
+GetAllBlockPlayouts
+GetAllBlocksForPlayout
+GetBlockPlayoutHistory
+DecodePlayoutHistory
 
 # --- grafika
 GetAllGraphicsElements

@@ -6,7 +6,7 @@
 // ostatnią pozycję (Id = −1, najwyższy Index); ReplacePlayoutAlternateScheduleItems zapisuje pozycję
 // o najwyższym Index jako harmonogram główny. Panel pokazuje harmonogram główny jako osobne pole edytora.
 
-import { VIEWS, h, btn, panel, pill, cmd, pl, table, toast, confirmDlg, route, dateTime, isFiller, cmdNote, onChannel, S, api } from '../core.js';
+import { VIEWS, h, btn, panel, pill, cmd, pl, table, toast, confirmDlg, route, dateTime, isFiller, cmdNote, onChannel, S, api, has } from '../core.js';
 import { followTask } from '../tasks.js';
 import { form } from '../form.js';
 import { crudView, itemsEditor } from '../parts.js';
@@ -58,6 +58,59 @@ export async function checkOverlap(p) {
     match: new RegExp(`Playout for channel ${esc} has overlapping playout items`), timeoutMs: 20000,
     empty: `Legacy nie zgłosił nakładania pozycji w kanale ${chanName(p)} – ramówka bez nakładania (legacy zapisuje wpis tylko wtedy, gdy je znajdzie).`,
   });
+}
+
+// ---------- K7: historia playoutu blokowego (BlockPlayoutHistory legacy, tylko odczyt) ----------
+const HISTORY_CMDS = ['GetAllBlocksForPlayout', 'GetBlockPlayoutHistory', 'DecodePlayoutHistory'];
+const HIST_PAGE = 20;
+const ORDER_PL = { None: 'brak', Chronological: 'chronologicznie', Random: 'losowo', Shuffle: 'tasowanie', ShuffleInOrder: 'tasowanie w kolejności', MultiEpisodeShuffle: 'tasowanie wieloodcinkowe', SeasonEpisode: 'sezon i odcinek', RandomRotation: 'losowa rotacja', Marathon: 'maraton' };
+const HIST = { block: null, page: 0 };
+
+/** Historia bloku: ostatnie emisje z kolekcji bloku i stan losowania (legacy zapamiętuje go między budowami). */
+function historyPanel(p) {
+  if (!HISTORY_CMDS.every((n) => has(n))) return null;
+  const box = h('div', { class: 'pad', 'data-history': '' }, h('div', { class: 'dim' }, 'Wczytuję bloki playoutu…'));
+  const detail = h('div', { class: 'pad hist-detail', hidden: true });
+  (async () => {
+    let blocks;
+    try { blocks = await cmd('GetAllBlocksForPlayout', { PlayoutId: p.PlayoutId }); } catch (e) { box.replaceChildren(h('div', { class: 'empty err' }, 'Legacy: ' + e.message)); return; }
+    if (!blocks?.length) { box.replaceChildren(h('div', { class: 'empty' }, 'Playout nie ma bloków w szablonach dnia.')); return; }
+    if (!blocks.some((b) => b.Id === HIST.block)) { HIST.block = blocks[0].Id; HIST.page = 0; }
+    const sel = h('select', { id: 'hist-block', 'aria-label': 'Blok' }, blocks.map((b) => h('option', { value: b.Id }, `${b.GroupName ? b.GroupName + ' / ' : ''}${b.Name}`)));
+    sel.value = String(HIST.block);
+    const list = h('div');
+    const load = async () => {
+      detail.hidden = true;
+      let d;
+      try { d = await cmd('GetBlockPlayoutHistory', { PlayoutId: p.PlayoutId, BlockId: HIST.block, PageNum: HIST.page, PageSize: HIST_PAGE }); }
+      catch (e) { list.replaceChildren(h('div', { class: 'empty err' }, 'Legacy: ' + e.message)); return; }
+      const pages = Math.max(1, Math.ceil((d?.TotalCount || 0) / HIST_PAGE));
+      const decode = async (row) => {
+        try {
+          const x = await cmd('DecodePlayoutHistory', { PlayoutHistory: row });
+          detail.replaceChildren(h('h3', null, `Wpis z ${dateTime(row.When)}`), h('dl', { class: 'kv' },
+            h('dt', null, 'Kolejność'), h('dd', null, ORDER_PL[x.PlaybackOrder] || pl(x.PlaybackOrder)),
+            h('dt', null, 'Treść'), h('dd', null, `${pl(x.CollectionType)}: ${x.Name || '—'}`),
+            h('dt', null, 'Ostatnia pozycja'), h('dd', null, x.MediaItemTitle ? `${x.MediaItemTitle} (${pl(x.MediaItemType)})` : '—')));
+          detail.hidden = false;
+        } catch (e) { toast('Legacy nie rozszyfrował wpisu: ' + e.message, 'bad'); }
+      };
+      list.replaceChildren(
+        table(d?.Page || [], [[(r) => dateTime(r.When), 'Emisja', { class: 'num' }], [(r) => dateTime(r.Finish), 'Do', { class: 'num' }],
+          [(r) => h('span', { class: 'mono dim' }, (r.Key || '').slice(0, 60)), 'Klucz', { class: 'w' }], [(r) => btn('Pokaż', () => decode(r)), '']],
+        { empty: 'Brak historii – blok jeszcze nie nadawał.' }),
+        h('div', { class: 'bar pad' },
+          btn('← nowsze', () => { HIST.page--; load(); }), h('span', { class: 'dim' }, `strona ${HIST.page + 1} z ${pages} · wpisów ${d?.TotalCount ?? 0}`),
+          btn('starsze →', () => { HIST.page++; load(); })));
+      list.querySelectorAll('.bar button')[0].disabled = HIST.page === 0;
+      list.querySelectorAll('.bar button')[1].disabled = HIST.page + 1 >= pages;
+    };
+    sel.addEventListener('change', () => { HIST.block = Number(sel.value); HIST.page = 0; load(); });
+    box.replaceChildren(h('div', { class: 'bar' }, h('label', { for: 'hist-block' }, 'Blok'), sel), list);
+    load();
+  })();
+  return panel(`Historia bloków · ${p.ChannelName}`, h('span', { class: 'dim' }, 'tylko odczyt – stan losowania legacy między budowami'), box, detail,
+    cmdNote(...HISTORY_CMDS));
 }
 
 const KIND_PILL = { Block: 'info', Sequential: 'warn', Scripted: 'warn', ExternalJson: 'warn' };
@@ -206,7 +259,7 @@ VIEWS.playouty = crudView({
         ...(blocks ? [[(i) => blocks[ctx.items.indexOf(i)], 'Blok']] : [])],
       { empty: 'Brak przyszłych pozycji – przebuduj playout.' }),
       cmdNote('GetFuturePlayoutItemsById', 'BuildPlayout', 'GetAllBlocks', 'CG Playout GET /api/live/state (audycje LIVE)'));
-    return [alt, ...(ctx.cal ? calendarPanels(p, ctx) : []), items];
+    return [alt, ...(ctx.cal ? calendarPanels(p, ctx) : []), items, p.ScheduleKind === 'Block' ? historyPanel(p) : null];
   },
   beforeSave: (ctx) => {
     if (ctx.calEd) {

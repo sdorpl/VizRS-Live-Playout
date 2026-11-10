@@ -79,7 +79,7 @@ Przebieg łączy [LUKI.md](../LUKI.md) i punkty z §2–§3 w jedną kolejkę: n
 | K4 | Własne rozdzielczości w Profilach (LUKI #24) | – | zrobione (2026-11-09) |
 | K5 | Silnik Next w Profilach i Diagnostyce, paczka diagnostyczna (LUKI #11, #27) | – | zrobione (2026-11-09; #27 zostaje – DOKUMENTACJA §4) |
 | K6 | Wyniki zadań w tle (nakładanie pozycji, konserwacja) w panelu, nie tylko w Logach (LUKI #10) | – | zrobione (2026-11-09) |
-| K7 | Diagnostyka i historia playoutu blokowego (LUKI #13, część #25) | – | do zrobienia |
+| K7 | Diagnostyka i historia playoutu blokowego (LUKI #13, część #25) | – | zrobione (2026-11-09) |
 | K8 | Biblioteki: czas folderów obrazów, skan jednego serialu, wyodrębnianie napisów (LUKI #18, #26) | – | do zrobienia |
 | K9 | Kontrola ramówki: błędy na czerwono w Na antenie, EPG i Playoutach (Vizrt B) | K6 | do zrobienia |
 | K10 | Mozaika kanałów (multiview) w Na antenie (Vizrt J) | K9 | do zrobienia |
