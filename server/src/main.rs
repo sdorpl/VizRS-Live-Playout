@@ -50,6 +50,11 @@ const STATIC: &[(&str, &str, &str)] = &[
         include_str!("../web/when.js"),
     ),
     (
+        "/alarms.js",
+        "text/javascript; charset=utf-8",
+        include_str!("../web/alarms.js"),
+    ),
+    (
         "/check.js",
         "text/javascript; charset=utf-8",
         include_str!("../web/check.js"),
@@ -148,6 +153,11 @@ const STATIC: &[(&str, &str, &str)] = &[
         "/views/live.js",
         "text/javascript; charset=utf-8",
         include_str!("../web/views/live.js"),
+    ),
+    (
+        "/views/asrun.js",
+        "text/javascript; charset=utf-8",
+        include_str!("../web/views/asrun.js"),
     ),
     (
         "/views/import.js",
@@ -1036,6 +1046,17 @@ fn cg_segment(s: &str) -> bool {
         && s != ".."
 }
 
+/// Dzień `RRRR-MM-DD` (dziennik emisji, K14).
+fn valid_day(s: &str) -> bool {
+    let b = s.as_bytes();
+    b.len() == 10
+        && b[4] == b'-'
+        && b[7] == b'-'
+        && b.iter()
+            .enumerate()
+            .all(|(i, c)| i == 4 || i == 7 || c.is_ascii_digit())
+}
+
 /// Biała lista pośrednika CG Playout: (metoda, ścieżka w panelu) → ścieżka w CG Playout.
 pub fn cg_path(method: &str, rest: &str) -> Option<String> {
     let seg: Vec<&str> = rest.split('/').collect();
@@ -1057,6 +1078,14 @@ pub fn cg_path(method: &str, rest: &str) -> Option<String> {
         ("PUT", ["live", "channels", ch]) => format!("/api/live/channels/{ch}"),
         ("POST", ["live", "channels", ch, a @ ("hold" | "release" | "rebuild")]) => {
             format!("/api/live/channels/{ch}/{a}")
+        }
+        // K13: ręczne TAKE / CONTINUE / OUT pojedynczej strony na antenie kanału (kontrakt CG – DOKUMENTACJA §3)
+        ("POST", ["live", "channels", ch, a @ ("take" | "continue" | "out")]) => {
+            format!("/api/live/channels/{ch}/{a}")
+        }
+        // K14: dziennik emisji kanału z jednego dnia (RRRR-MM-DD)
+        ("GET", ["live", "asrun", ch, day]) if valid_day(day) => {
+            format!("/api/live/asrun?channel={ch}&day={day}")
         }
         _ => return None,
     };
@@ -1554,6 +1583,25 @@ mod tests {
             route(&app(None), &req("GET", "/api/stream/session/24/x.exe", &[])).status,
             404
         );
+    }
+
+    #[test]
+    fn cg_whitelist_k13_k14() {
+        assert_eq!(
+            cg_path("POST", "live/channels/24/take").as_deref(),
+            Some("/api/live/channels/24/take")
+        );
+        assert_eq!(
+            cg_path("POST", "live/channels/24/out").as_deref(),
+            Some("/api/live/channels/24/out")
+        );
+        assert!(cg_path("GET", "live/channels/24/take").is_none());
+        assert_eq!(
+            cg_path("GET", "live/asrun/24/2026-11-09").as_deref(),
+            Some("/api/live/asrun?channel=24&day=2026-11-09")
+        );
+        assert!(cg_path("GET", "live/asrun/24/2026-11-9").is_none());
+        assert!(cg_path("GET", "live/asrun/24/x&y=1").is_none());
     }
 
     #[test]

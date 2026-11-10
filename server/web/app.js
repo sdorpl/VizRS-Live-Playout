@@ -6,6 +6,7 @@
 
 import { S, main, h, btn, head, api, cmd, ApiError, route, hms, dialog, operatorName, has } from './core.js';
 import { openMonitor } from './player.js';
+import { startAlarms } from './alarms.js';
 import './views/antena.js';
 import './views/kanaly.js';
 import './views/profile.js';
@@ -22,6 +23,7 @@ import './views/harmonogramy.js';
 import './views/grafika.js';
 import './views/live.js';
 import './views/system.js';
+import './views/asrun.js';
 
 async function refreshStatus() {
   const d = await api('/api/status');
@@ -185,6 +187,7 @@ async function start() {
   Object.keys(COUNTS).forEach(refreshCount);
   refreshStudio();
   setInterval(refreshStudio, 5000);
+  startAlarms();
 }
 
 start();

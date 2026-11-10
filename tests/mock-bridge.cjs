@@ -4,6 +4,7 @@
 //   node tests/mock-bridge.cjs [port=18409] [token=test-token-0123456789]
 //   LEGACY_SRC=<klon ErsatzTV/legacy> – metadane komend (parametry, wyliczenia) z rekordów MediatR jak /vizrs-bridge/commands;
 //   bez niego – same nazwy z bridge/commands.txt (formularze bez list wyboru).
+//   MOCK_CG=1 – atrapa VizRS CG Playout na porcie+1 (token test-cg-token-0123456789): stan z warstwami, TAKE/CONTINUE/OUT, dziennik emisji (K12–K17).
 //   MOCK_HLS=1 – strumienie testowe kanałów 24–26 (ffmpeg: plansza testowa + ton, HLS) dla podglądu i mozaiki.
 // Panel: server/target/…/vizrs-live --bridge http://127.0.0.1:18409 --bridge-token <token> --web server/web
 'use strict';
@@ -263,3 +264,44 @@ http.createServer((req, res) => {
     reply(res, 404, { ok: false, error: 'nieznany adres mostu' });
   });
 }).listen(PORT, '127.0.0.1', () => console.log(`atrapa mostu: http://127.0.0.1:${PORT}/vizrs-bridge (${META.length} komend z metadanymi${process.env.LEGACY_SRC ? '' : ' – bez LEGACY_SRC'})`));
+
+// ---------- atrapa VizRS CG Playout (MOCK_CG=1) – kontrakt K12–K17 (DOKUMENTACJA §3) ----------
+if (process.env.MOCK_CG === '1') {
+  const CGT = 'test-cg-token-0123456789';
+  const layers = { 24: [{ layer: 10, page: '101', name: 'belka 101', scene: 'belka', since: now - 300e3 }, { layer: 20, page: '4001', name: 'zegar', scene: 'zegar', since: now - 3600e3 }], 25: [{ layer: 10, page: '201', name: 'teraz gramy', since: now - 120e3 }], 26: [] };
+  const asrun = [];
+  const log = (e) => asrun.push({ t: Date.now(), operator: 'VizRS Live · atrapa', ...e });
+  for (let i = 0; i < 8; i++) { const it = items(1, 8)[i]; asrun.push({ t: +new Date(it.Start), kind: 'item_start', title: it.Title }); if (i % 3 === 0) asrun.push({ t: +new Date(it.Start) + 10e3, kind: 'take', page: '101', layer: 10, title: it.Title, operator: 'reguła: on_clip' }); }
+  asrun.push({ t: now - 1800e3, kind: 'hold', operator: 'VizRS Live · MCR 1' }, { t: now - 1700e3, kind: 'release', operator: 'VizRS Live · MCR 1' });
+  http.createServer((q, r) => {
+    const u = new URL(q.url, 'http://x');
+    let b = '';
+    q.on('data', (d) => (b += d));
+    q.on('end', () => {
+      if (q.headers.authorization !== 'Bearer ' + CGT) return reply(r, 401, { error: 'zły token panelu' });
+      if (u.pathname === '/health') return reply(r, 200, { sessions: 3, overlay: ['24'], ingest: { channels: ['24'] }, captures: [] });
+      if (u.pathname === '/api/live/state') return reply(r, 200, {
+        ingest: true, now: Date.now(), version: 'atrapa', features: ['layers', 'take', 'asrun', 'webhook'], settings: { graphics_off: false },
+        channels: DB.channels.slice(0, 3).map((c) => ({ number: c.Number, name: c.Name, source: { live: c.Number === '24' }, on_air: false, hold: false, anytime: false, layers: layers[c.Number] || [],
+          next_live: c.Number === '25' ? { start: Date.now() + 3 * 60e3, title: 'Koncert w studiu' } : null })),
+        events: [], guide: {},
+      });
+      if (u.pathname === '/api/live/inputs') return reply(r, 200, { listeners: [{ channel: '24', url: 'rtmp://0.0.0.0:1936/live/x' }] });
+      if (u.pathname === '/etv/pages') return reply(r, 200, { pages: [{ number: '101', name: 'belka tytułowa' }, { number: '102', name: 'za chwilę' }, { number: '4001', name: 'zegar' }] });
+      if (u.pathname === '/api/live/asrun') return reply(r, 200, { entries: asrun });
+      if (u.pathname === '/api/live/graphics') return reply(r, 200, { rules: { on_clip: 'TAKE 101 headline={title}', on_ad: '', ad_match: { path: '/reklamy/', title: '' }, on_end: 'TAKE 102 next={next_title}', end_seconds: 30, shows: [], channels: {} }, source: 'config', store: true });
+      if (u.pathname === '/api/live/shows') return reply(r, 200, { shows: [{ id: '25-koncert', channel: '25', title: 'Koncert w studiu', duration: '01:00:00', plot: '', collection: true, collection_name: 'LIVE · Koncert w studiu', next: null, file_ok: true, airings: 2 }], error: null,
+        channels: DB.channels.slice(0, 3).map((c) => ({ number: c.Number, name: c.Name })), guide_known: true, max: 50, etv: { configured: true, ok: true, error: null }, settings: { library: null, store: true } });
+      const m = u.pathname.match(/^\/api\/live\/channels\/(\w+)\/(take|continue|out)$/);
+      if (m && q.method === 'POST') {
+        const a = b ? JSON.parse(b) : {};
+        const L = (layers[m[1]] ||= []);
+        if (m[2] === 'take') { const l = { layer: 30, page: String(a.page), name: 'strona ' + a.page, manual: true, since: Date.now() }; L.splice(0, L.length, ...L.filter((x) => x.layer !== 30), l); log({ kind: 'take', page: a.page, layer: 30 }); }
+        if (m[2] === 'out') { const i = L.findIndex((x) => x.layer === a.layer); if (i >= 0) { log({ kind: 'out', page: L[i].page, layer: a.layer }); L.splice(i, 1); } }
+        if (m[2] === 'continue') log({ kind: 'continue', layer: a.layer });
+        return reply(r, 200, { ok: true });
+      }
+      reply(r, 404, { error: 'nieznany adres atrapy CG' });
+    });
+  }).listen(PORT + 1, '127.0.0.1', () => console.log(`atrapa CG Playout: http://127.0.0.1:${PORT + 1}`));
+}

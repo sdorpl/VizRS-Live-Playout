@@ -2,6 +2,8 @@
 
 ## Niewydane
 
+- **K12–K17 – strona panelu (kontrakt CG Playout w DOKUMENTACJA §3):** warstwy VizRS w karcie kanału (K12), „Dalej” / „Zdejmij” warstwy i „Wprowadź stronę…” (K13), ekran „Dziennik emisji” z eksportem CSV (K14), alarmy w przeglądarce – banner i dźwięk (K17); każda funkcja włącza się dopiero, gdy VizRS CG Playout zgłosi ją w `features` (starszy CG – bez zmian w UI). K15/K16 – kontrakt API. **Wymaga wydania VizRS CG Playout z tym kontraktem** (krok ręczny).
+
 - **K18 – podgląd HEVC i AC-3:** `mux.js` przepakowuje HEVC (Main, Main 10) i AC-3 (do 5.1) na fragmenty MP4, gdy przeglądarka dekoduje je w MSE (Safari, Chrome/Edge ze sprzętowym HEVC); w pozostałych bez zmian (HEVC – natywny HLS, AC-3 – bez dźwięku). Zamyka LUKI #21.
 
 - **K11 – import ramówki z pliku** (Vizrt E): Playlisty → „Import ramówki z pliku…” – CSV albo XML z systemu emisyjnego, dopasowanie pozycji do mediów legacy z podglądem (dopasowane / niejednoznaczne / brak), zapis jako nowa playlista legacy.

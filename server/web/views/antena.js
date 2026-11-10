@@ -2,7 +2,7 @@
 
 import { openMonitor, Preview } from '../player.js';
 import { scheduleCheck, checkItems, missingTitles, itemKey } from '../check.js';
-import { S, VIEWS, h, btn, pill, head, panel, cmdNote, toast, confirmDlg, cmd, api, route, pl, hm, hms, dur, isFiller, trioLink, vizrsPreview, vizrsUrl, onChannel } from '../core.js';
+import { S, VIEWS, h, btn, pill, head, panel, cmdNote, toast, confirmDlg, cmd, api, route, pl, hm, hms, dur, isFiller, trioLink, vizrsPreview, vizrsUrl, onChannel, dialog } from '../core.js';
 
 /** Przebudowa playoutu przez kolejkę legacy (też w widoku Playouty). */
 export async function build(p, mode) {
@@ -181,6 +181,7 @@ VIEWS.antena = async () => {
               h('span', { class: 'dim' }, p ? 'teraz nic nie jest zaplanowane' : 'kanał nie ma playoutu – załóż go w widoku Playouty')),
             nextLine),
         cgPills(cg, now) || '',
+        layersRow(c, cg, d.cgState, refresh) || '',
         h('div', { class: 'bar' },
           btn('Podgląd ▶', () => openMonitor(c.Number)),
           ses ? null : btn('Uruchom emisję', () => session(c, 'start', refresh)),
@@ -248,6 +249,49 @@ VIEWS.antena = async () => {
     panel('Most', null, cmdNote('GetAllChannels', 'GetPagedPlayouts', 'GetFuturePlayoutItemsById', 'BuildPlayout', 'most: sesje (GET /api/sessions, start · stop · restart)', 'CG Playout GET /api/live/state · POST /api/live/graphics/off|on')),
   ];
 };
+
+// ---------- K12 / K13: warstwy VizRS na antenie, ręczne TAKE / CONTINUE / OUT (kontrakt CG – DOKUMENTACJA §3) ----------
+// CG Playout podaje w /api/live/state: kanał.layers = [{ layer, page, name?, scene?, since? }] i features: ['layers', 'take', …].
+// Starszy CG Playout bez tych pól – pigułek i przycisków nie ma.
+const cgFeature = (st, f) => !!(st && !(st instanceof Error) && Array.isArray(st.features) && st.features.includes(f));
+
+async function cgAction(c, action, body, after) {
+  try {
+    await api(`/api/cg/live/channels/${encodeURIComponent(c.Number)}/${action}`, { method: 'POST', body: JSON.stringify(body) });
+    toast(`Kanał ${c.Number}: ${{ take: 'strona wprowadzona', continue: 'dalej', out: 'warstwa zdjęta' }[action]}.`, 'ok');
+  } catch (e) { toast(`Grafika kanału ${c.Number}: ${e.message}`, 'bad'); }
+  setTimeout(after, 800);
+}
+
+/** „Wprowadź stronę…” – odpowiednik Quick Take: lista stron VizRS kanału (/etv/pages) i TAKE wybranej. */
+async function quickTake(c, after) {
+  let pages = [];
+  try { pages = (await api(`/api/cg/pages/${encodeURIComponent(c.Number)}`)).result?.pages || []; } catch (e) { return toast('Strony VizRS: ' + e.message, 'bad'); }
+  if (!pages.length) return toast('Show VizRS nie ma stron dla tego kanału.', 'bad');
+  const sel = h('select', { id: 'qt-page', 'aria-label': 'Strona VizRS' }, pages.map((p) => h('option', { value: p.number }, `${p.number} · ${p.name || ''}`)));
+  const ok = await dialog(`Wprowadź stronę · kanał ${c.Number}`, h('div', { class: 'form' },
+    h('label', { for: 'qt-page' }, 'Strona'), sel,
+    h('p', { class: 'dim' }, 'Ręcznie wprowadzona strona ma pierwszeństwo przed regułą grafiki, dopóki jej nie zdejmiesz („Zdejmij” przy warstwie).')),
+  [['Anuluj', false], ['TAKE', true, 'acc']]);
+  if (ok) cgAction(c, 'take', { page: sel.value }, after);
+}
+
+/** Pigułki warstw („W10 · belka 101”) i przyciski Dalej / Zdejmij przy każdej, gdy CG je obsługuje. */
+function layersRow(c, cg, st, after) {
+  if (!cgFeature(st, 'layers') || !cg) return null;
+  const layers = Array.isArray(cg.layers) ? cg.layers : [];
+  const take = cgFeature(st, 'take');
+  const items = layers.map((l) => {
+    const p = pill(`W${l.layer} · ${l.name || l.page}`, 'info');
+    p.title = [l.scene ? `scena ${l.scene}` : '', l.since ? `od ${hm(new Date(l.since))}` : '', l.manual ? 'wprowadzona ręcznie' : 'z reguły'].filter(Boolean).join(' · ');
+    return h('span', { class: 'layer', 'data-layer': String(l.layer) }, p,
+      take ? btn('Dalej', () => cgAction(c, 'continue', { layer: l.layer }, after), 'sm') : null,
+      take ? btn('Zdejmij', () => cgAction(c, 'out', { layer: l.layer }, after), 'sm danger') : null);
+  });
+  return h('div', { class: 'layers', 'data-layers': '' },
+    items.length ? items : h('span', { class: 'dim' }, 'grafika VizRS: brak warstw na antenie'),
+    take ? btn('Wprowadź stronę…', () => quickTake(c, after)) : null);
+}
 
 /** Wiersz stanu studia z CG Playout pod „teraz” (w makiecie – warstwy grafiki; CG nie podaje warstw, więc tylko to, co wie). */
 function cgPills(cg, now) {

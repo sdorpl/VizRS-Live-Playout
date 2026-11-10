@@ -34,6 +34,7 @@ function check(cond, msg) {
   const T0 = Date.now(); // ramówka atrapy stała w czasie, jak EPG prawdziwego CG Playout
   const CG = {
     hold: false, anytime: true, library: null, operators: [],
+    layers: [{ layer: 10, page: '1001', name: 'Belka tytułowa', scene: 'belka', since: T0 - 30000 }], asrun: [{ t: T0 - 60000, kind: 'item_start', title: 'Wiadomosci' }],
     graphics: { rules: { on_clip: 'TAKE 4001 headline={title}', on_ad: '', ad_match: { path: '/reklamy/', title: '' }, on_end: '', end_seconds: 60, shows: [], channels: { 24: { on_end: '', shows: [{ show_title: 'x', on_clip: 'TAKE 9' }] } } }, source: 'config', store: true },
     shows: [{ id: '24-poranek-na-zywo', channel: '24', title: 'Poranek na żywo', duration: '01:00:00', plot: '', collection: true, collection_name: 'LIVE · Poranek na żywo', next: null }],
   };
@@ -59,8 +60,8 @@ function check(cond, msg) {
       if (u === '/health') return send(200, { sessions: 1, overlay: ['24'], ingest: { channels: ['24'] }, captures: [{ channel: '24', size: '1280x720', fps: 25, mode: 'frames', drawn_by: 'native', status: 'capturing' }] });
       if (u === '/etv/pages?channel=24') return send(200, { pages: [{ number: 1001, name: 'Belka tytułowa' }, { number: 3001, name: 'Wracamy po reklamie' }] });
       if (u === '/api/live/state') return send(200, {
-        ingest: true, now,
-        channels: [{ number: '24', name: 'INFO24', source: { live: true, audio: true, video: 'h264', seconds: 75 }, on_air: !CG.hold && CG.anytime, hold: CG.hold, anytime: CG.anytime,
+        ingest: true, now, features: ['layers', 'take', 'asrun'],
+        channels: [{ number: '24', name: 'INFO24', source: { live: true, audio: true, video: 'h264', seconds: 75 }, on_air: !CG.hold && CG.anytime, hold: CG.hold, anytime: CG.anytime, layers: CG.layers,
           now: { title: 'Wiadomosci', start: T0 - 60000, stop: T0 + 60000, live: false }, next_live: { title: 'Poranek na żywo', start: T0 + 3600000, stop: T0 + 7200000, live: true },
           inputs: [{ kind: 'rtmp', host: 'tv.example.pl', port: 1936, app: '/live', key: 'studio-klucz', passphrase: '', streamid: '' },
             { kind: 'srt', host: '', port: 9000, app: '', key: '', passphrase: 'tajne haslo', streamid: '' }] }],
@@ -80,6 +81,15 @@ function check(cond, msg) {
       let m;
       if ((m = u.match(/^\/api\/live\/shows\/([\w.-]+)$/)) && q.method === 'DELETE') { CG.shows = CG.shows.filter((x) => x.id !== m[1]); return send(200, { ok: true }); }
       if ((m = u.match(/^\/api\/live\/channels\/24\/(hold|release)$/))) { CG.hold = m[1] === 'hold'; return send(200, { ok: true }); }
+      // K13: TAKE / CONTINUE / OUT; K14: dziennik emisji (kontrakt DOKUMENTACJA §3)
+      if ((m = u.match(/^\/api\/live\/channels\/24\/(take|continue|out)$/)) && q.method === 'POST') {
+        cgSeen.push(`${m[1]} ${JSON.stringify(body)}`);
+        if (m[1] === 'take') CG.layers.push({ layer: 30, page: String(body.page), name: 'ręcznie', manual: true, since: now });
+        if (m[1] === 'out') CG.layers = CG.layers.filter((l) => l.layer !== body.layer);
+        CG.asrun.push({ t: now, kind: m[1], page: body.page, layer: body.layer, operator: 'VizRS Live' });
+        return send(200, { ok: true });
+      }
+      if (/^\/api\/live\/asrun\?channel=24&day=\d{4}-\d{2}-\d{2}$/.test(u)) return send(200, { entries: CG.asrun });
       if (u === '/api/live/channels/24' && q.method === 'PUT') { CG.anytime = body.anytime; return send(200, { ok: true }); }
       if (u === '/api/live/inputs' && q.method === 'GET') {
         return send(200, { listeners: CG.inputs || [{ channel: '24', url: 'rtmp://0.0.0.0:1936/live/studio-klucz' }], from: CG.inputs ? 'panel' : 'env', store: true, ingest: true, ports: { rtmp: [1936, 1943], srt: [9000, 9007] } });
@@ -102,7 +112,7 @@ function check(cond, msg) {
   await new Promise((ok) => cgServer.listen(18700, '127.0.0.1', ok));
 
   const views = ['antena', 'epg', 'kanaly', 'profile', 'znaki', 'media', 'zrodla', 'przegladarka', 'kosz', 'kolekcje', 'playlisty', 'wypelniacze',
-    'harmonogramy', 'bloki', 'deco', 'playouty', 'grafika', 'live', 'ustawienia', 'logi', 'diagnostyka'];
+    'harmonogramy', 'bloki', 'deco', 'playouty', 'grafika', 'live', 'asrun', 'ustawienia', 'logi', 'diagnostyka'];
   for (const v of views) {
     await page.goto(`${BASE}/#${v}`);
     await page.waitForSelector(`main[data-view="${v}"]`);
@@ -1279,6 +1289,33 @@ function check(cond, msg) {
   await page.click('[data-graphics] button:has-text("Przywróć grafikę")');
   await page.waitForSelector('[data-graphics] button:has-text("Zdejmij grafikę")');
   check(CG.graphicsOff === false, 'antena: Przywróć grafikę → CG Playout graphics/on');
+  // K12: warstwy VizRS na antenie (layers z /api/live/state); K13: TAKE / OUT przez pośrednika
+  const card24 = '.panel:has(h2:text-is("24 · INFO24"))';
+  await page.waitForSelector(`${card24} [data-layers]`);
+  check(/W10 · Belka tytułowa/.test(await page.textContent(`${card24} [data-layers]`)), 'K12: pigułka warstwy VizRS w karcie kanału');
+  await page.click(`${card24} [data-layers] button:has-text("Wprowadź stronę")`);
+  await page.selectOption('#qt-page', '3001');
+  await page.click('#dlg-buttons button:has-text("TAKE")');
+  await page.waitForFunction(() => /W30/.test(document.querySelector('.panel [data-layers]')?.textContent || ''), null, { timeout: 15000 }).catch(() => {});
+  check(cgSeen.some((x) => /^take \{"page":"3001"\}/.test(x)), 'K13: TAKE strony przez pośrednika CG');
+  await page.click(`${card24} [data-layer="10"] button:has-text("Zdejmij")`);
+  await page.waitForFunction(() => !document.querySelector('[data-layer="10"]'), null, { timeout: 15000 }).catch(() => {});
+  check(cgSeen.some((x) => /^out \{"layer":10\}/.test(x)) && !CG.layers.some((l) => l.layer === 10), 'K13: OUT warstwy 10');
+  // K14: dziennik emisji – wpisy z CG Playout (także TAKE/OUT z panelu)
+  await tab('asrun');
+  await page.waitForSelector('[data-asrun] table');
+  const asr = await page.textContent('[data-asrun]');
+  check(/start pozycji/.test(asr) && /TAKE strony/.test(asr) && /OUT strony/.test(asr), 'K14: dziennik emisji z CG Playout');
+  // K17: reguły alarmów (czysta funkcja w przeglądarce)
+  const al = await page.evaluate(async () => {
+    const { computeAlarms } = await import('/alarms.js');
+    const now = Date.now(), iso = (t) => new Date(t).toISOString();
+    const items = new Map([['24', [{ Title: 'A', Start: iso(now - 60e3), Finish: iso(now + 120e3) }, { Title: 'B', Start: iso(now + 300e3), Finish: iso(now + 3600e3) }]]]);
+    return computeAlarms({ now, channels: [{ Number: '24', Name: 'INFO24' }], playouts: new Map([['24', { PlayoutId: 1 }]]), items, sessions: [],
+      cg: { channels: [{ number: '24', name: 'INFO24', source: { live: false }, next_live: { start: now + 120e3, title: 'Studio' } }], settings: { graphics_off: true, graphics_off_since: now - 600e3 } } }).map((a) => a.key.split('-')[0]);
+  });
+  check(['gap', 'live', 'stopped', 'graphics'].every((k) => al.includes(k)), `K17: alarmy – dziura za 15 min, LIVE bez sygnału, emisja zatrzymana, grafika zdjęta (${al.join(', ')})`);
+  await tab('antena');
   // poza stroną (page.request – te same ciasteczka): odrzucone 404 nie trafia do konsoli przeglądarki
   const badSes = (await page.request.post(`${BASE}/api/session/24/kill`, { headers: { 'X-VizRS-Live': '1' } })).status();
   check(badSes === 404, 'antena: sesja – tylko start, stop, restart');
