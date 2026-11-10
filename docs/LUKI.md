@@ -33,4 +33,3 @@ Ograniczenia samego legacy, których panel nie obejdzie bez zmiany legacy (np. j
 | 17 | Własna kolejność kolekcji (`UpdateCollectionCustomOrder`) | legacy pozwala tylko dla kolekcji z samych filmów (DOKUMENTACJA §4 R4) |
 | 19 | Głęboki skan źródeł zewnętrznych | pominięty (rzadko potrzebny, długo trwa) – DOKUMENTACJA §4 R8 |
 | 20 | Elementy graficzne legacy (YAML): tylko lista i „Wczytaj pliki elementów” | element VizRS zakłada CG Playout; patrz #14 |
-| 21 | Podgląd kanału: HEVC/AV1 tylko przez natywny HLS przeglądarki, dźwięk tylko AAC | `mux.js` przepakowuje H.264 + AAC; HEVC wymagałby `hvcC` (DOKUMENTACJA §3 „UI”); PLAN-mcr K18 |

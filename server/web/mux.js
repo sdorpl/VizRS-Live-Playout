@@ -1,4 +1,5 @@
-// Przepakowanie segmentów HLS (MPEG-TS z H.264 + AAC) na fragmenty MP4 dla Media Source Extensions.
+// Przepakowanie segmentów HLS (MPEG-TS z H.264 albo HEVC + AAC albo AC-3) na fragmenty MP4 dla Media Source Extensions.
+// HEVC i AC-3 tylko, gdy przeglądarka je dekoduje w MSE (Transmuxer({ hevc, ac3 }) – sprawdza player.js; K18).
 // Bez kodowania – tylko zmiana opakowania, więc podgląd kanału kosztuje przeglądarkę tyle, co zwykły odtwarzacz.
 // Moduł bez DOM (test w Node: tests/e2e.cjs).
 
@@ -148,6 +149,67 @@ export function spsSize(sps) {
 
 const hex2 = (n) => n.toString(16).padStart(2, '0');
 
+// ---------- HEVC (H.265, K18) ----------
+
+/** SPS HEVC: rozmiar (z przycięciem), profile_tier_level (12 bajtów), chroma i głębia – do hvcC i nazwy kodeka. */
+export function hevcSps(sps) {
+  const r = new Bits(sps.subarray(1)); // nagłówek NAL HEVC ma 2 bajty – Bits pomija drugi
+  r.u(4);
+  const subLayers = r.u(3);
+  r.u(1);
+  const ptl = [];
+  for (let i = 0; i < 12; i++) ptl.push(r.u(8));
+  const subProf = [], subLev = [];
+  for (let i = 0; i < subLayers; i++) { subProf.push(r.u(1)); subLev.push(r.u(1)); }
+  if (subLayers > 0) for (let i = subLayers; i < 8; i++) r.u(2);
+  for (let i = 0; i < subLayers; i++) { if (subProf[i]) { r.u(32); r.u(32); r.u(24); } if (subLev[i]) r.u(8); }
+  r.ue();
+  const chroma = r.ue();
+  if (chroma === 3) r.u(1);
+  let width = r.ue(), height = r.ue();
+  if (r.u(1)) {
+    const cl = r.ue(), cr = r.ue(), ct = r.ue(), cb = r.ue();
+    width -= (cl + cr) * (chroma === 1 || chroma === 2 ? 2 : 1);
+    height -= (ct + cb) * (chroma === 1 ? 2 : 1);
+  }
+  return { width, height, ptl, chroma, depthLuma: r.ue() + 8, depthChroma: r.ue() + 8, subLayers };
+}
+
+/** Nazwa kodeka HEVC wg ISO/IEC 14496-15 (np. hvc1.1.6.L93.B0). */
+export function hevcCodec(ptl) {
+  const space = ['', 'A', 'B', 'C'][ptl[0] >> 6];
+  let compat = (ptl[1] << 24 | ptl[2] << 16 | ptl[3] << 8 | ptl[4]) >>> 0, rev = 0;
+  for (let i = 0; i < 32; i++) { rev = (rev << 1 | (compat & 1)) >>> 0; compat >>>= 1; }
+  const cons = ptl.slice(5, 11);
+  while (cons.length > 1 && cons[cons.length - 1] === 0) cons.pop();
+  return `hvc1.${space}${ptl[0] & 31}.${rev.toString(16).toUpperCase()}.${ptl[0] & 32 ? 'H' : 'L'}${ptl[11]}.${cons.map((b) => b.toString(16).toUpperCase()).join('.')}`;
+}
+
+// ---------- AC-3 (K18) ----------
+
+const AC3_RATES = [48000, 44100, 32000];
+const AC3_WORDS = [
+  [64, 64, 80, 80, 96, 96, 112, 112, 128, 128, 160, 160, 192, 192, 224, 224, 256, 256, 320, 320, 384, 384, 448, 448, 512, 512, 640, 640, 768, 768, 896, 896, 1024, 1024, 1152, 1152, 1280, 1280],
+  [69, 70, 87, 88, 104, 105, 121, 122, 139, 140, 174, 175, 208, 209, 243, 244, 278, 279, 348, 349, 417, 418, 487, 488, 557, 558, 696, 697, 835, 836, 975, 976, 1114, 1115, 1253, 1254, 1393, 1394],
+  [96, 96, 120, 120, 144, 144, 168, 168, 192, 192, 240, 240, 288, 288, 336, 336, 384, 384, 480, 480, 576, 576, 672, 672, 768, 768, 960, 960, 1152, 1152, 1344, 1344, 1536, 1536, 1728, 1728, 1920, 1920],
+];
+const AC3_CHANNELS = [2, 1, 2, 3, 3, 4, 4, 5];
+
+/** Nagłówek ramki AC-3 (od słowa synchronizacji 0B 77): parametry do dac3 i długość ramki w bajtach. */
+export function ac3Header(d, i) {
+  const fscod = d[i + 4] >> 6, frmsizecod = d[i + 4] & 63;
+  if (fscod > 2 || frmsizecod > 37) return null;
+  const bsid = d[i + 5] >> 3, bsmod = d[i + 5] & 7;
+  const bits = (d[i + 6] << 8) | d[i + 7];
+  const acmod = bits >> 13;
+  let p = 3; // bity po acmod (od najstarszego w `bits`)
+  if ((acmod & 1) && acmod !== 1) p += 2;
+  if (acmod & 4) p += 2;
+  if (acmod === 2) p += 2;
+  const lfeon = (bits >> (15 - p)) & 1;
+  return { fscod, frmsizecod, bsid, bsmod, acmod, lfeon, len: AC3_WORDS[fscod][frmsizecod] * 2, rate: AC3_RATES[fscod], channels: AC3_CHANNELS[acmod] + lfeon };
+}
+
 // ---------- MP4 ----------
 
 function box(type, ...parts) {
@@ -171,6 +233,19 @@ const full = (type, version, flags, ...parts) => box(type, u32((version << 24) |
 const MATRIX = [0x00010000, 0, 0, 0, 0x00010000, 0, 0, 0, 0x40000000].map(u32);
 
 function sampleEntry(t) {
+  if (t.kind === 'video' && t.hevc) {
+    const s = t.hs;
+    const arrays = [[32, t.vps], [33, t.sps], [34, t.pps]].map(([type, n]) => [u8(0x80 | type), u16(1), u16(n.length), n]);
+    const hvcC = box('hvcC', u8(1, ...s.ptl.slice(0, 1)), u8(...s.ptl.slice(1, 11)), u8(s.ptl[11]), u16(0xf000), u8(0xfc, 0xfc | s.chroma, 0xf8 | (s.depthLuma - 8), 0xf8 | (s.depthChroma - 8)),
+      u16(0), u8(((s.subLayers + 1) << 3) | (1 << 2) | 3), u8(3), arrays);
+    return box('hvc1', zeros(6), u16(1), zeros(16), u16(t.width), u16(t.height), u32(0x00480000), u32(0x00480000), u32(0), u16(1), zeros(32), u16(0x18), u16(0xffff), hvcC);
+  }
+  if (t.kind === 'audio' && t.ac3) {
+    const c = t.ac3;
+    const v = (c.fscod << 22) | (c.bsid << 17) | (c.bsmod << 14) | (c.acmod << 11) | (c.lfeon << 10) | ((c.frmsizecod >> 1) << 5);
+    const dac3 = box('dac3', u8(v >> 16 & 255, v >> 8 & 255, v & 255));
+    return box('ac-3', zeros(6), u16(1), zeros(8), u16(t.channels), u16(16), zeros(4), u32(t.rate * 65536), dac3);
+  }
   if (t.kind === 'video') {
     const avcC = box('avcC', u8(1, t.sps[1], t.sps[2], t.sps[3], 0xff, 0xe1), u16(t.sps.length), t.sps, u8(1), u16(t.pps.length), t.pps);
     return box('avc1', zeros(6), u16(1), zeros(16), u16(t.width), u16(t.height), u32(0x00480000), u32(0x00480000), u32(0), u16(1), zeros(32), u16(0x18), u16(0xffff), avcC);
@@ -235,7 +310,9 @@ const sameBytes = (a, b) => a && b && a.length === b.length && a.every((v, i) =>
  * Oś czasu: gdy playlista ma PROGRAM-DATE-TIME, czas w MSE = (pdt − epoch) s, czyli zegar anteny.
  */
 export class Transmuxer {
-  constructor() {
+  /** opts.hevc / opts.ac3 – przeglądarka dekoduje HEVC / AC-3 w MSE (inaczej HEVC = błąd „HEVC”, AC-3 = bez dźwięku). */
+  constructor(opts = {}) {
+    this.opts = opts;
     this.demux = new TsDemuxer();
     this.offset = null;   // przesunięcie znaczników PES → oś odtwarzacza (90 kHz)
     this.epoch = null;    // ms; początek osi odtwarzacza przy PROGRAM-DATE-TIME
@@ -247,7 +324,8 @@ export class Transmuxer {
   push(ts, { pdt = null, disc = false } = {}) {
     const d = this.demux.parse(ts);
     const res = { video: null, audio: null, start: 0, end: 0, error: null };
-    if (d.videoType === 0x24) { res.error = 'HEVC'; return res; }
+    if (d.videoType === 0x24 && !this.opts.hevc) { res.error = 'HEVC'; return res; }
+    this.v.hevc = d.videoType === 0x24;
     const firstV = d.video.length ? d.video[0].pts : null;
     const firstA = d.audio.length ? d.audio[0].pts : null;
     const first = firstV ?? firstA;
@@ -256,7 +334,7 @@ export class Transmuxer {
     const want = pdt != null ? (pdt - this.epoch) * 90 : this.end || TS;
     if (this.offset == null || disc || Math.abs(first + this.offset - want) > TS / 2) this.offset = Math.round(want - first);
     res.video = this.videoFragment(d.video);
-    res.audio = d.audioType === 0x0f ? this.audioFragment(d.audio) : null;
+    res.audio = d.audioType === 0x0f ? this.audioFragment(d.audio) : d.audioType === 0x81 && this.opts.ac3 ? this.ac3Fragment(d.audio) : null;
     res.start = (first + this.offset) / TS;
     res.end = this.end / TS;
     return res;
@@ -269,6 +347,16 @@ export class Transmuxer {
       const nals = [];
       let key = false;
       for (const n of nalUnits(pes.data)) {
+        if (t.hevc) {
+          const ht = (n[0] >> 1) & 0x3f;
+          if (ht === 32) { if (!sameBytes(n, t.vps)) { t.vps = n.slice(); t.changed = true; } continue; }
+          if (ht === 33) { if (!sameBytes(n, t.sps)) { t.sps = n.slice(); t.changed = true; } continue; }
+          if (ht === 34) { if (!sameBytes(n, t.pps)) { t.pps = n.slice(); t.changed = true; } continue; }
+          if (ht === 35) continue; // AUD
+          if (ht >= 16 && ht <= 21) key = true; // BLA, IDR, CRA
+          nals.push(u32(n.length), n);
+          continue;
+        }
         const type = n[0] & 0x1f;
         if (type === 7) { if (!sameBytes(n, t.sps)) { t.sps = n.slice(); t.changed = true; } continue; }
         if (type === 8) { if (!sameBytes(n, t.pps)) { t.pps = n.slice(); t.changed = true; } continue; }
@@ -279,7 +367,7 @@ export class Transmuxer {
       if (!nals.length) continue;
       samples.push({ dts: pes.dts + this.offset, pts: pes.pts + this.offset, key, data: concat(nals) });
     }
-    if (!t.sps || !t.pps) return null;
+    if (!t.sps || !t.pps || (t.hevc && !t.vps)) return null;
     if (!t.started) {
       const k = samples.findIndex((s) => s.key);
       if (k < 0) return null;
@@ -293,11 +381,40 @@ export class Transmuxer {
       s.duration = t.dur;
       s.cts = s.pts - s.dts;
     }
-    const out = { codec: 'avc1.' + hex2(t.sps[1]) + hex2(t.sps[2]) + hex2(t.sps[3]) };
-    if (t.changed) { Object.assign(t, spsSize(t.sps)); out.init = initSegment(t); t.changed = false; }
+    if (t.changed && t.hevc) { t.hs = hevcSps(t.sps); t.width = t.hs.width; t.height = t.hs.height; }
+    const out = { codec: t.hevc ? hevcCodec(t.hs.ptl) : 'avc1.' + hex2(t.sps[1]) + hex2(t.sps[2]) + hex2(t.sps[3]) };
+    if (t.changed) { if (!t.hevc) Object.assign(t, spsSize(t.sps)); out.init = initSegment(t); t.changed = false; }
     const base = Math.max(0, samples[0].dts);
     out.data = fragment(t, ++t.seq, base, samples);
     this.end = Math.max(this.end, samples[samples.length - 1].dts + t.dur);
+    return out;
+  }
+
+  /** AC-3: ramki z PES (słowo synchronizacji 0B 77), 1536 próbek na ramkę. */
+  ac3Fragment(list) {
+    const t = this.a;
+    const frames = [];
+    let conf = null;
+    for (const pes of list) {
+      const d = pes.data;
+      for (let i = 0; i + 8 <= d.length;) {
+        if (d[i] !== 0x0b || d[i + 1] !== 0x77) { i++; continue; }
+        const hd = ac3Header(d, i);
+        if (!hd || i + hd.len > d.length) break;
+        conf = hd;
+        frames.push(d.subarray(i, i + hd.len));
+        i += hd.len;
+      }
+    }
+    if (!conf || !frames.length) return null;
+    const out = { codec: 'ac-3' };
+    const key = `${conf.fscod}/${conf.acmod}/${conf.lfeon}/${conf.bsid}/${conf.frmsizecod >> 1}`;
+    if (t.ac3key !== key) {
+      Object.assign(t, { ac3: conf, ac3key: key, rate: conf.rate, timescale: conf.rate, channels: conf.channels, object: null });
+      out.init = initSegment(t);
+    }
+    const base = Math.max(0, Math.round((list[0].pts + this.offset) * t.rate / TS));
+    out.data = fragment(t, ++t.seq, base, frames.map((f) => ({ data: f, duration: 1536, cts: 0, key: true })));
     return out;
   }
 
@@ -320,7 +437,7 @@ export class Transmuxer {
     if (!conf || !frames.length || !AAC_RATES[conf.rateIndex]) return null;
     const out = { codec: 'mp4a.40.' + conf.object };
     if (t.object !== conf.object || t.rateIndex !== conf.rateIndex || t.channels !== conf.channels) {
-      Object.assign(t, conf, { rate: AAC_RATES[conf.rateIndex], timescale: AAC_RATES[conf.rateIndex] });
+      Object.assign(t, conf, { rate: AAC_RATES[conf.rateIndex], timescale: AAC_RATES[conf.rateIndex], ac3: null, ac3key: null });
       out.init = initSegment(t);
     }
     const base = Math.max(0, Math.round((list[0].pts + this.offset) * t.rate / TS));

@@ -2,6 +2,8 @@
 
 ## Niewydane
 
+- **K18 – podgląd HEVC i AC-3:** `mux.js` przepakowuje HEVC (Main, Main 10) i AC-3 (do 5.1) na fragmenty MP4, gdy przeglądarka dekoduje je w MSE (Safari, Chrome/Edge ze sprzętowym HEVC); w pozostałych bez zmian (HEVC – natywny HLS, AC-3 – bez dźwięku). Zamyka LUKI #21.
+
 - **K11 – import ramówki z pliku** (Vizrt E): Playlisty → „Import ramówki z pliku…” – CSV albo XML z systemu emisyjnego, dopasowanie pozycji do mediów legacy z podglądem (dopasowane / niejednoznaczne / brak), zapis jako nowa playlista legacy.
 
 - **K10 – mozaika kanałów** (Vizrt J): przycisk „Mozaika” w Na antenie – siatka podglądów, dźwięk z jednego kafla, czerwona ramka przy błędzie ramówki; limit `VIZRS_LIVE_MULTIVIEW_MAX` (domyślnie 4, 0 = bez mozaiki). Atrapa mostu: `MOCK_HLS=1` – strumienie testowe ffmpeg.

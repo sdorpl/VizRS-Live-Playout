@@ -1420,6 +1420,29 @@ function check(cond, msg) {
   check(await page.$('main[data-view="harmonogramy"]') !== null, 'pokrycie: przejście do ekranu panelu');
 
 
+  // ---------- K18: mux.js – HEVC i AC-3 (próbka z ffmpeg hosta, gdy ma libx265; dekodowanie zależy od przeglądarki) ----------
+  {
+    const { execFileSync } = require('child_process');
+    const tsFile = path.join(require('os').tmpdir(), `vizrs-e2e-hevc-${process.pid}.ts`);
+    let ts = null;
+    try {
+      execFileSync('ffmpeg', ['-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc2=size=320x180:rate=25', '-f', 'lavfi', '-i', 'sine', '-t', '2', '-c:v', 'libx265', '-preset', 'ultrafast',
+        '-x265-params', 'log-level=error', '-g', '25', '-pix_fmt', 'yuv420p', '-c:a', 'ac3', '-ac', '2', '-f', 'mpegts', tsFile], { stdio: 'ignore', timeout: 60000 });
+      ts = require('fs').readFileSync(tsFile).toString('base64');
+      require('fs').unlinkSync(tsFile);
+    } catch { /* bez ffmpeg z libx265 – test pominięty */ }
+    if (ts) {
+      const r = await page.evaluate(async (b64) => {
+        const { Transmuxer } = await import('/mux.js');
+        const buf = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+        const on = new Transmuxer({ hevc: true, ac3: true }).push(buf);
+        const off = new Transmuxer().push(buf);
+        return { v: on.video?.codec, a: on.audio?.codec, init: !!on.video?.init && !!on.audio?.init, off: off.error };
+      }, ts);
+      check(/^hvc1\.1\.6\.L\d+/.test(r.v || '') && r.a === 'ac-3' && r.init && r.off === 'HEVC', `K18: mux.js przepakowuje HEVC + AC-3 (${r.v}, ${r.a}); bez obsługi w przeglądarce – HEVC przez natywny HLS`);
+    } else console.log('pominięte K18: brak ffmpeg z libx265 na hoście');
+  }
+
   // ---------- Podgląd strumienia kanału (player.js + mux.js, pośrednik /api/stream/…) ----------
   // Prawdziwy strumień legacy (silnik Next) kanału 24 z seed: MSE w Chromium, obraz równany do zegara anteny.
   {

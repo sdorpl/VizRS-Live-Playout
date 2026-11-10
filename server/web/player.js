@@ -79,13 +79,16 @@ export class Preview {
       const variant = master.master ? master.variant : masterUrl;
       const hevc = /hvc1|hev1|av01/.test(master.codecs);
       const mse = window.MediaSource && MediaSource.isTypeSupported('video/mp4; codecs="avc1.640028"');
+      // K18: HEVC i AC-3 przez MSE tylko tam, gdzie przeglądarka je dekoduje (np. Chrome/Edge ze sprzętowym HEVC, Safari)
+      this.caps = { hevc: !!(window.MediaSource && MediaSource.isTypeSupported('video/mp4; codecs="hvc1.1.6.L93.B0"')), ac3: !!(window.MediaSource && MediaSource.isTypeSupported('audio/mp4; codecs="ac-3"')) };
+      const av1 = /av01/.test(master.codecs);
       if (!variant) throw new Error('playlista kanału bez wariantu');
-      if (mse && !hevc) {
+      if (mse && !av1 && (!hevc || this.caps.hevc)) {
         try { await this.playMse(variant, alive); return; } catch (e) { if (!(e instanceof NeedNative)) throw e; }
         this.teardown();
       }
       if (!this.video.canPlayType('application/vnd.apple.mpegurl')) {
-        this.report(`Ta przeglądarka nie odtworzy strumienia (${master.codecs || 'kodek nieznany'}). Podgląd obsługuje H.264; HEVC/AV1 – Safari, nowy Chrome albo VLC.`, 'bad');
+        this.report(`Ta przeglądarka nie odtworzy strumienia (${master.codecs || 'kodek nieznany'}). Podgląd obsługuje H.264, a HEVC – gdy przeglądarka go dekoduje (Safari, Chrome/Edge ze sprzętowym HEVC); AV1 – VLC.`, 'bad');
         return;
       }
       this.video.src = masterUrl;
@@ -133,7 +136,7 @@ export class Preview {
     this.url = URL.createObjectURL(ms);
     v.src = this.url;
     await new Promise((r) => ms.addEventListener('sourceopen', r, { once: true }));
-    const mux = new Transmuxer();
+    const mux = new Transmuxer(this.caps || {});
     const bufs = {};
     let next = null, started = false, td = 4;
     this.syncTimer = setInterval(() => this.sync(td), 250);
@@ -157,7 +160,7 @@ export class Preview {
           for (const kind of ['video', 'audio']) {
             if (r[kind]?.init) bufs[kind] = Object.assign(ms.addSourceBuffer(`${kind}/mp4; codecs="${r[kind].codec}"`), { codec: r[kind].codec });
           }
-          if (!bufs.video) throw new NeedNative('brak obrazu H.264');
+          if (!bufs.video) throw new NeedNative('brak obrazu H.264/HEVC');
         }
         for (const kind of ['video', 'audio']) await this.append(bufs[kind], kind, r[kind]);
         if (!alive()) return;
@@ -167,7 +170,7 @@ export class Preview {
           const t = this.target();
           v.currentTime = t != null && t > r.start ? t : r.start;
           v.play().catch(() => {});
-          this.info = `${mux.v.width}×${mux.v.height} · H.264 · ${bufs.audio ? 'AAC' : 'bez dźwięku (podgląd odtwarza tylko AAC)'}`;
+          this.info = `${mux.v.width}×${mux.v.height} · ${mux.v.hevc ? 'HEVC' : 'H.264'} · ${bufs.audio ? (bufs.audio.codec === 'ac-3' ? 'AC-3' : 'AAC') : `bez dźwięku (podgląd odtwarza AAC${this.caps?.ac3 ? ' i AC-3' : ''})`}`;
         }
       }
       for (const sb of Object.values(bufs)) {
