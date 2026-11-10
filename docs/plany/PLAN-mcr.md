@@ -83,7 +83,7 @@ Przebieg łączy [LUKI.md](../LUKI.md) i punkty z §2–§3 w jedną kolejkę: n
 | K8 | Biblioteki: czas folderów obrazów, skan jednego serialu, wyodrębnianie napisów (LUKI #18, #26) | – | zrobione (2026-11-09) |
 | K9 | Kontrola ramówki: błędy na czerwono w Na antenie, EPG i Playoutach (Vizrt B) | K6 | zrobione (2026-11-09) |
 | K10 | Mozaika kanałów (multiview) w Na antenie (Vizrt J) | K9 | zrobione (2026-11-09) |
-| K11 | Import ramówki z pliku CSV/XML do playlisty legacy (Vizrt E) | – | do zrobienia |
+| K11 | Import ramówki z pliku CSV/XML do playlisty legacy (Vizrt E) | – | zrobione (2026-11-09) |
 | Q1 | Sloty na żywo z prawdziwym sygnałem OBS → CG Playout, Plex z prawdziwym kontem (LUKI #3, G1) | – | ręcznie (z użytkownikiem) |
 | K12 | Warstwy i strony VizRS na antenie w karcie kanału (LUKI #22, Vizrt D; CG) | – | do zrobienia |
 | K13 | Ręczne TAKE / CONTINUE / OUT pojedynczej strony (Vizrt H; CG) | K12 | do zrobienia |

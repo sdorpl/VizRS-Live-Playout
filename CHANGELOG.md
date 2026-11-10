@@ -2,6 +2,8 @@
 
 ## Niewydane
 
+- **K11 – import ramówki z pliku** (Vizrt E): Playlisty → „Import ramówki z pliku…” – CSV albo XML z systemu emisyjnego, dopasowanie pozycji do mediów legacy z podglądem (dopasowane / niejednoznaczne / brak), zapis jako nowa playlista legacy.
+
 - **K10 – mozaika kanałów** (Vizrt J): przycisk „Mozaika” w Na antenie – siatka podglądów, dźwięk z jednego kafla, czerwona ramka przy błędzie ramówki; limit `VIZRS_LIVE_MULTIVIEW_MAX` (domyślnie 4, 0 = bez mozaiki). Atrapa mostu: `MOCK_HLS=1` – strumienie testowe ffmpeg.
 
 - **K9 – kontrola ramówki** (Vizrt B): dziury, nakładanie, koniec playoutu w ciągu 24 h, pliki w koszu, audycja LIVE bez wejścia studia – „Sprawdź ramówkę” i „BŁĄD RAMÓWKI” w Na antenie, czerwone pozycje i dziury w EPG, kolumna „Kontrola” w Playoutach.

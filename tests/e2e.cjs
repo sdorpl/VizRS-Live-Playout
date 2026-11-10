@@ -778,6 +778,23 @@ function check(cond, msg) {
   const items = (await api('GetPlaylistItems', { PlaylistId: plId })).result.sort((a, b) => a.Index - b.Index);
   check(items.length === 3 && items[0].CollectionType === 'OtherVideo' && items[1].CollectionType === 'Collection' && items[1].PlayAll, 'playlista: zmiana kolejności zapisana');
 
+  // K11: import ramówki z pliku CSV – dopasowanie po tytule, nowa playlista z dopasowanych pozycji
+  const impName = 'E2E import ' + tag;
+  await page.click('button:has-text("Import ramówki z pliku")');
+  await page.setInputFiles('#imp-file', { name: 'ramowka.csv', mimeType: 'text/csv', buffer: Buffer.from('Start;Tytuł;Długość\n06:00:00;Pogoda;00:05:00\n06:05:00;Nie ma takiej pozycji;00:10:00\n') });
+  await page.fill('#imp-name', impName);
+  await page.selectOption('#imp-group', { label: plgName });
+  await page.click('#dlg-buttons button:has-text("Dalej")');
+  await page.waitForSelector('.imp-prev', { timeout: 30000 });
+  const impTxt = await page.textContent('.imp-prev');
+  check(/(dopasowane 1|do wyboru 1)/.test(impTxt) && /brak 1/.test(impTxt), `K11: podgląd dopasowania (${impTxt.slice(0, 60)})`);
+  await rerender(() => page.click('#dlg-buttons button:has-text("Utwórz playlistę")'));
+  const impPl = (await api('GetPlaylistsByPlaylistGroupId', { PlaylistGroupId: (await api('GetAllPlaylistGroups')).result.find((g) => g.Name === plgName).Id })).result.find((x) => x.Name === impName);
+  const impItems = impPl ? (await api('GetPlaylistItems', { PlaylistId: impPl.Id })).result : [];
+  check(impItems.length === 1 && impItems[0].CollectionType === 'OtherVideo', `K11: playlista z importu (${impItems.length} poz.)`);
+  if (impPl) await api('DeletePlaylist', { PlaylistId: impPl.Id });
+  await rerender(() => page.click(`td:text-is("${plName}")`));
+
   // sprzątanie R4 (przez UI: playlista, grupa; reszta przez UI kolekcji)
   await page.click('main .panel header button:has-text("Usuń")');
   await rerender(() => page.click('#dlg-buttons button:has-text("Usuń")'));

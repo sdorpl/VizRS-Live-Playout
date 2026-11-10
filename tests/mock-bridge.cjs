@@ -140,6 +140,9 @@ const probe = {
   },
   Json: '{}', FFmpegPath: '/usr/local/bin/ffmpeg', ProbedAt: iso(now - 3600e3),
 };
+const VIDEOS = ['Serwis 06:00', 'Serwis 12:00', 'Pogoda', 'Pogoda', 'Rozmowa dnia', 'Magazyn regionalny', 'Gość VizRS'].map((Title, i) => ({ MediaItemId: 200 + i, Title, Subtitle: `/media/info24/${Title.toLowerCase().replace(/\W+/g, '-')}${i === 3 ? '-weekend' : ''}.mp4`, SortTitle: Title, Poster: '', State: 'Normal' }));
+const PLAYLISTS = [{ Id: 1, PlaylistGroupId: 1, Name: 'Poranek INFO24', IsSystem: false }];
+const PL_ITEMS = {};
 const LOGS = []; // wpisy dopisywane przez zadania w tle atrapy (K6)
 const logs = () => [...LOGS,
   { Timestamp: iso(now - 20e3), Level: 'Information', Message: 'Checking for overlapping playout items in 3 playouts', Properties: '' },
@@ -185,10 +188,15 @@ const H = {
   UpdateImageFolderDuration: (a) => a.ImageFolderDuration,
   QuerySearchIndexAllItems: (a) => (/FileNotFound/.test(a.Query || '') ? { OtherVideoIds: [9], MovieIds: [] } : { OtherVideoIds: [1, 2, 3], ShowIds: [101, 102], MovieIds: [], SeasonIds: [], EpisodeIds: [], MusicVideoIds: [], ArtistIds: [], SongIds: [], ImageIds: [5, 6], RemoteStreamIds: [] }),
   QuerySearchIndexShows: () => ({ Count: 2, Cards: [{ TelevisionShowId: 101, MediaItemId: 101, Title: 'Kryminalni', Subtitle: '2004', SortTitle: 'kryminalni', Poster: '', State: 'Normal' }, { TelevisionShowId: 102, MediaItemId: 102, Title: 'Ranczo', Subtitle: '2006', SortTitle: 'ranczo', Poster: '', State: 'Normal' }] }),
-  QuerySearchIndexOtherVideos: (a) => (/FileNotFound/.test(a.Query || '') ? { Count: 1, Cards: [{ MediaItemId: 9, Title: 'Seksmisja (1984)', Subtitle: '/media/kino/seksmisja.mkv', State: 'FileNotFound' }] } : { Count: 3, Cards: [['Serwis 06:00', 1], ['Pogoda – plansza', 2], ['Rozmowa dnia – zapowiedź', 3]].map(([Title, MediaItemId]) => ({ MediaItemId, Title, Subtitle: `/media/info24/${MediaItemId}.mp4`, SortTitle: Title, Poster: '', State: 'Normal' })) }),
+  QuerySearchIndexOtherVideos: (a) => (/title:"/.test(a.Query || '') ? (() => { const t = /title:"([^"]*)"/.exec(a.Query)[1].trim().toLowerCase(); const c = VIDEOS.filter((v) => v.Title.toLowerCase() === t || v.Title.toLowerCase().includes(t)); return { Count: c.length, Cards: c }; })() : /FileNotFound/.test(a.Query || '') ? { Count: 1, Cards: [{ MediaItemId: 9, Title: 'Seksmisja (1984)', Subtitle: '/media/kino/seksmisja.mkv', State: 'FileNotFound' }] } : { Count: 3, Cards: [['Serwis 06:00', 1], ['Pogoda – plansza', 2], ['Rozmowa dnia – zapowiedź', 3]].map(([Title, MediaItemId]) => ({ MediaItemId, Title, Subtitle: `/media/info24/${MediaItemId}.mp4`, SortTitle: Title, Poster: '', State: 'Normal' })) }),
   GetMediaItemInfo: (a) => ({ Id: a.Id, Title: a.Id > 100 ? 'Kryminalni' : 'Serwis 06:00', Kind: a.Id > 100 ? 'Show' : 'OtherVideo', LibraryName: a.Id > 100 ? 'Seriale' : 'Archiwum INFO24', State: 'Normal', Duration: '00:25:00', Width: 1920, Height: 1080, DisplayAspectRatio: '16:9', RFrameRate: '25/1', Streams: [{ Index: 0, Kind: 'Video', Codec: 'h264', Profile: 'High' }, { Index: 1, Kind: 'Audio', Codec: 'aac', Language: 'pol', Channels: 2, Default: true }, { Index: 2, Kind: 'Subtitle', Codec: 'subrip', Language: 'pol' }], Chapters: [] }),
   GetTelevisionShowById: (a) => ({ Id: a.Id, LibraryId: 3, Title: 'Kryminalni', Year: '2004' }),
   QueueShowScanByLibraryId: () => true,
+  GetAllPlaylistGroups: () => [{ Id: 1, Name: 'Ramówki INFO24', IsSystem: false, PlaylistCount: PLAYLISTS.length }],
+  GetPlaylistsByPlaylistGroupId: () => PLAYLISTS,
+  CreatePlaylist: (a) => { const p = { Id: PLAYLISTS.length + 1, PlaylistGroupId: a.PlaylistGroupId, Name: a.Name, IsSystem: false }; PLAYLISTS.push(p); return p; },
+  ReplacePlaylistItems: (a) => { PL_ITEMS[a.PlaylistId] = a.Items; return []; },
+  GetPlaylistItems: (a) => (PL_ITEMS[a.PlaylistId] || []).map((i) => ({ ...i, MediaItem: { MediaItemId: i.MediaItemId, Title: (VIDEOS.find((v) => v.MediaItemId === i.MediaItemId) || {}).Title } })),
   GetAllBlocksForPlayout: () => [{ Id: 4, GroupId: 1, GroupName: 'Muzyka', Name: 'Teledyski 20 min' }, { Id: 5, GroupId: 1, GroupName: 'Muzyka', Name: 'Lista przebojów' }],
   GetBlockPlayoutHistory: () => ({ TotalCount: 2, Page: [
     { Id: 11, When: iso(now - 3 * 3600e3), Finish: iso(now - 2 * 3600e3), Key: '{"b":4,"i":2}', Details: '{"CollectionType":"Collection","Name":"Teledyski"}' },

@@ -4,6 +4,7 @@
 
 import { VIEWS, h, btn, panel, cmd, pl, pill, table, toast, dialog, route, cmdNote } from '../core.js';
 import { form } from '../form.js';
+import { importSchedule } from './import.js';
 import { crudView, itemsEditor, contentPicker } from '../parts.js';
 
 const PICK_KINDS = ['Collection', 'TelevisionShow', 'TelevisionSeason', 'Artist', 'MultiCollection', 'SmartCollection'];
@@ -120,7 +121,7 @@ VIEWS.playlisty = crudView({
   id: (p) => p.Id,
   cols: [['Group', 'Grupa'], ['Name', 'Playlista', { class: 'w' }], [(p) => (p.IsSystem ? pill('systemowa') : h('span')), '']],
   empty: 'Brak playlist. Załóż grupę, potem playlistę.',
-  headExtra: (ctx) => [btn('+ Grupa', newGroup), btn('Usuń grupę…', () => deleteGroup(ctx.groups))],
+  headExtra: (ctx) => [btn('+ Grupa', newGroup), btn('Usuń grupę…', () => deleteGroup(ctx.groups)), btn('Import ramówki z pliku…', () => importSchedule(ctx.groups))],
   editor: (p, ctx) => {
     ctx.current = p;
     const groups = ctx.groups.filter((g) => !g.IsSystem);

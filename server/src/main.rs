@@ -150,6 +150,11 @@ const STATIC: &[(&str, &str, &str)] = &[
         include_str!("../web/views/live.js"),
     ),
     (
+        "/views/import.js",
+        "text/javascript; charset=utf-8",
+        include_str!("../web/views/import.js"),
+    ),
+    (
         "/views/system.js",
         "text/javascript; charset=utf-8",
         include_str!("../web/views/system.js"),

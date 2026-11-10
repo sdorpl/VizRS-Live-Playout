@@ -346,3 +346,7 @@ dl.kv dd { flex-wrap: wrap; }
 .mv-tile video { display: block; width: 100%; aspect-ratio: 16 / 9; background: #000; }
 .mv-cap { display: flex; gap: 6px; align-items: center; padding: 4px 8px; background: rgba(0, 0, 0, .75); font-size: 12px; }
 .mv-err { position: absolute; left: 0; right: 0; top: 0; padding: 4px 8px; background: rgba(120, 20, 20, .85); color: #ffd7d7; font-size: 12px; }
+.imp-prev { max-width: 1000px; max-height: 65vh; overflow: auto; }
+.imp-prev select { max-width: 420px; }
+.dialog:has(.imp-prev), .dialog:has(.task-result), .dialog:has(.renumber) { width: min(1000px, 94vw); }
+.imp-prev { max-width: none; }
