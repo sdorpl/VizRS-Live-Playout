@@ -537,6 +537,29 @@ function check(cond, msg) {
   }
   check(true, 'profil i kopia usunięte');
 
+  // K4: własna rozdzielczość – nieparzysta odrzucona w przeglądarce, dodanie i usunięcie
+  await page.fill('#res-w', '1001');
+  await page.fill('#res-h', '562');
+  await page.click('button:has-text("+ Dodaj rozdzielczość")');
+  await page.waitForSelector('#toast.bad');
+  check(/parzyste/.test(await page.textContent('#toast')), 'K4: nieparzysta rozdzielczość zatrzymana przed wysłaniem');
+  await page.fill('#res-w', '1000');
+  await page.click('button:has-text("+ Dodaj rozdzielczość")');
+  await page.waitForSelector('td:text-is("1000x562")');
+  const customRes = (await api('GetAllResolutions')).result.find((r) => r.Name === '1000x562');
+  check(customRes && customRes.IsCustom, 'K4: własna rozdzielczość zapisana w legacy (IsCustom)');
+  await page.click('tr:has(td:text-is("1000x562")) button:has-text("Usuń")');
+  await page.click('#dlg-buttons button:has-text("Usuń")');
+  await page.waitForSelector('td:text-is("1000x562")', { state: 'detached' });
+  check(true, 'K4: własna rozdzielczość usunięta');
+  // K5: podpowiedź akceleracji wg silnika Next (legacy ≥ 26.12.0)
+  {
+    await rerender(() => page.click('text=+ Nowy profil'));
+    await page.selectOption('#f-HardwareAcceleration', 'Vaapi');
+    const hint = await page.textContent('.row:has(#f-HardwareAcceleration) .hint');
+    check(/Next|programowo|sprzętowo/.test(hint || ''), `K5: stan akceleracji wg Next w edytorze profilu (${(hint || '').slice(0, 80)})`);
+  }
+
   // R5: znak wodny z wgranym PNG, przypisany do kanału; logo kanału wgrane
   const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAAAgCAYAAACinX6EAAAAXElEQVR4nO3QMREAIBDAsJeCdCTiAGRkoEP2XufsdX82OkBrgA7QGqADtAboAK0BOkBrgA7QGqADtAboAK0BOkBrgA7QGqADtAboAK0BOkBrgA7QGqADtAboAO0BIgN5PBkUl+sAAAAASUVORK5CYII=', 'base64');
   const wmName = 'E2E znak ' + tag;
@@ -1065,6 +1088,10 @@ function check(cond, msg) {
   check(/v\d+\./.test(await page.textContent('.panel:has(h2:text-is("Wersje i sprzęt"))')), 'diagnostyka: wersja legacy i sprzęt');
   const stack = await page.textContent('[data-stack]');
   check(/OK\s*legacy/.test(stack) && /most/.test(stack) && /kontrole legacy/.test(stack) && /CG Playout/.test(stack), `diagnostyka: „Stan” stosu na górze (${stack.slice(0, 120)})`);
+  if (await page.isVisible('[data-next]')) {
+    const nx = await page.textContent('[data-next]');
+    check(/Wersja/.test(nx) && /(Sprzęt|sprawdzony)/.test(nx), `K5: karta „Silnik Next” (${nx.slice(0, 100)})`);
+  } else check(false, 'K5: brak karty „Silnik Next” (legacy ≥ 26.12.0 w stosie testowym)');
   const hls = await page.getAttribute('#pt-hls', 'href');
   check(/\/iptv\/channel\/[^/]+\.m3u8$/.test(hls || ''), `test odtwarzania: odnośnik do strumienia (${hls})`);
   await page.click('#maint button:has-text("Zwolnij pamięć")');

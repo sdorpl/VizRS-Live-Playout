@@ -22,8 +22,15 @@ UpdateFFmpegProfile
 CopyFFmpegProfile
 DeleteFFmpegProfile
 GetAllResolutions
+# własne rozdzielczości (K4, Settings → FFmpeg w legacy; usuwać można tylko IsCustom)
+CreateCustomResolution
+DeleteCustomResolution
+# silnik Next (K5, legacy ≥ 26.12.0; starsze – commandsMissing, panel chowa kartę)
+GetNextVersion
+GetNextDescribe
+GetNextProbe
+RefreshNextProbe
 GetSupportedHardwareAccelerationKinds
-# GetNextProbe/RefreshNextProbe (stan sprzętu wg Next) – dopiero w legacy nowszym niż 26.11.6; dopisać po aktualizacji
 GetAllWatermarks
 GetWatermarkById
 CreateWatermark

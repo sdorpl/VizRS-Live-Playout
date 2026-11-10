@@ -6,6 +6,7 @@ import { form } from '../form.js';
 import { contentPicker } from '../parts.js';
 import { openMonitor } from '../player.js';
 import { cg } from './grafika.js';
+import { accels, accelCodecs } from './profile.js';
 
 // ---------- Ustawienia ----------
 
@@ -321,6 +322,51 @@ export function exposureVerdict(x) {
   return { cls: 'ok', text: 'zamknięte: na zewnątrz tylko strumienie, M3U/XMLTV i HDHomeRun' };
 }
 
+// ---------- K5: silnik Next (legacy ≥ 26.12.0; starsze – brak komend = brak karty) ----------
+const sv = (o, snake, pascal) => (o == null ? undefined : o[snake] ?? o[pascal]);
+const ACCEL_ST = { available: ['działa', 'ok'], ffmpeg_missing: ['brak w ffmpeg', 'bad'], ffmpegmissing: ['brak w ffmpeg', 'bad'], probe_failed: ['test nieudany', 'bad'], probefailed: ['test nieudany', 'bad'], skipped: ['pominięta', ''], timeout: ['przekroczony czas', 'bad'] };
+const NEXT_CMDS = ['GetNextVersion', 'GetNextDescribe', 'GetNextProbe'];
+
+async function loadNext() {
+  if (!NEXT_CMDS.some(has)) return null;
+  const [version, describe, probe] = await Promise.all(NEXT_CMDS.map((n) => (has(n) ? cmd(n).catch((e) => ({ error: e.message })) : null)));
+  return { version, describe, probe };
+}
+
+function nextPanel(n) {
+  if (!n) return null;
+  const refresh = has('RefreshNextProbe') ? btn('Sprawdź ponownie', async () => {
+    toast('Silnik Next sprawdza sprzęt…');
+    try { await cmd('RefreshNextProbe'); toast('Sprzęt sprawdzony ponownie.', 'ok'); route(true); } catch (e) { toast('Legacy: ' + e.message, 'bad'); }
+  }) : null;
+  const d = n.describe && !n.describe.error ? n.describe : null;
+  const c = sv(d, 'contract', 'Contract');
+  const schema = (x) => (x ? `${sv(x, 'breaking', 'Breaking')}.${sv(x, 'compatible', 'Compatible')}` : '—');
+  const sc = sv(d, 'schema_capability', 'SchemaCapability');
+  const rows = [
+    { k: 'Wersja', v: typeof n.version === 'string' ? n.version || '—' : n.version?.error ? 'błąd: ' + n.version.error : sv(sv(d, 'binary', 'Binary'), 'version', 'Version') || '—' },
+    c ? { k: 'Schematy (playout / kanał)', v: `${schema(sv(c, 'playout_schema', 'PlayoutSchema'))} / ${schema(sv(c, 'channel_config_schema', 'ChannelConfigSchema'))} · segment ${sv(c, 'segment_seconds', 'SegmentSeconds')} s, klatka kluczowa co ${sv(c, 'keyframe_seconds', 'KeyframeSeconds')} s` } : null,
+    sc ? { k: 'Obsługiwane', v: `obraz: ${(sv(sc, 'video_formats', 'VideoFormats') || []).join(', ')} · dźwięk: ${(sv(sc, 'audio_formats', 'AudioFormats') || []).join(', ')} · akceleracje: ${(sv(sc, 'accels', 'Accels') || []).join(', ')}` } : null,
+    n.describe?.error ? { k: 'Opis Next', v: 'błąd: ' + n.describe.error } : null,
+  ].filter(Boolean);
+  const p = n.probe && !n.probe.error ? n.probe : null;
+  const list = accels(p);
+  const probed = p ? sv(p, 'ProbedAt', 'probed_at') : null;
+  const ff = sv(sv(p, 'Capability', 'capability'), 'ffmpeg', 'Ffmpeg');
+  if (p) rows.push({ k: 'Sprzęt sprawdzony', v: `${probed ? new Date(probed).toLocaleString('pl-PL') : '—'}${ff ? ` · ffmpeg ${sv(ff, 'version', 'Version') || '?'} (${sv(ff, 'path', 'Path') || '?'})` : ''}` });
+  else rows.push({ k: 'Sprzęt', v: n.probe?.error ? 'błąd: ' + n.probe.error : 'Next jeszcze nie sprawdził sprzętu – „Sprawdź ponownie”' });
+  return panel('Silnik Next', refresh,
+    h('div', { 'data-next': '' }, table(rows, [['k', 'Pole'], ['v', 'Wartość', { class: 'w' }]])),
+    list.length ? table(list, [
+      [(a) => { const st = String(sv(a, 'status', 'Status') || '').toLowerCase(); const [t, k] = ACCEL_ST[st] || [st || '?', '']; return pill(t, k); }, 'Stan'],
+      [(a) => [sv(a, 'accel', 'Accel'), sv(a, 'device', 'Device'), sv(a, 'driver', 'Driver')].filter(Boolean).join(' · '), 'Akceleracja'],
+      [(a) => accelCodecs(a).dec.join(', ') || '—', 'Dekodowanie'],
+      [(a) => accelCodecs(a).enc.join(', ') || '—', 'Kodowanie'],
+      [(a) => sv(a, 'error', 'Error') || '', 'Błąd', { class: 'w' }],
+    ]) : null,
+    cmdNote(...NEXT_CMDS.filter(has), ...(has('RefreshNextProbe') ? ['RefreshNextProbe'] : [])));
+}
+
 function exposurePanel(x) {
   const v = exposureVerdict(x);
   const names = SCREEN_PL();
@@ -347,6 +393,7 @@ VIEWS.diagnostyka = async () => {
     S.status.cg ? cg('live/state').catch(() => null) : null,
     has('GetPlayoutWarningsCount') ? cmd('GetPlayoutWarningsCount').catch(() => null) : null,
   ]);
+  const next = await loadNext();
   S.healthRefresh = false;
   const kind = { Pass: 'ok', Warning: 'warn', Error: 'bad', Info: 'info' };
   const commands = [...S.meta.values()];
@@ -426,6 +473,7 @@ VIEWS.diagnostyka = async () => {
         !info ? missingNote(['GetTroubleshootingInfo']) : info.error ? h('div', { class: 'empty err' }, info.error)
           : table(infoRows, [['k', 'Pole'], ['v', 'Wartość', { class: 'w' }]]),
         cmdNote('GetTroubleshootingInfo', 'RefreshFFmpegCapabilities'))),
+    nextPanel(next),
     ...exposurePanel(exposure),
     h('div', { class: 'split' },
       panel('Konserwacja', null,

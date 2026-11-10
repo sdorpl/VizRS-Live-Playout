@@ -2,6 +2,10 @@
 
 ## Niewydane
 
+- **K4 – własne rozdzielczości** (Profile kodowania → „Rozdzielczości”): dodawanie (`CreateCustomResolution`, kontrola parzystości i duplikatu) i usuwanie własnych (`DeleteCustomResolution`). Zamyka LUKI #24.
+- **K5 – silnik Next:** podpowiedź akceleracji w edytorze profilu wg `GetNextProbe` (ta sama logika co edytor legacy 26.12), karta „Silnik Next” w Diagnostyce (wersja, schematy, akceleracje z kodekami, „Sprawdź ponownie” – `RefreshNextProbe`). Zamyka LUKI #11; paczka diagnostyczna (#27) zostaje – plik ZIP powstaje tylko na dysku legacy, pobranie wymagałoby nowego kodu C# (DOKUMENTACJA §4).
+- Atrapa mostu `tests/mock-bridge.cjs` (metadane komend ze źródeł legacy, przykładowe kanały i ramówka) – zrzuty UI bez Dockera i legacy.
+
 - **K3 – numeracja kanałów naraz** (Kanały → „Numeracja…”): tabela numerów wszystkich kanałów, kontrola duplikatów w przeglądarce, zapis jednym `UpdateChannelNumbers` (na białej liście z `GetAllChannelsForSort`). Zamyka LUKI #23.
 
 - **K2 – CSP zawężone:** `img-src` i `frame-src` tylko z originów `--stream-url` i `--vizrs-url` (bez opcji – brak źródła) zamiast `http:`/`https:`; `prod-smoke.cjs` oblewa przebieg przy naruszeniu CSP. Zamyka LUKI #6.

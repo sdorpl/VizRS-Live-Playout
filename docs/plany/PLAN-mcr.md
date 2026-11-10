@@ -76,8 +76,8 @@ Przebieg łączy [LUKI.md](../LUKI.md) i punkty z §2–§3 w jedną kolejkę: n
 | K1 | Sesje panelu: losowy identyfikator sesji zamiast tokenu w ciasteczku, wylogowanie, wygasanie (LUKI #2, G1) | – | zrobione (2026-11-09) |
 | K2 | CSP zawężone do znanych źródeł obrazów i ramek zamiast `http:`/`https:` (LUKI #6, G1) | – | zrobione (2026-11-09) |
 | K3 | Numeracja kanałów naraz (LUKI #23) | – | zrobione (2026-11-09) |
-| K4 | Własne rozdzielczości w Profilach (LUKI #24) | – | do zrobienia |
-| K5 | Silnik Next w Profilach i Diagnostyce, paczka diagnostyczna (LUKI #11, #27) | – | do zrobienia |
+| K4 | Własne rozdzielczości w Profilach (LUKI #24) | – | zrobione (2026-11-09) |
+| K5 | Silnik Next w Profilach i Diagnostyce, paczka diagnostyczna (LUKI #11, #27) | – | zrobione (2026-11-09; #27 zostaje – DOKUMENTACJA §4) |
 | K6 | Wyniki zadań w tle (nakładanie pozycji, konserwacja) w panelu, nie tylko w Logach (LUKI #10) | – | do zrobienia |
 | K7 | Diagnostyka i historia playoutu blokowego (LUKI #13, część #25) | – | do zrobienia |
 | K8 | Biblioteki: czas folderów obrazów, skan jednego serialu, wyodrębnianie napisów (LUKI #18, #26) | – | do zrobienia |
@@ -120,6 +120,7 @@ Legacy: Settings → FFmpeg: `GetAllResolutions` (jest), `CreateCustomResolution
 
 ### K5 – silnik Next, paczka diagnostyczna (LUKI #11, #27)
 `GetNextVersion`, `GetNextDescribe`, `GetNextProbe`, `RefreshNextProbe` (legacy ≥ 26.12.0; starsze – brak komendy = brak sekcji). Profile kodowania: przy wybranej akceleracji „działa / nie działa i dlaczego”, kodeki dekodowania i kodowania sprzętowego (jak edytor profilu legacy 26.12.0). Diagnostyka: karta „Silnik Next” z wersją, akceptowanymi wersjami schematów i „Sprawdź ponownie”. Paczka diagnostyczna (`ArchiveTroubleshootingResults`): sprawdzić, co zwraca; jeśli plik da się podać przez dyspozytor albo istniejący endpoint mostu – przycisk „Pobierz paczkę diagnostyczną”, w przeciwnym razie zostawić #27 z opisem powodu.
+*Zrobione 2026-11-09:* ZIP powstaje tylko w katalogu tymczasowym legacy (`ArchiveTroubleshootingResults` zwraca ścieżkę) – bez nowego kodu C# nie do pobrania; #27 zostaje (DOKUMENTACJA §4).
 
 ### K6 – wyniki zadań w tle (LUKI #10)
 `CheckForOverlappingPlayoutItems` i zadania konserwacji wracają jako `queued`, a wynik jest tylko w logu legacy. Po zleceniu panel czyta `GetRecentLogEntries` przez ≤ 60 s i pokazuje w oknie wpisy z czasem po zleceniu, pasujące do zadania (wzorce komunikatów z kodu legacy – wypisać w DOKUMENTACJA §4); brak wpisu = „wynik w Logach”. Potrzebne dla K9 (nakładanie pozycji jako błąd ramówki).

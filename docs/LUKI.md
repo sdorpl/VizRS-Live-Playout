@@ -20,13 +20,11 @@ Ograniczenia samego legacy, których panel nie obejdzie bez zmiany legacy (np. j
 | 8 | Test odtwarzania pliku z wyborem profilu (jak w Blazorze legacy) – panel ma tylko podgląd kanału | legacy przekazuje między krokami obiekty wewnętrzne (DOKUMENTACJA §5) |
 | 9 | Brak postępu skanu biblioteki | legacy podaje go tylko zdarzeniami Blazora; panel przez 30 s odświeża liczby pozycji (DOKUMENTACJA §4 „Media”) |
 | 10 | Wynik „Sprawdź nakładanie pozycji” i zadań konserwacji tylko w Logach | zadania w tle legacy (`queued`); PLAN-mcr K6 |
-| 11 | Stan silnika Next w Profilach (`GetNextProbe`, `RefreshNextProbe`, `GetNextDescribe`) | dostępne od legacy v26.12.0, nie na białej liście (DOKUMENTACJA §4 R5, §6); PLAN-mcr K5 |
 | 12 | Plex: panel nie wie, czy konto jest zalogowane | legacy trzyma to w `IPlexSecretStore` poza MediatR; „Wyloguj” tylko, gdy są serwery |
 | 13 | Historia bloku w edytorze playoutu blokowego (`GetBlockPlayoutHistory`) | pominięte świadomie (DOKUMENTACJA §4 „Playouty”); PLAN-mcr K7 |
-| 24 | Własne rozdzielczości (`CreateCustomResolution`, `DeleteCustomResolution`) | brak na białej liście; PLAN-mcr K4 |
 | 25 | Walidator YAML harmonogramu sekwencyjnego i diagnostyka playoutu blokowego (`DecodePlayoutHistory`) | walidator poza MediatR (`ISequentialScheduleValidator`); razem z #13 i #14 (PLAN-mcr K7, walidator poza przebiegiem) |
 | 26 | Wyodrębnianie napisów osadzonych (`ExtractEmbeddedSubtitles`, `ExtractEmbeddedShowSubtitles`) | zadanie w tle legacy (PLAN-mcr K8) |
-| 27 | Paczka diagnostyczna legacy (`ArchiveTroubleshootingResults`, `ArchiveMediaSample`) | przydatna przy zgłoszeniu awarii (PLAN-mcr K5) |
+| 27 | Paczka diagnostyczna legacy (`ArchiveTroubleshootingResults`, `ArchiveMediaSample`) | ZIP powstaje tylko na dysku legacy, pobranie wymagałoby nowego endpointu C# (DOKUMENTACJA §4, decyzja K5) |
 
 ## G3 – funkcje
 
