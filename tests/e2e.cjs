@@ -30,6 +30,7 @@ function check(cond, msg) {
   // Stan jak w CG Playout: kanały z sygnałem studia, wstrzymanie, audycje LIVE; sprawdza token panelu CG i brak Origin.
   const CG_TOKEN = 'test-cg-token-0123456789';
   const cgSeen = [];
+  const cgActions = []; // K13: TAKE / CONTINUE / OUT z treścią (cgSeen sprawdza token każdego żądania)
   const vizrsSeen = [];
   const T0 = Date.now(); // ramówka atrapy stała w czasie, jak EPG prawdziwego CG Playout
   const CG = {
@@ -83,7 +84,7 @@ function check(cond, msg) {
       if ((m = u.match(/^\/api\/live\/channels\/24\/(hold|release)$/))) { CG.hold = m[1] === 'hold'; return send(200, { ok: true }); }
       // K13: TAKE / CONTINUE / OUT; K14: dziennik emisji (kontrakt DOKUMENTACJA §3)
       if ((m = u.match(/^\/api\/live\/channels\/24\/(take|continue|out)$/)) && q.method === 'POST') {
-        cgSeen.push(`${m[1]} ${JSON.stringify(body)}`);
+        cgActions.push(`${m[1]} ${JSON.stringify(body)}`);
         if (m[1] === 'take') CG.layers.push({ layer: 30, page: String(body.page), name: 'ręcznie', manual: true, since: now });
         if (m[1] === 'out') CG.layers = CG.layers.filter((l) => l.layer !== body.layer);
         CG.asrun.push({ t: now, kind: m[1], page: body.page, layer: body.layer, operator: 'VizRS Live' });
@@ -1302,10 +1303,10 @@ function check(cond, msg) {
   await page.selectOption('#qt-page', '3001');
   await page.click('#dlg-buttons button:has-text("TAKE")');
   await page.waitForFunction(() => /W30/.test(document.querySelector('.panel [data-layers]')?.textContent || ''), null, { timeout: 15000 }).catch(() => {});
-  check(cgSeen.some((x) => /^take \{"page":"3001"\}/.test(x)), 'K13: TAKE strony przez pośrednika CG');
+  check(cgActions.some((x) => /^take \{"page":"3001"\}/.test(x)), 'K13: TAKE strony przez pośrednika CG');
   await page.click(`${card24} [data-layer="10"] button:has-text("Zdejmij")`);
   await page.waitForFunction(() => !document.querySelector('[data-layer="10"]'), null, { timeout: 15000 }).catch(() => {});
-  check(cgSeen.some((x) => /^out \{"layer":10\}/.test(x)) && !CG.layers.some((l) => l.layer === 10), 'K13: OUT warstwy 10');
+  check(cgActions.some((x) => /^out \{"layer":10\}/.test(x)) && !CG.layers.some((l) => l.layer === 10), 'K13: OUT warstwy 10');
   // K14: dziennik emisji – wpisy z CG Playout (także TAKE/OUT z panelu)
   await tab('asrun');
   await page.waitForSelector('[data-asrun] table');
@@ -1518,7 +1519,8 @@ function check(cond, msg) {
   }
 
   // ---------- R11: wydanie 1.0 – przegląd bezpieczeństwa (osobny panel z tokenem na 18091) ----------
-  check(st10.panel === '1.2.8' && st10.bridge?.result?.bridge === '1.2.8', `wersja 1.2.8: panel ${st10.panel}, most ${st10.bridge?.result?.bridge}`);
+  const ver = /^version = "([^"]+)"/m.exec(require('fs').readFileSync(path.join(__dirname, '..', 'server', 'Cargo.toml'), 'utf8'))[1];
+  check(st10.panel === ver && st10.bridge?.result?.bridge === ver, `wersja ${ver}: panel ${st10.panel}, most ${st10.bridge?.result?.bridge}`);
   const SEC = 'http://127.0.0.1:18091', PTOK = 'e2e-panel-token-0123456789';
   const secProc = require('child_process').spawn(path.join(__dirname, '..', 'server', 'target', 'release', 'vizrs-live'),
     ['--port', '18091', '--bridge', 'http://127.0.0.1:18409', '--bridge-token', 'test-token-0123456789', '--token', PTOK], { stdio: 'ignore' });
