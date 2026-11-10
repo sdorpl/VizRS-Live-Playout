@@ -2,7 +2,7 @@
 
 > Aktualizuj w tym samym commicie, który zmienia stan. Plan: [plany/PLAN-rozbudowy.md](plany/PLAN-rozbudowy.md), znane braki: [LUKI.md](LUKI.md), opis działania: [DOKUMENTACJA.md](DOKUMENTACJA.md).
 >
-> **Ostatnia aktualizacja:** 2026-11-09
+> **Ostatnia aktualizacja:** 2026-11-10
 
 ## Bieżący etap
 
@@ -26,9 +26,15 @@
 | R11 | wydanie 1.0: instrukcja operatora, runbook, obrazy ghcr, przegląd bezpieczeństwa | `docs/INSTRUKCJA.md`, `docs/RUNBOOK.md`, `release.yml` |
 | R12 | Sloty na żywo (MCR), Audycje LIVE, operator i studio w pasku górnym | `views/live.js`, `app.js` |
 
+## PLAN-mcr – wydanie testowe 1.3.0-test.1 (2026-11-10, gałąź `next-v`)
+
+Zrobione w panelu: K1–K11, K18 (sesje, CSP, numeracja kanałów, rozdzielczości, silnik Next, wyniki zadań w tle, historia bloków, biblioteki, kontrola ramówki, mozaika, import ramówki, HEVC/AC-3). K12–K14 i K17 – strona panelu gotowa, włącza się po `features` z VizRS CG Playout; K15–K16 – kontrakt API (DOKUMENTACJA §3). Zrzuty bez legacy: atrapa mostu `tests/mock-bridge.cjs` (`MOCK_CG=1 MOCK_HLS=1`). e2e nowych punktów – do sprawdzenia w CI (bramka `release.yml` przed publikacją obrazów).
+
+**Kroki ręczne po tym wydaniu:** (1) VizRS CG Playout – zaimplementować kontrakt K12–K17 (`features`, `layers`, `take/continue/out`, `asrun`, `VIZRS_ALERT_WEBHOOK`, potem K15/K16) i wydać razem z panelem; (2) Q1 z użytkownikiem; (3) po zielonej bramce i teście na stosie `virtrs` – scalenie `next-v` do `main` i wydanie 1.3.0.
+
 ## Następne zadanie
 
-**Jeden przebieg** luk i planu rozwoju: [PLAN-mcr.md](plany/PLAN-mcr.md) §4 (K1–K18 + Q1 ręcznie), realizacja na gałęzi **`next-v`**. Następne zadanie: **K1** – sesje panelu (LUKI #2). Decyzja użytkownika 2026-11-09: **zostajemy przy ErsatzTV legacy** (wariant A, PLAN-mcr §6). Punkty K12–K17 wymagają zmian w API VizRS CG Playout.
+**Jeden przebieg** luk i planu rozwoju: [PLAN-mcr.md](plany/PLAN-mcr.md) §4 (K1–K18 + Q1 ręcznie), realizacja na gałęzi **`next-v`**. Stan: przebieg wykonany do 1.3.0-test.1 (wyżej); następne – kontrakt CG Playout (K12–K17) i Q1. Decyzja użytkownika 2026-11-09: **zostajemy przy ErsatzTV legacy** (wariant A, PLAN-mcr §6). Punkty K12–K17 wymagają zmian w API VizRS CG Playout.
 
 ## Kroki ręczne (czekają na użytkownika)
 

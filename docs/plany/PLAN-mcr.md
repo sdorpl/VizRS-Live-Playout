@@ -1,6 +1,6 @@
 # Plan rozwoju VizRS Live (PLAN-mcr) – braki wobec legacy, wzorzec Viz Channel Branding, legacy czy Next
 
-> **Stan:** w realizacji na gałęzi `next-v` (od 2026-11-09), żaden punkt niezaczęty; decyzja legacy/Next: **A – legacy** (§6). Stan prac: [../STATUS.md](../STATUS.md), znane braki: [../LUKI.md](../LUKI.md), opis działania: [../DOKUMENTACJA.md](../DOKUMENTACJA.md).
+> **Stan:** gałąź `next-v`, wydanie testowe 1.3.0-test.1 (2026-11-10): K1–K11, K18 zrobione; K12–K14, K17 – panel gotowy, czeka na VizRS CG Playout; K15–K16 – kontrakt; Q1 ręcznie; decyzja legacy/Next: **A – legacy** (§6). Stan prac: [../STATUS.md](../STATUS.md), znane braki: [../LUKI.md](../LUKI.md), opis działania: [../DOKUMENTACJA.md](../DOKUMENTACJA.md).
 >
 > **Jedyny dokument planów rozwoju VizRS Live** (decyzja użytkownika 2026-11-09): nowe plany i punkty panelu dopisuj tutaj – nowy punkt w tabeli §4 (w miejscu kolejki, które mu odpowiada) i opis w §5, nowe analizy jako kolejne sekcje – zamiast zakładać nowe pliki `PLAN-*.md`. Zakończone plany [PLAN-rozbudowy.md](PLAN-rozbudowy.md) i [PLAN-makieta.md](PLAN-makieta.md) zostają jako archiwum.
 >
