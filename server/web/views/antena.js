@@ -1,6 +1,7 @@
 // Widoki grupy „Antena”: Na antenie, Przewodnik EPG.
 
 import { openMonitor } from '../player.js';
+import { scheduleCheck, checkItems, missingTitles, itemKey } from '../check.js';
 import { S, VIEWS, h, btn, pill, head, panel, cmdNote, toast, confirmDlg, cmd, api, route, pl, hm, hms, dur, isFiller, trioLink, vizrsPreview, vizrsUrl, onChannel } from '../core.js';
 
 /** Przebudowa playoutu przez kolejkę legacy (też w widoku Playouty). */
@@ -80,6 +81,13 @@ VIEWS.antena = async () => {
   const gfx = h('span', { class: 'bar', 'data-graphics': '' });
   const eventsBox = h('div');
   const notesBox = h('div');
+  // K9: kontrola ramówki – przy wejściu, co 5 min i na żądanie (24 h pozycji każdego kanału – za drogo co 30 s)
+  let chk = null;
+  const runCheck = async (manual) => {
+    try { chk = await scheduleCheck(d.channels, d.byNumber, d.cgState); } catch (e) { if (manual) toast('Kontrola ramówki: ' + e.message, 'bad'); return; }
+    fill();
+    if (manual) { const n = [...chk.values()].reduce((a, r) => a + r.issues.filter((i) => i.level === 'bad').length, 0); toast(n ? `Kontrola ramówki: ${n} błędów – lista „Uwagi”.` : 'Kontrola ramówki: bez błędów na 24 h.', n ? 'bad' : 'ok'); }
+  };
 
   const fill = () => {
     const now = Date.now();
@@ -97,7 +105,11 @@ VIEWS.antena = async () => {
       const left = h('span', { class: 'num' });
       if (cur) progressEls.push({ bar, left, start: +new Date(cur.Start), finish: +new Date(cur.Finish) });
       const ses = sessionOf(c);
-      state.replaceChildren(...[!p ? pill('BRAK PLAYOUTU', 'warn') : cur ? pill('NA ANTENIE', 'on') : pill('ZASTĘPCZY', 'warn'),
+      const bad = (chk?.get(String(c.Number))?.issues || []).filter((x) => x.level === 'bad');
+      const badPill = bad.length ? pill(`BŁĄD RAMÓWKI${bad.length > 1 ? ' ×' + bad.length : ''}`, 'bad') : null;
+      if (badPill) badPill.title = bad.map((x) => x.text).join('\n');
+      slots[i].el.classList.toggle('chk-bad', !!bad.length);
+      state.replaceChildren(...[!p ? pill('BRAK PLAYOUTU', 'warn') : cur ? pill('NA ANTENIE', 'on') : pill('ZASTĘPCZY', 'warn'), badPill,
         ses === undefined ? null : ses ? pill(`emisja: ${ses.State}`, 'on') : pill('emisja zatrzymana')].filter(Boolean));
       const stream = S.status.streamUrl ? h('a', { href: `${S.status.streamUrl}/iptv/channel/${encodeURIComponent(c.Number)}.m3u8`, target: '_blank', rel: 'noopener' }, 'Strumień ↗') : null;
       const nextLine = next.length ? h('div', { class: 'dim' }, 'Następnie: ', next.map((n, j) => [j ? ' · ' : '', h('span', { class: 'num' }, hm(new Date(n.Start))), ' ', n.Title])) : null;
@@ -111,7 +123,7 @@ VIEWS.antena = async () => {
             h('div', { class: 'now' }, h('b', null, p ? 'Wypełniacz zapasowy' : 'Brak ramówki'),
               h('span', { class: 'dim' }, p ? 'teraz nic nie jest zaplanowane' : 'kanał nie ma playoutu – załóż go w widoku Playouty')),
             nextLine),
-        cgPills(cg, now),
+        cgPills(cg, now) || '',
         h('div', { class: 'bar' },
           btn('Podgląd ▶', () => openMonitor(c.Number)),
           ses ? null : btn('Uruchom emisję', () => session(c, 'start', refresh)),
@@ -137,7 +149,7 @@ VIEWS.antena = async () => {
         h('span', null, e.live ? [pill('LIVE', 'on'), ' '] : null, e.title,
           e.live ? h('span', { class: 'dim k' }, ' · audycja na żywo – studio przez CG Playout') : e.filler ? h('span', { class: 'dim k' }, ' · wypełniacz') : null))))
       : h('div', { class: 'empty' }, 'Brak zaplanowanych pozycji.'));
-    const ns = notes(d);
+    const ns = notes(d, chk);
     notesBox.replaceChildren(ns.length
       ? h('div', { 'data-notes': '' }, ns.map(([kind, who, text, link]) => h('div', { class: 'alert' }, pill(who, kind), h('span', { class: 'w' }, text, link ? [' ', link] : null))))
       : h('div', { class: 'empty', 'data-notes': '' }, 'Bez uwag – wszystkie kanały mają ramówkę.'));
@@ -159,11 +171,13 @@ VIEWS.antena = async () => {
     fill();
   };
   fill();
-  S.timers.push(setInterval(tick, 1000), setInterval(refresh, 30000));
+  runCheck(false);
+  S.timers.push(setInterval(tick, 1000), setInterval(refresh, 30000), setInterval(() => runCheck(false), 300000));
 
   return [
     h('div', { class: 'head' }, h('h1', null, 'Na antenie'), summary, h('span', { class: 'grow' }), gfx,
       multi ? null : trioLink('', 'Otwórz Trio ↗'),
+      btn('Sprawdź ramówkę', () => runCheck(true)),
       btn('Odśwież', () => refresh()),
       h('p', null, 'Co teraz leci w ramówce każdego kanału, co następne, jaka grafika VizRS jest na wizji i czy studio jest na antenie. Tu też uruchomisz, zrestartujesz albo zatrzymasz emisję kanału i zdejmiesz całą grafikę. Dane z playoutów legacy i VizRS CG Playout, odświeżane co 30 s.')),
     h('div', { class: 'split wide' },
@@ -205,7 +219,7 @@ function upcoming(d) {
 }
 
 /** Uwagi dla operatora: [rodzaj pigułki, kto, tekst, odnośnik?] – tylko z danych, które panel ma. */
-function notes(d) {
+function notes(d, chk) {
   const now = Date.now();
   const link = (href, text) => h('a', { href }, text);
   const out = [];
@@ -218,6 +232,13 @@ function notes(d) {
       out.push(['warn', c.Name, 'przerwa w ramówce – leci wypełniacz zapasowy kanału.', link('#playouty', 'Przebuduj w Playoutach')]);
     }
   });
+  // K9: wynik kontroli ramówki (bez „brak playoutu” – jest wyżej)
+  for (const c of d.channels) {
+    for (const x of chk?.get(String(c.Number))?.issues || []) {
+      if (/nie ma playoutu/.test(x.text)) continue;
+      out.push([x.level, c.Name, x.text + '.', link('#playouty', 'Playouty')]);
+    }
+  }
   if (d.sessions instanceof Error) out.push(['warn', 'Emisja', 'stan sesji niedostępny: ' + d.sessions.message, null]);
   if (d.cgState instanceof Error) out.push(['bad', 'CG Playout', 'nie odpowiada: ' + d.cgState.message, null]);
   else {
@@ -241,7 +262,7 @@ const EPG_MIN = 0.015;     // pozycja węższa niż 1,5 % okna (3,6 min) idzie d
 const EPG_GROUP = 30 * 60e3; // blok krótkich pozycji najwyżej 30 min
 
 /** Pozycje w oknie [t0, t1) jako bloki do narysowania: długie osobno, krótkie sklejone (z listą w podpowiedzi). */
-function epgBlocks(list, t0, t1, liveAt) {
+function epgBlocks(list, t0, t1, liveAt, errs = new Map()) {
   const out = [];
   let grp = null;
   const flush = () => {
@@ -249,7 +270,8 @@ function epgBlocks(list, t0, t1, liveAt) {
     const one = grp.items.length === 1;
     out.push({ s: grp.s, e: grp.e, label: one ? grp.items[0].Title : `${grp.items[0].Title} +${grp.items.length - 1}`, grp: !one,
       title: `${hm(new Date(grp.s))}–${hm(new Date(grp.e))}\n` + grp.items.map((it) => `${hm(new Date(it.Start))} ${it.Title}`).join('\n'),
-      fill: grp.items.every(isFiller), live: grp.items.some((it) => liveAt(+new Date(it.Start))) });
+      fill: grp.items.every(isFiller), live: grp.items.some((it) => liveAt(+new Date(it.Start))),
+      err: grp.items.flatMap((it) => errs.get(itemKey(it)) || []) });
     grp = null;
   };
   for (const it of list) {
@@ -263,7 +285,7 @@ function epgBlocks(list, t0, t1, liveAt) {
       continue;
     }
     flush();
-    out.push({ s, e, label: it.Title, title: `${hm(new Date(s))}–${hm(new Date(e))} ${it.Title}`, fill: isFiller(it), live: liveAt(s) });
+    out.push({ s, e, label: it.Title, title: `${hm(new Date(s))}–${hm(new Date(e))} ${it.Title}`, fill: isFiller(it), live: liveAt(s), err: errs.get(itemKey(it)) || [] });
   }
   flush();
   return out;
@@ -280,10 +302,12 @@ VIEWS.epg = async () => {
   const byNumber = new Map((res?.Page || []).map((p) => [p.ChannelNumber, p]));
   // dość pozycji, żeby sięgnąć końca okna przy krótkich pozycjach (2 min → 120 na 4 h)
   const pageSize = Math.min(1000, 160 * (epgStep + 1));
+  const missingP = missingTitles().catch(() => new Set());
   const lists = await Promise.all(channels.map((c) => {
     const p = byNumber.get(c.Number);
     return p ? cmd('GetFuturePlayoutItemsById', { PlayoutId: p.PlayoutId, ShowFiller: true, PageNum: 0, PageSize: pageSize }).then((r) => r?.Page || []).catch(() => []) : null;
   }));
+  const missing = await missingP;
   const x = (t) => ((t - t0) / EPG_SPAN) * 100;
   const ruler = h('div', { class: 'ruler' }, [0, 1, 2, 3].map((k) => { const s = h('span', null, hm(new Date(t0 + k * 3600e3))); s.style.left = k * 25 + '%'; return s; }));
   const nowLine = () => { const l = h('div', { class: 'nowl' }); l.style.left = x(Date.now()) + '%'; return l; };
@@ -300,9 +324,19 @@ VIEWS.epg = async () => {
     const guide = (cgState?.guide?.[String(c.Number)] || []).filter((g) => g.live);
     const liveAt = (s) => guide.some((g) => Math.abs(g.start - s) < 90e3);
     const now = Date.now();
-    for (const b of epgBlocks(lists[i], t0, t1, liveAt)) {
-      const el = h('div', { class: 'p' + (b.s <= now && now < b.e ? ' now' : '') + (b.fill ? ' fill' : '') + (b.grp ? ' grp' : '') + (b.live ? ' lv' : ''), title: b.title },
-        b.live ? '● ' : '', b.label);
+    // K9: kontrola ramówki na pozycjach okna – dziury jako czerwone pola, błędne pozycje na czerwono z opisem w podpowiedzi
+    const ck = checkItems(lists[i], { now, missing, window: Math.max(0, t1 - now) });
+    for (const g of ck.gaps) {
+      if (g.e <= t0 || g.s >= t1) continue;
+      const el = h('div', { class: 'p gap', title: `${hm(new Date(g.s))}–${hm(new Date(g.e))} dziura w ramówce – leci wypełniacz zapasowy` }, 'dziura');
+      el.style.left = Math.max(0, x(g.s)) + '%';
+      el.style.width = `calc(${Math.min(100, x(g.e)) - Math.max(0, x(g.s))}% - 2px)`;
+      row.append(el);
+    }
+    for (const b of epgBlocks(lists[i], t0, t1, liveAt, ck.items)) {
+      const el = h('div', { class: 'p' + (b.s <= now && now < b.e ? ' now' : '') + (b.fill ? ' fill' : '') + (b.grp ? ' grp' : '') + (b.live ? ' lv' : '') + (b.err.length ? ' err' : ''),
+        title: b.title + (b.err.length ? '\n⚠ ' + b.err.join('\n⚠ ') : '') },
+        b.live ? '● ' : '', b.err.length ? '⚠ ' : '', b.label);
       el.style.left = Math.max(0, x(b.s)) + '%';
       el.style.width = `calc(${Math.min(100, x(b.e)) - Math.max(0, x(b.s))}% - 2px)`;
       row.append(el);

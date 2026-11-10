@@ -2,6 +2,8 @@
 
 ## Niewydane
 
+- **K9 – kontrola ramówki** (Vizrt B): dziury, nakładanie, koniec playoutu w ciągu 24 h, pliki w koszu, audycja LIVE bez wejścia studia – „Sprawdź ramówkę” i „BŁĄD RAMÓWKI” w Na antenie, czerwone pozycje i dziury w EPG, kolumna „Kontrola” w Playoutach.
+
 - **K8 – biblioteki:** „Foldery obrazów” w Bibliotekach (czas wyświetlania obrazu na folder), „Skanuj serial” i „Wyodrębnij napisy” w karcie serialu, „Wyodrębnij napisy” w konserwacji playoutu (`ExtractEmbeddedSubtitles`, `ExtractEmbeddedShowSubtitles` na białej liście). Zamyka LUKI #18 i #26.
 
 - **K7 – historia bloków** w edytorze playoutu blokowego (tylko odczyt): bloki z szablonów, wpisy historii ze stronicowaniem, rozszyfrowanie wpisu (kolejność, kolekcja, ostatnia pozycja). Zamyka LUKI #13; z #25 zostaje walidator YAML (poza MediatR).

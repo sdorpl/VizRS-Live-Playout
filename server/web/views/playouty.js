@@ -8,6 +8,7 @@
 
 import { VIEWS, h, btn, panel, pill, cmd, pl, table, toast, confirmDlg, route, dateTime, isFiller, cmdNote, onChannel, S, api, has } from '../core.js';
 import { followTask } from '../tasks.js';
+import { checkItems, itemKey, missingTitles } from '../check.js';
 import { form } from '../form.js';
 import { crudView, itemsEditor } from '../parts.js';
 import { build } from './antena.js';
@@ -170,15 +171,16 @@ VIEWS.playouty = crudView({
   },
   loadOne: async (p) => {
     if (!p) return { alternates: [], main: null, items: [] };
-    const [alts, items] = await Promise.all([
+    const [alts, items, missing] = await Promise.all([
       p.ScheduleKind === 'Classic' ? cmd('GetPlayoutAlternateSchedules', { PlayoutId: p.PlayoutId }) : [],
       cmd('GetFuturePlayoutItemsById', { PlayoutId: p.PlayoutId, ShowFiller: true, PageNum: 0, PageSize: 50 }).then((r) => r?.Page || []).catch(() => []),
+      missingTitles().catch(() => new Set()),
     ]);
     const sorted = [...alts].sort((a, b) => a.Index - b.Index);
     const main = sorted.pop() || null;  // najwyższy Index = harmonogram główny
     const cal = p.ScheduleKind === 'Block' ? await loadCalendar(p) : {};
     const cgGuide = S.status?.cg ? await api('/api/cg/live/state').then((r) => r.result?.guide || null).catch(() => null) : null;
-    return { alternates: sorted.map(fromLegacy), main, items, cal: null, cgGuide, ...cal };
+    return { alternates: sorted.map(fromLegacy), main, items, missing, cal: null, cgGuide, ...cal };
   },
   id: (p) => p.PlayoutId,
   cols: [
@@ -260,11 +262,14 @@ VIEWS.playouty = crudView({
       try { const id = JSON.parse(i.SchedulingContext || 'null')?.BlockId; if (id != null) lastBlock = blockName.get(id) || `blok ${id}`; } catch { /* inny kontekst */ }
       return lastBlock;
     }) : null;
-    const items = panel(`${p.ChannelName} · najbliższe pozycje`, null,
+    const ck = checkItems(ctx.items, { missing: ctx.missing });
+    const items = panel(`${p.ChannelName} · najbliższe pozycje`, ck.issues.length ? h('span', { class: 'bar', 'data-check': '' }, pill(`kontrola: ${ck.issues.length} uwag`, 'bad')) : h('span', { 'data-check': '' }, pill('kontrola: bez błędów', 'ok')),
+      ck.gaps.length ? h('div', { class: 'note err' }, ck.issues.filter((x) => /dziura/.test(x.text)).map((x) => h('div', null, x.text))) : null,
       table(ctx.items, [[(i) => dateTime(i.Start), 'Start', { class: 'num' }], [(i) => dateTime(i.Finish), 'Koniec', { class: 'num' }],
         [(i) => (isFiller(i) ? h('span', { class: 'dim' }, i.Title) : live(i) ? h('span', null, pill('LIVE', 'on'), ' ', i.Title) : i.Title), 'Pozycja', { class: 'w' }],
         [(i) => (isFiller(i) ? h('span', { class: 'dim' }, FILLER_PL[i.FillerKind] || 'wypełniacz') : ''), 'Rodzaj'], ['Duration', 'Czas', { class: 'num' }],
-        ...(blocks ? [[(i) => blocks[ctx.items.indexOf(i)], 'Blok']] : [])],
+        ...(blocks ? [[(i) => blocks[ctx.items.indexOf(i)], 'Blok']] : []),
+        [(i) => { const e = ck.items.get(itemKey(i)); if (!e) return h('span'); const pp = pill('błąd', 'bad'); pp.title = e.join('\n'); return h('span', null, pp, ' ', h('span', { class: 'dim' }, e[0])); }, 'Kontrola']],
       { empty: 'Brak przyszłych pozycji – przebuduj playout.' }),
       cmdNote('GetFuturePlayoutItemsById', 'BuildPlayout', 'GetAllBlocks', 'CG Playout GET /api/live/state (audycje LIVE)'));
     return [alt, ...(ctx.cal ? calendarPanels(p, ctx) : []), items, p.ScheduleKind === 'Block' ? historyPanel(p) : null];

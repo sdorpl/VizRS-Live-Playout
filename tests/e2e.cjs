@@ -392,6 +392,9 @@ function check(cond, msg) {
   await page.waitForTimeout(1500);
   check(await page.$eval(cardFrame, (f) => f.dataset.mark) === '1', 'antena: odświeżenie nie przeładowuje ramki VizRS');
   check(/nie ma playoutu/.test(await page.textContent('[data-notes]')), 'antena: uwaga – kanał bez playoutu');
+  // K9: kontrola ramówki na żądanie (24 h pozycji, koniec playoutu, kosz, nakładanie) – wynik w tostach i „Uwagach”
+  await page.click('main .head button:has-text("Sprawdź ramówkę")');
+  check(await page.waitForFunction(() => /Kontrola ramówki/.test(document.querySelector('#toast')?.textContent || ''), null, { timeout: 30000 }).then(() => true, () => false), 'K9: „Sprawdź ramówkę” – wynik kontroli');
   check(/Poranek na żywo/.test(await page.textContent('main .panel:has(h2:text-is("Najbliższe zdarzenia"))')), 'antena: audycja LIVE z CG w najbliższych zdarzeniach');
   check(/LIVE \d\d:\d\d · Poranek na żywo/.test(await page.textContent('.panel:has(h2:text-is("24 · INFO24")) [data-cg-state]') || ''),
     'antena: stan studia z CG na karcie kanału (najbliższy slot LIVE)');
