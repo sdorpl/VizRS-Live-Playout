@@ -51,6 +51,7 @@ services:
       # token wyjścia VizRS (tylko odczyt) do podglądu /output; anteny kanałów jak w CG Playout
       VIZRS_LIVE_VIZRS_OUTPUT_TOKEN: ${VIZRS_OUTPUT_TOKEN:-vizrs-output-change-me}
       VIZRS_LIVE_VIZRS_CHANNELS: ${VIZRS_CHANNEL_BUSES:-0}
+      VIZRS_LIVE_MULTIVIEW_MAX: ${VIZRS_LIVE_MULTIVIEW_MAX:-4}
       VIZRS_LIVE_CG_URL: http://cg:7700
       VIZRS_LIVE_CG_TOKEN: ${VIZRS_PANEL_TOKEN:?ustaw VIZRS_PANEL_TOKEN w .env (token live API CG Playout)}
     ports:

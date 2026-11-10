@@ -395,6 +395,15 @@ function check(cond, msg) {
   // K9: kontrola ramówki na żądanie (24 h pozycji, koniec playoutu, kosz, nakładanie) – wynik w tostach i „Uwagach”
   await page.click('main .head button:has-text("Sprawdź ramówkę")');
   check(await page.waitForFunction(() => /Kontrola ramówki/.test(document.querySelector('#toast')?.textContent || ''), null, { timeout: 30000 }).then(() => true, () => false), 'K9: „Sprawdź ramówkę” – wynik kontroli');
+  // K10: mozaika – kafle podglądu (najwyżej VIZRS_LIVE_MULTIVIEW_MAX), wyłączenie zatrzymuje podglądy
+  await rerender(() => page.click('#mosaic-toggle'));
+  await page.waitForSelector('[data-mosaic] .mv-tile');
+  const mvN = await page.$$eval('[data-mosaic] .mv-tile', (t) => t.length);
+  check(mvN >= 1 && mvN <= 4, `K10: mozaika z ${mvN} kaflami (limit 4)`);
+  await page.click('[data-mosaic] .mv-tile');
+  check(await page.$eval('[data-mosaic] .mv-tile video', (v) => !v.muted), 'K10: klik w kafel włącza jego dźwięk');
+  await rerender(() => page.click('#mosaic-toggle'));
+  check(!(await page.$('[data-mosaic]')), 'K10: mozaika wyłączona');
   check(/Poranek na żywo/.test(await page.textContent('main .panel:has(h2:text-is("Najbliższe zdarzenia"))')), 'antena: audycja LIVE z CG w najbliższych zdarzeniach');
   check(/LIVE \d\d:\d\d · Poranek na żywo/.test(await page.textContent('.panel:has(h2:text-is("24 · INFO24")) [data-cg-state]') || ''),
     'antena: stan studia z CG na karcie kanału (najbliższy slot LIVE)');

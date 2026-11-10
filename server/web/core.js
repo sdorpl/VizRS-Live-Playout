@@ -8,6 +8,7 @@ export const S = {
   status: null,      // /api/status
   meta: new Map(),   // nazwa komendy -> {name, kind, parameters}
   timers: [],
+  cleanup: [],       // funkcje sprzątające przy zmianie ekranu (np. podglądy mozaiki – K10)
   vizrsAnt: null,    // wybrana antena kanału w podglądzie VizRS
   channel: '',       // kanał wybrany w pasku górnym ('' = wszystkie) – filtr ekranów kanałowych
 };
@@ -312,6 +313,8 @@ export const VIEWS = {};
 export async function route(keepScroll) {
   S.timers.forEach(clearInterval);
   S.timers = [];
+  S.cleanup.forEach((f) => { try { f(); } catch { /* sprzątanie bez wpływu na nowy ekran */ } });
+  S.cleanup = [];
   let name = (location.hash || '#antena').slice(1);
   if (!VIEWS[name]) name = 'antena';
   document.querySelectorAll('.side a').forEach((a) => a.classList.toggle('on', a.getAttribute('href') === '#' + name));

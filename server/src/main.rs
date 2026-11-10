@@ -177,7 +177,12 @@ pub struct Config {
     pub cg_url: String,
     pub cg_token: String,
     pub web: Option<PathBuf>,
+    /// najwyżej tyle podglądów w mozaice Na antenie (K10; każdy to sesja Next, która koduje); 0 = bez mozaiki
+    pub multiview_max: u32,
 }
+
+/// Górna granica `--multiview-max` (ochrona maszyny: każdy podgląd to transkodująca sesja Next).
+pub const MULTIVIEW_LIMIT: u32 = 16;
 
 const HELP: &str = "vizrs-live – panel kanału nad ErsatzTV legacy
 
@@ -195,6 +200,8 @@ Użycie: vizrs-live [opcje]
   --vizrs-channels      VizRS z antenami kanałów, jak channel_buses w CG Playout (VIZRS_LIVE_VIZRS_CHANNELS=1)
   --cg-url URL          VizRS CG Playout (sidecar, np. http://cg:7700) – grafika i sloty na żywo (VIZRS_LIVE_CG_URL)
   --cg-token T          token panelu CG Playout, = panel_token / VIZRS_PANEL_TOKEN tam (VIZRS_LIVE_CG_TOKEN)
+  --multiview-max N     najwyżej tyle podglądów w mozaice Na antenie, 0–16, 0 = bez mozaiki
+                        (VIZRS_LIVE_MULTIVIEW_MAX, domyślnie 4; każdy podgląd to sesja Next, która koduje)
   --web KATALOG         UI z dysku zamiast wbudowanego (praca nad UI)
   --healthcheck         sprawdź działający panel (GET /health), kod wyjścia 0/1
   --version, --help
@@ -224,6 +231,12 @@ pub fn parse_config(
         cg_url: env("VIZRS_LIVE_CG_URL").unwrap_or_default(),
         cg_token: env("VIZRS_LIVE_CG_TOKEN").unwrap_or_default(),
         web: None,
+        multiview_max: match env("VIZRS_LIVE_MULTIVIEW_MAX") {
+            Some(v) => v
+                .parse()
+                .map_err(|_| format!("zły VIZRS_LIVE_MULTIVIEW_MAX: {v}"))?,
+            None => 4,
+        },
     };
     let mut it = args.iter();
     while let Some(a) = it.next() {
@@ -249,8 +262,18 @@ pub fn parse_config(
             "--cg-url" => c.cg_url = val()?,
             "--cg-token" => c.cg_token = val()?,
             "--web" => c.web = Some(PathBuf::from(val()?)),
+            "--multiview-max" => {
+                c.multiview_max = val()?
+                    .parse()
+                    .map_err(|_| "--multiview-max: zła liczba".to_string())?
+            }
             other => return Err(format!("nieznana opcja: {other} (--help)")),
         }
+    }
+    if c.multiview_max > MULTIVIEW_LIMIT {
+        return Err(format!(
+            "--multiview-max: najwyżej {MULTIVIEW_LIMIT} (każdy podgląd mozaiki to sesja Next, która koduje)"
+        ));
     }
     bridge::parse_url(&c.bridge_url)?;
     if !c.cg_url.is_empty() {
@@ -1174,13 +1197,14 @@ fn status(app: &App) -> Response {
     Response::json(
         200,
         format!(
-            "{{\"ok\":true,\"result\":{{\"panel\":{},\"bridgeUrl\":{},\"streamUrl\":{},\"vizrsUrl\":{},\"vizrsOutputToken\":{},\"vizrsChannels\":{},\"cg\":{},\"auth\":{},\"bridge\":{bridge},\"bridgeError\":{err}}}}}",
+            "{{\"ok\":true,\"result\":{{\"panel\":{},\"bridgeUrl\":{},\"streamUrl\":{},\"vizrsUrl\":{},\"vizrsOutputToken\":{},\"vizrsChannels\":{},\"multiviewMax\":{},\"cg\":{},\"auth\":{},\"bridge\":{bridge},\"bridgeError\":{err}}}}}",
             json_str(VERSION),
             json_str(&app.cfg.bridge_url),
             json_str(&app.cfg.stream_url),
             json_str(&app.cfg.vizrs_url),
             json_str(&app.cfg.vizrs_output_token),
             app.cfg.vizrs_channels,
+            app.cfg.multiview_max,
             app.cg.is_some(),
             app.cfg.token.is_some()
         ),
@@ -1822,6 +1846,26 @@ mod tests {
         Response::json(200, "{}").write_to(&mut out).unwrap();
         let head = String::from_utf8_lossy(&out);
         assert!(head.contains("frame-ancestors 'none'") && head.contains("X-Frame-Options: DENY"));
+    }
+
+    #[test]
+    fn multiview_option() {
+        let base = ["--bridge-token", T];
+        assert_eq!(cfg(&base, &[]).unwrap().multiview_max, 4);
+        assert_eq!(
+            cfg(&base, &[("VIZRS_LIVE_MULTIVIEW_MAX", "0")])
+                .unwrap()
+                .multiview_max,
+            0
+        );
+        assert_eq!(
+            cfg(&["--bridge-token", T, "--multiview-max", "9"], &[])
+                .unwrap()
+                .multiview_max,
+            9
+        );
+        assert!(cfg(&["--bridge-token", T, "--multiview-max", "17"], &[]).is_err());
+        assert!(cfg(&base, &[("VIZRS_LIVE_MULTIVIEW_MAX", "x")]).is_err());
     }
 
     #[test]

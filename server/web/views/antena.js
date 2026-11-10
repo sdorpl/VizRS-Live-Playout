@@ -1,6 +1,6 @@
 // Widoki grupy „Antena”: Na antenie, Przewodnik EPG.
 
-import { openMonitor } from '../player.js';
+import { openMonitor, Preview } from '../player.js';
 import { scheduleCheck, checkItems, missingTitles, itemKey } from '../check.js';
 import { S, VIEWS, h, btn, pill, head, panel, cmdNote, toast, confirmDlg, cmd, api, route, pl, hm, hms, dur, isFiller, trioLink, vizrsPreview, vizrsUrl, onChannel } from '../core.js';
 
@@ -38,6 +38,60 @@ async function graphicsSwitch(off, after) {
     toast(off ? 'Grafika schodzi z anteny (animacje wyjścia) na wszystkich kanałach.' : 'Grafika wraca na antenę (animacje wejścia).', off ? 'bad' : 'ok');
   } catch (e) { toast('Grafika: ' + e.message, 'bad'); }
   after();
+}
+
+// ---------- K10: mozaika kanałów (multiview) ----------
+// Każdy podgląd to sesja Next, która koduje kanał – liczba kafli ograniczona opcją serwera (--multiview-max, domyślnie 4).
+let mosaicOn = false;
+let mosaicSound = null;  // numer kanału z dźwiękiem (jeden naraz)
+function mosaicStorage(val) {
+  try { if (val === undefined) return localStorage.getItem('vizrs-live-mosaic') === '1'; localStorage.setItem('vizrs-live-mosaic', val ? '1' : '0'); } catch { /* bez localStorage */ }
+  return false;
+}
+mosaicOn = mosaicStorage();
+
+/** Kafle mozaiki dla kanałów; zwraca { el, mark(numer → [błędy]) }. Podglądy zatrzymuje zmiana ekranu (S.cleanup). */
+function mosaic(channels) {
+  const max = S.status?.multiviewMax ?? 4;
+  const shown = channels.slice(0, max);
+  const tiles = shown.map((c) => {
+    const video = h('video', { muted: true, playsinline: true, 'aria-label': `Podgląd kanału ${c.Number}` });
+    video.muted = mosaicSound !== String(c.Number);
+    const st = h('span', { class: 'pill' }, 'ŁĄCZĘ');
+    const snd = h('span', { class: 'pill' + (video.muted ? '' : ' on') }, video.muted ? 'wycisz.' : 'dźwięk');
+    const err = h('div', { class: 'mv-err', hidden: true });
+    const el = h('div', { class: 'mv-tile', 'data-mv': String(c.Number), tabindex: '0', role: 'button', title: 'Klik – dźwięk z tego kanału (pozostałe wyciszone)' },
+      video, h('div', { class: 'mv-cap' }, h('b', null, `${c.Number} · ${c.Name}`), h('span', { class: 'grow' }), snd, st), err);
+    const LABEL = { on: 'NA ŻYWO', info: 'NA ŻYWO', warn: 'POZA ZEGAREM', bad: 'BŁĄD', none: 'BRAK', '': 'ŁĄCZĘ' };
+    const preview = new Preview(video, (text, kind = '') => { st.textContent = LABEL[kind] ?? kind; st.className = 'pill' + (kind ? ' ' + kind : ''); st.title = text; });
+    const toggle = () => {
+      mosaicSound = mosaicSound === String(c.Number) ? null : String(c.Number);
+      for (const t of tiles) {
+        t.video.muted = mosaicSound !== t.num;
+        t.snd.textContent = t.video.muted ? 'wycisz.' : 'dźwięk';
+        t.snd.className = 'pill' + (t.video.muted ? '' : ' on');
+      }
+    };
+    el.addEventListener('click', toggle);
+    el.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } });
+    return { el, video, snd, err, preview, num: String(c.Number) };
+  });
+  tiles.forEach((t) => t.preview.start(t.num));
+  S.cleanup.push(() => tiles.forEach((t) => t.preview.stop()));
+  const more = channels.length > shown.length
+    ? h('div', { class: 'hint pad' }, `Pokazuję ${shown.length} z ${channels.length} kanałów – limit podglądów VIZRS_LIVE_MULTIVIEW_MAX=${max} (każdy podgląd to sesja Next, która koduje; wybierz kanał w pasku górnym, by zobaczyć inne).`)
+    : null;
+  return {
+    el: panel('Mozaika', h('span', { class: 'dim' }, 'wyciszone – klik w kafel włącza jego dźwięk; czerwona ramka = błąd ramówki'),
+      h('div', { class: 'mv', 'data-mosaic': '' }, tiles.map((t) => t.el)), more,
+      h('div', { class: 'cmd' }, 'Podgląd: /api/stream/{kanał}.m3u8 (jak „Podgląd ▶”) · każdy kafel = sesja segmentera Next kanału')),
+    mark: (errs) => tiles.forEach((t) => {
+      const e = errs(t.num);
+      t.el.classList.toggle('bad', !!e.length);
+      t.err.hidden = !e.length;
+      t.err.textContent = e.length ? '⚠ ' + e[0] + (e.length > 1 ? ` (+${e.length - 1})` : '') : '';
+    }),
+  };
 }
 
 VIEWS.antena = async () => {
@@ -81,6 +135,8 @@ VIEWS.antena = async () => {
   const gfx = h('span', { class: 'bar', 'data-graphics': '' });
   const eventsBox = h('div');
   const notesBox = h('div');
+  const mvMax = S.status?.multiviewMax ?? 4;
+  const mv = mosaicOn && mvMax > 0 && d.channels.length ? mosaic(d.channels) : null;
   // K9: kontrola ramówki – przy wejściu, co 5 min i na żądanie (24 h pozycji każdego kanału – za drogo co 30 s)
   let chk = null;
   const runCheck = async (manual) => {
@@ -109,6 +165,7 @@ VIEWS.antena = async () => {
       const badPill = bad.length ? pill(`BŁĄD RAMÓWKI${bad.length > 1 ? ' ×' + bad.length : ''}`, 'bad') : null;
       if (badPill) badPill.title = bad.map((x) => x.text).join('\n');
       slots[i].el.classList.toggle('chk-bad', !!bad.length);
+      mv?.mark((num) => (chk?.get(num)?.issues || []).filter((x) => x.level === 'bad').map((x) => x.text));
       state.replaceChildren(...[!p ? pill('BRAK PLAYOUTU', 'warn') : cur ? pill('NA ANTENIE', 'on') : pill('ZASTĘPCZY', 'warn'), badPill,
         ses === undefined ? null : ses ? pill(`emisja: ${ses.State}`, 'on') : pill('emisja zatrzymana')].filter(Boolean));
       const stream = S.status.streamUrl ? h('a', { href: `${S.status.streamUrl}/iptv/channel/${encodeURIComponent(c.Number)}.m3u8`, target: '_blank', rel: 'noopener' }, 'Strumień ↗') : null;
@@ -177,9 +234,11 @@ VIEWS.antena = async () => {
   return [
     h('div', { class: 'head' }, h('h1', null, 'Na antenie'), summary, h('span', { class: 'grow' }), gfx,
       multi ? null : trioLink('', 'Otwórz Trio ↗'),
+      mvMax > 0 ? (() => { const b = btn(mosaicOn ? 'Mozaika: wł.' : 'Mozaika', () => { mosaicOn = !mosaicOn; mosaicStorage(mosaicOn); route(true); }); b.classList.toggle('on', mosaicOn); b.setAttribute('aria-pressed', String(mosaicOn)); b.id = 'mosaic-toggle'; return b; })() : null,
       btn('Sprawdź ramówkę', () => runCheck(true)),
       btn('Odśwież', () => refresh()),
       h('p', null, 'Co teraz leci w ramówce każdego kanału, co następne, jaka grafika VizRS jest na wizji i czy studio jest na antenie. Tu też uruchomisz, zrestartujesz albo zatrzymasz emisję kanału i zdejmiesz całą grafikę. Dane z playoutów legacy i VizRS CG Playout, odświeżane co 30 s.')),
+    mv?.el,
     h('div', { class: 'split wide' },
       h('div', { class: 'cols' }, slots.length ? slots.map((x) => x.el) : h('div', { class: 'note' }, 'Brak włączonych kanałów. Dodaj kanał w widoku Kanały.')),
       h('div', { class: 'cols' },

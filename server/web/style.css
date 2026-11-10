@@ -340,3 +340,9 @@ dl.kv dd { flex-wrap: wrap; }
 .epg .p.err { background: #5a1d1d; border-color: var(--bad, #e5484d); color: #ffd7d7; }
 .epg .p.gap { background: repeating-linear-gradient(45deg, #3a1414, #3a1414 6px, #4a1a1a 6px, #4a1a1a 12px); border: 1px dashed #e5484d; color: #ff9b9b; }
 .panel.chk-bad { border-color: #e5484d; }
+.mv { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 8px; padding: 10px; }
+.mv-tile { position: relative; background: #000; border: 2px solid var(--line); border-radius: 4px; cursor: pointer; overflow: hidden; }
+.mv-tile.bad { border-color: #e5484d; box-shadow: 0 0 0 1px #e5484d inset; }
+.mv-tile video { display: block; width: 100%; aspect-ratio: 16 / 9; background: #000; }
+.mv-cap { display: flex; gap: 6px; align-items: center; padding: 4px 8px; background: rgba(0, 0, 0, .75); font-size: 12px; }
+.mv-err { position: absolute; left: 0; right: 0; top: 0; padding: 4px 8px; background: rgba(120, 20, 20, .85); color: #ffd7d7; font-size: 12px; }

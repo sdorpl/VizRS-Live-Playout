@@ -4,6 +4,7 @@
 //   node tests/mock-bridge.cjs [port=18409] [token=test-token-0123456789]
 //   LEGACY_SRC=<klon ErsatzTV/legacy> – metadane komend (parametry, wyliczenia) z rekordów MediatR jak /vizrs-bridge/commands;
 //   bez niego – same nazwy z bridge/commands.txt (formularze bez list wyboru).
+//   MOCK_HLS=1 – strumienie testowe kanałów 24–26 (ffmpeg: plansza testowa + ton, HLS) dla podglądu i mozaiki.
 // Panel: server/target/…/vizrs-live --bridge http://127.0.0.1:18409 --bridge-token <token> --web server/web
 'use strict';
 const http = require('http');
@@ -195,6 +196,30 @@ const H = {
   DecodePlayoutHistory: () => ({ PlaybackOrder: 'Shuffle', CollectionType: 'Collection', Name: 'Teledyski', MediaItemType: 'MusicVideo', MediaItemTitle: 'Teledysk 17' }),
 };
 
+// ---------- strumienie testowe (MOCK_HLS=1) ----------
+const HLS_DIR = path.join(require('os').tmpdir(), `vizrs-mock-hls-${PORT}`);
+if (process.env.MOCK_HLS === '1') {
+  const { spawn } = require('child_process');
+  const SRC = { 24: 'testsrc2', 25: 'smptehdbars', 26: 'mandelbrot' };
+  for (const [ch, src] of Object.entries(SRC)) {
+    const dir = path.join(HLS_DIR, ch);
+    fs.mkdirSync(dir, { recursive: true });
+    const ff = spawn('ffmpeg', ['-loglevel', 'error', '-re', '-f', 'lavfi', '-i', `${src}=size=640x360:rate=25`, '-f', 'lavfi', '-i', `sine=frequency=${300 + Number(ch) * 10}`,
+      '-c:v', 'libx264', '-preset', 'ultrafast', '-tune', 'zerolatency', '-g', '50', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '96k',
+      '-f', 'hls', '-hls_time', '2', '-hls_list_size', '6', '-hls_flags', 'delete_segments+program_date_time',
+      '-hls_base_url', `http://127.0.0.1:${PORT}/iptv/session/${ch}/`, path.join(dir, 'live.m3u8')], { stdio: 'inherit' });
+    process.on('exit', () => ff.kill());
+  }
+  for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => process.exit(0));
+}
+function serveFile(res, file, type) {
+  fs.readFile(file, (e, b) => {
+    if (e) { res.writeHead(404); return res.end(); }
+    res.writeHead(200, { 'Content-Type': type, 'Content-Length': b.length });
+    res.end(b);
+  });
+}
+
 function reply(res, status, obj) {
   const b = Buffer.from(JSON.stringify(obj));
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Length': b.length });
@@ -202,6 +227,10 @@ function reply(res, status, obj) {
 }
 http.createServer((req, res) => {
   const u = new URL(req.url, 'http://x');
+  let m = u.pathname.match(/^\/iptv\/channel\/(\d+)\.m3u8$/);
+  if (m) return serveFile(res, path.join(HLS_DIR, m[1], 'live.m3u8'), 'application/vnd.apple.mpegurl');
+  m = u.pathname.match(/^\/iptv\/session\/(\d+)\/([\w-]+\.(ts|m3u8))$/);
+  if (m) return serveFile(res, path.join(HLS_DIR, m[1], m[2]), m[3] === 'ts' ? 'video/mp2t' : 'application/vnd.apple.mpegurl');
   if (req.headers['x-vizrs-token'] !== TOKEN && u.pathname.startsWith('/vizrs-bridge/')) return reply(res, 401, { ok: false, error: 'zły token mostu' });
   let body = '';
   req.on('data', (d) => (body += d));
