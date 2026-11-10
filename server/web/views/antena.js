@@ -282,7 +282,9 @@ function layersRow(c, cg, st, after) {
   const layers = Array.isArray(cg.layers) ? cg.layers : [];
   const take = cgFeature(st, 'take');
   const items = layers.map((l) => {
-    const p = pill(`W${l.layer} · ${l.name || l.page}`, 'info');
+    // CG Playout podaje warstwę tak, jak nazywa ją VizRS: liczba („10”) albo nazwa („main”).
+    const where = /^\d+$/.test(String(l.layer)) ? `W${l.layer}` : String(l.layer);
+    const p = pill(`${where} · ${l.name || l.page}`, 'info');
     p.title = [l.scene ? `scena ${l.scene}` : '', l.since ? `od ${hm(new Date(l.since))}` : '', l.manual ? 'wprowadzona ręcznie' : 'z reguły'].filter(Boolean).join(' · ');
     return h('span', { class: 'layer', 'data-layer': String(l.layer) }, p,
       take ? btn('Dalej', () => cgAction(c, 'continue', { layer: l.layer }, after), 'sm') : null,

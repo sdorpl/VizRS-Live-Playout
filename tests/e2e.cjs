@@ -441,6 +441,10 @@ function check(cond, msg) {
   await page.fill('#f-DailyRebuildTime', '5:00');
   await rerender(() => page.click('main .panel header button:has-text("Zapisz")'));
   await page.waitForSelector(`main .panel header h2:has-text("Playout ${chNum} · ${chName}")`);
+  // zapis przeładowuje ekran z legacy (pozycje, kontrola ramówki) – czekamy na dane, nie na sam render
+  await page.waitForFunction(() => document.querySelector('#f-DailyRebuildTime')?.value === '05:00:00'
+    && [...document.querySelectorAll('.items tbody tr')].some((tr) => /sob/.test(tr.textContent)), null, { timeout: 30000 })
+    .catch(() => {});
   const altRows = await page.$$eval('.items tbody tr', (trs) => trs.map((tr) => tr.textContent));
   const pid = (await api('GetPlayoutIdByChannelNumber', { ChannelNumber: chNum })).result;
   const alts = (await api('GetPlayoutAlternateSchedules', { PlayoutId: pid })).result.sort((a, b) => a.Index - b.Index);

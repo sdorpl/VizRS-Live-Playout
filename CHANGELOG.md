@@ -6,6 +6,7 @@
 
 Wydanie wstępne z przebiegiem planu rozwoju [PLAN-mcr](docs/plany/PLAN-mcr.md) (K1–K18). Obrazy `ghcr.io/sdorpl/vizrs-live:1.3.0-test.1` i `vizrs-live-legacy:1.3.0-test.1` – bez przesuwania `:latest` (produkcja na `latest` bez zmian). Most: nowe wiersze białej listy (K3–K8) – do testu potrzebny obraz legacy z tej wersji. K12–K14 i webhook K17 zadziałają z VizRS CG Playout zgodnym z kontraktem (DOKUMENTACJA §3); starszy CG – te elementy UI się nie pokazują. Q1 (prawdziwy sygnał OBS, Plex) – ręcznie z użytkownikiem.
 
+- **K12–K17:** VizRS CG Playout (gałąź `next-v`, 2026-11-10) ma już stronę serwerową kontraktu: `features`, warstwy na antenie, `take`/`continue`/`out`, dziennik emisji `GET /api/live/asrun`, `graphics_off_since` i webhook alarmów (`VIZRS_ALERT_WEBHOOK`). Panel i CG Playout wydaje się razem.
 - **K12–K17 – strona panelu (kontrakt CG Playout w DOKUMENTACJA §3):** warstwy VizRS w karcie kanału (K12), „Dalej” / „Zdejmij” warstwy i „Wprowadź stronę…” (K13), ekran „Dziennik emisji” z eksportem CSV (K14), alarmy w przeglądarce – banner i dźwięk (K17); każda funkcja włącza się dopiero, gdy VizRS CG Playout zgłosi ją w `features` (starszy CG – bez zmian w UI). K15/K16 – kontrakt API. **Wymaga wydania VizRS CG Playout z tym kontraktem** (krok ręczny).
 
 - **K18 – podgląd HEVC i AC-3:** `mux.js` przepakowuje HEVC (Main, Main 10) i AC-3 (do 5.1) na fragmenty MP4, gdy przeglądarka dekoduje je w MSE (Safari, Chrome/Edge ze sprzętowym HEVC); w pozostałych bez zmian (HEVC – natywny HLS, AC-3 – bez dźwięku). Zamyka LUKI #21.
