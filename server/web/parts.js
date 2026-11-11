@@ -24,6 +24,7 @@ import { h, btn, head, panel, cmdNote, table, toast, dialog, confirmDlg, cmd, ar
  *   below: (row, ctx) => węzeł | [węzły],            // pod listą i edytorem, na całą szerokość (np. edytor pozycji)
  *   beforeSave: (ctx) => void,                       // sprawdzenie przed zapisem; Error = komunikat, nic nie zapisuje
  *   afterSave: async (id, ctx) => void,              // po zapisie (np. zapis pozycji); Error = komunikat
+ *   locked: (row, ctx) => węzeł | null,              // pozycja zarządzana gdzie indziej: uwaga zamiast „Zapisz”, „Usuń”, „Kopiuj”
  * }
  */
 export function crudView(cfg) {
@@ -83,9 +84,10 @@ export function crudView(cfg) {
 
     const list = panel(noun.list, h('span', { class: 'dim' }, String(rows.length)),
       table(rows, typeof cfg.cols === 'function' ? cfg.cols(ctx) : cfg.cols, { onRow: (r) => { sel = cfg.id(r); route(true); }, selected: (r) => cfg.id(r) === sel, empty: cfg.empty }));
+    const lock = !isNew && cfg.locked ? cfg.locked(current, ctx) : null;
     const editor = panel(isNew ? noun.new : noun.title(current),
-      [!isNew && c.copy ? btn('Kopiuj', copy) : null, !isNew ? btn('Usuń', remove, 'danger') : null, btn(isNew ? noun.create : 'Zapisz', save, 'acc')],
-      ed.el, cfg.footer ? cfg.footer(current, ctx) : null, cmdNote(...[isNew ? c.create : c.update, c.copy, c.delete].filter(Boolean)));
+      lock ? [] : [!isNew && c.copy ? btn('Kopiuj', copy) : null, !isNew ? btn('Usuń', remove, 'danger') : null, btn(isNew ? noun.create : 'Zapisz', save, 'acc')],
+      lock, ed.el, cfg.footer ? cfg.footer(current, ctx) : null, cmdNote(...[isNew ? c.create : c.update, c.copy, c.delete].filter(Boolean)));
     return [
       head(cfg.title, cfg.desc, btn(noun.add, () => { sel = 'new'; route(true); }, 'acc'), cfg.headExtra ? cfg.headExtra(ctx) : null),
       h('div', { class: 'split' }, list, editor),

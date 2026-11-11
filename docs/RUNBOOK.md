@@ -39,6 +39,8 @@ Cofnięcie: przywróć poprzedni `.env` CG Playout i kopię `ersatztv-config` (�
 
 **Portainer (stos z GitHuba, np. s1):** `compose.cg-playout.yml` montuje pliki z `VIZRS_LIVE_DIR` i buduje legacy na miejscu, czego stos z repozytorium w Portainerze nie potrafi. Tam zamiast niej służy `docker-compose.live.yml` z repozytorium CG Playout (obrazy z ghcr – `vizrs-live` i `vizrs-live-legacy` w wersji wydania, Caddyfile wpisany w compose): w stosie **Additional paths** → `docker-compose.live.yml` (po `docker-compose.ampere.yml`), w **Environment variables** `VIZRS_BRIDGE_TOKEN`, `VIZRS_LIVE_TOKEN`, `VIZRS_PANEL_TOKEN`, `VIZRS_LIVE_STREAM_URL`; potem **Pull and redeploy**. Przed pierwszym razem kopia `ersatztv-config` (pkt 2) i porównanie wersji legacy w obrazie z mostem z działającą – starszy obraz nie może dostać nowszej bazy. Opis nakładki: DOKUMENTACJA CG Playout, „VizRS Live zamiast web GUI ErsatzTV”.
 
+**Dwie nakładki, jedna treść.** `compose.cg-playout.yml` (stos lokalny) i `docker-compose.live.yml` CG Playout (Portainer) opisują to samo. Caddyfile, środowisko usługi `live` i nakładka VAAPI muszą być w nich takie same – sprawdza to `scripts/check-cg-overlay.sh [katalog CG Playout]`, a `tests/deploy.sh` uruchamia go na początku i przerywa wdrożenie przy rozjeździe. Zmieniasz jedno – popraw drugie w tym samym cyklu (źródłem jest VizRS Live: `docker/proxy.Caddyfile`, `compose.cg-playout.yml`).
+
 ### 2b. Akceleracja sprzętowa (Intel, AMD, NVIDIA)
 
 Kodowanie wideo wykonuje ffmpeg w procesie ErsatzTV legacy (silnik Next); obraz panelu `vizrs-live` (`scratch`) nie zawiera ffmpeg – akceleracja dotyczy wyłącznie usługi `ersatztv` (obraz `vizrs-live-legacy`, lokalnie `vizrs-live-legacy:local`).

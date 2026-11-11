@@ -59,7 +59,7 @@ function check(cond, msg) {
       const now = Date.now();
       const u = q.url;
       if (u === '/health') return send(200, { sessions: 1, overlay: ['24'], ingest: { channels: ['24'] }, captures: [{ channel: '24', size: '1280x720', fps: 25, mode: 'frames', drawn_by: 'native', status: 'capturing' }] });
-      if (u === '/etv/pages?channel=24') return send(200, { pages: [{ number: 1001, name: 'Belka tytułowa' }, { number: 3001, name: 'Wracamy po reklamie' }] });
+      if (u === '/etv/pages?channel=24') return send(200, { pages: [{ number: 1001, name: 'Belka tytułowa', playout: { at: -60, out: 5, ref: 'programme' } }, { number: 3001, name: 'Wracamy po reklamie' }, { number: 4001, name: 'Pasek' }] });
       if (u === '/api/live/state') return send(200, {
         ingest: true, now, features: ['layers', 'take', 'asrun'],
         channels: [{ number: '24', name: 'INFO24', source: { live: true, audio: true, video: 'h264', seconds: 75 }, on_air: !CG.hold && CG.anytime, hold: CG.hold, anytime: CG.anytime, layers: CG.layers,
@@ -1273,6 +1273,30 @@ function check(cond, msg) {
   check(await page.textContent('[data-cg-sessions]') === '1', 'grafika: stan CG Playout (sesje elementu VizRS)');
   await page.waitForSelector('[data-cg-pages] td:has-text("Belka tytułowa")');
   check(true, 'grafika: strony VizRS kanału 24 z /etv/pages');
+  // kiedy strona wchodzi: czas z Trio, reguła CG z TAKE strony, element legacy (przypisania na żądanie)
+  const when = (n) => page.textContent(`[data-cg-when] tr:has(td:text-is("${n}"))`);
+  check(/wchodzi 60 s przed końcem audycji \(EPG\), schodzi 5 s przed końcem/.test(await when('1001')), 'grafika: czas strony z Trio (⏱ kanał) w tabeli „kiedy strona wchodzi”');
+  check(/start pozycji · wszystkie kanały/.test(await when('4001')) && /reguła CG/.test(await when('4001')), 'grafika: reguła CG Playout z TAKE 4001 przy stronie 4001');
+  check(/nie wchodzi sama/.test(await when('3001')), 'grafika: strona bez reguły i elementu – „nie wchodzi sama”');
+  await rerender(() => page.click('[data-cg-when] button:has-text("Sprawdź przypisania")'));
+  check(await page.isVisible('[data-cg-when] button:has-text("Sprawdź przypisania ponownie")'), 'grafika: przypisania elementów w ramówce sprawdzone (harmonogramy, bloki, deco)');
+  // kolekcja audycji LIVE (nazwa z CG /api/live/shows) – prowadzi ją CG Playout, panel nie pozwala jej zmienić
+  const liveSc = (await api('CreateSmartCollection', { Name: 'LIVE · Poranek na żywo', Query: 'type:remote_stream' })).result;
+  const liveScId = liveSc?.Id ?? liveSc?.SmartCollectionId;
+  await page.goto(`${BASE}/#kolekcje`);
+  await page.waitForSelector('main[data-view="kolekcje"]');
+  await rerender(() => page.click('.page-tabs button:has-text("Inteligentne")'));
+  await rerender(() => page.click('main table tr:has-text("LIVE · Poranek na żywo")'));
+  check(await page.isVisible('[data-cg-managed]') && !(await page.isVisible('main .panel header button:has-text("Usuń")')),
+    'kolekcje: kolekcja audycji LIVE oznaczona „CG Playout”, bez Zapisz/Usuń');
+  await rerender(() => page.click('button:has-text("+ Nowa inteligentna")'));
+  await page.fill('#sc-Name', 'LIVE · ręczna');
+  await page.fill('#sc-Query', 'type:remote_stream');
+  await page.click('button:has-text("Załóż kolekcję")');
+  check(/zarezerwowane/.test(await page.textContent('#toast')), 'kolekcje: nazwa „LIVE · …” zarezerwowana dla CG Playout');
+  if (liveScId) await api('DeleteSmartCollection', { SmartCollectionId: liveScId });
+  await page.goto(`${BASE}/#grafika`);
+  await page.waitForSelector('main[data-view="grafika"] [data-cg-sessions]');
   // VizRS CG System: podgląd /output z tokenem wyjścia i anteną kanału (bus=ch-N), Trio z ?channel=N
   const vizrsBus = async () => {
     const f = await (await page.waitForSelector('iframe[data-vizrs-output]')).contentFrame();

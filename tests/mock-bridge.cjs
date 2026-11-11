@@ -167,6 +167,8 @@ const H = {
   GetNextProbe: () => probe,
   RefreshNextProbe: () => probe,
   GetAllWatermarks: () => DB.watermarks,
+  // kolekcje inteligentne: jedna audycji LIVE (prowadzi ją CG Playout – w panelu tylko do odczytu) i jedna zwykła
+  GetAllSmartCollections: () => [{ Id: 1, Name: 'LIVE · Koncert w studiu', Query: 'type:remote_stream AND sort_title:"koncert w studiu"' }, { Id: 2, Name: 'Archiwum INFO24', Query: 'type:other_video AND tag:info' }],
   GetAllFillerPresets: () => DB.fillers,
   GetPagedPlayouts: () => ({ TotalCount: DB.playouts.length, Page: DB.playouts }),
   GetAllBlockPlayouts: () => DB.playouts.filter((p) => p.ScheduleKind === 'Block'),

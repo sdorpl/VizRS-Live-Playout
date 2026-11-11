@@ -2,7 +2,7 @@
 // i powtórki. Odpowiednik Collections, Smart Collections, Multi Collections i Rerun Collections w legacy.
 // Playlisty: views/playlisty.js. Pozycje do kolekcji zwykłej dodaje się w Przeglądarce mediów.
 
-import { VIEWS, h, btn, head, panel, pill, cmd, pl, table, toast, confirmDlg, route, cmdNote } from '../core.js';
+import { VIEWS, S, h, btn, head, panel, pill, cmd, api, pl, table, toast, confirmDlg, route, cmdNote } from '../core.js';
 import { form } from '../form.js';
 import { crudView, itemsEditor, contentPicker } from '../parts.js';
 
@@ -69,6 +69,20 @@ async function countQuery(q) {
   return Object.values(r || {}).reduce((n, v) => n + (Array.isArray(v) ? v.length : 0), 0);
 }
 
+// Kolekcje audycji LIVE zakłada, zmienia i usuwa VizRS CG Playout (`LIVE · <tytuł>`, przy zapisie audycji
+// i przy „Skanuj”): ręczna zmiana zostałaby nadpisana, a usunięcie odcięłoby audycję od ramówki.
+const LIVE_PREFIX = 'LIVE · ';
+/** Nazwy kolekcji audycji LIVE z CG Playout (null = CG niepodłączony albo nie odpowiada – wtedy po przedrostku). */
+async function liveCollections() {
+  if (!S.status?.cg) return null;
+  try {
+    const r = (await api('/api/cg/live/shows')).result;
+    const shows = Array.isArray(r) ? r : r?.shows;
+    return Array.isArray(shows) ? new Set(shows.map((s) => s.collection_name || LIVE_PREFIX + s.title)) : null;
+  } catch { return null; }
+}
+const managedByCg = (s, ctx) => (ctx.live ? ctx.live.has(s.Name) : String(s.Name || '').startsWith(LIVE_PREFIX));
+
 const smart = crudView({
   title: 'Kolekcje',
   desc: 'Kolekcja inteligentna to zapisane zapytanie wyszukiwarki legacy – zawsze aktualna lista pasujących pozycji.',
@@ -80,10 +94,18 @@ const smart = crudView({
     const rows = await cmd('GetAllSmartCollections');
     const counts = await Promise.all(rows.map((s) => countQuery(s.Query).catch(() => null)));
     rows.forEach((s, i) => (s.Count = counts[i]));
-    return { rows };
+    return { rows, live: await liveCollections() };
   },
   id: (s) => s.Id,
-  cols: [['Name', 'Nazwa'], [(s) => h('span', { class: 'mono' }, s.Query), 'Zapytanie', { class: 'w' }], [(s) => s.Count ?? '?', 'Wyników', { class: 'num' }]],
+  cols: (ctx) => [[(s) => (managedByCg(s, ctx) ? h('span', null, s.Name, ' ', pill('CG Playout', 'info')) : s.Name), 'Nazwa'],
+    [(s) => h('span', { class: 'mono' }, s.Query), 'Zapytanie', { class: 'w' }], [(s) => s.Count ?? '?', 'Wyników', { class: 'num' }]],
+  locked: (s, ctx) => (managedByCg(s, ctx)
+    ? h('div', { class: 'note', 'data-cg-managed': '' }, 'Tę kolekcję prowadzi VizRS CG Playout dla audycji LIVE: zakłada ją, zmienia nazwę i zapytanie przy zmianie audycji i usuwa razem z audycją. Ręczna zmiana zostałaby nadpisana – zmieniaj audycję na ekranie ',
+      h('a', { href: '#audycje' }, 'Audycje LIVE'), '.')
+    : null),
+  beforeSave: (ctx, d) => {
+    if (d.Name.trim().startsWith(LIVE_PREFIX)) throw new Error(`Nazwy „${LIVE_PREFIX}…” są zarezerwowane dla kolekcji audycji LIVE, które zakłada VizRS CG Playout – wybierz inną nazwę.`);
+  },
   editor: (s) => {
     const f = form('CreateSmartCollection', [
       { key: 'Name', label: 'Nazwa', required: true, placeholder: 'np. Archiwum INFO24' },

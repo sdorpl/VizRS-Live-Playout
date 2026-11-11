@@ -186,3 +186,17 @@ Analiza, na której oparto decyzję:
 | Ryzyka | most na komendach wewnętrznych: każde wydanie legacy (co tydzień) = test (`commandsMissing`, e2e); .NET na Ampere | Next przed 1.0 (0.2.0 → 0.2.5 w miesiąc), bez API i bez autoryzacji; utrata Plex/Jellyfin/Emby, HDHR; ogromna praca, zanim panel znów zrobi to, co dziś | C1: dwa lineupy (dwa M3U/XMLTV), własny obraz Next do utrzymania; C2: łamie decyzję R2 |
 
 Niezależnie od decyzji: CG Playout może sprawdzić, czy element graficzny legacy z warstwą `canvas` Next zastąpi nakładkę `vizrs-ffmpeg` (PLAN-vizrs-live §4, „Na później”) – praca w repo CG Playout, poza tym planem.
+
+## 9. Zdublowane funkcje w pakiecie VizRS – analiza i porządki (2026-11-11)
+
+Przegląd VizRS Live wobec VizRS CG Playout i VizRS CG System. Kodu przeniesionego między repozytoriami nie ma (własne HTTP i JSON w każdym to zasada „zero zależności”), ale te same czynności dało się wykonać w kilku miejscach.
+
+| # | Dublowanie | Decyzja / stan |
+|---|---|---|
+| D1 | Ręczne TAKE / CONTINUE / OUT na antenie kanału w Trio (CG System) i w Live (K13); dziennik emisji widział tylko komendy z Live | **Live zachowuje sterowanie grafiką** (decyzja użytkownika 2026-11-11 – role Trio i Live nie są rozdzielane). Dziennik pełny: CG Playout wykrywa zmiany warstw, których sam nie wysłał (Trio, `/mobile`, makra, karuzela, Companion) i zapisuje `take`/`out` z operatorem „VizRS (poza panelem)”. Przy okazji naprawiona flaga `manual` (K13). **Zrobione** (CG Playout `panel.rs`, `vizrs.rs`) |
+| D2 | „Kiedy grafika wchodzi” w trzech miejscach: czas strony w Trio (⏱ kanał), reguły CG Playout (`on_clip`, `on_end`, `shows`, `channels`), elementy `page-<ID>.yml` w ramówce legacy | Jeden widok w Live: Grafika kanału → „Kiedy strona wchodzi na antenę” (trzy źródła przy każdej stronie, ostrzeżenie „może wejść dwa razy”). **Zrobione.** Otwarte: który mechanizm ma być główny (proponowany: element w ramówce + czas z Trio; reguły CG do pasków stałych i reklam) – do decyzji użytkownika |
+| D3 | Zapisy do legacy dwiema drogami: CG Playout `etv_api.rs` (Smart Collections `LIVE · …`, skan biblioteki, reset playoutu, XMLTV) i Live przez most | Kolekcje `LIVE · …` w Live tylko do odczytu, z pigułką „CG Playout”, nazwa zarezerwowana. **Zrobione.** Otwarte: CG przestaje pisać do legacy, a kroki audycji LIVE (kolekcja, skan, przebudowa) wykonuje Live przez most – zmiana styku po obu stronach, osobny punkt |
+| D4 | Wdrożenie opisane dwa razy: `compose.cg-playout.yml` (lokalnie) i `docker-compose.live.yml` CG (Portainer), kopia Caddyfile, `compose.vaapi.yml` | `scripts/check-cg-overlay.sh` (na początku `tests/deploy.sh`) wymusza zgodność; wyrównany rozjazd `TZ`. **Zrobione.** Otwarte: jedna nakładka (lokalnie `docker-compose.live.yml` CG + cienka nakładka Live tylko z budową mostu) – wymaga zmiany `COMPOSE_FILE` w `.env` lokalnego stosu i odtworzenia proxy, więc tylko na prośbę użytkownika |
+| D5 | Ramówka czytana dwa razy: XMLTV w CG Playout i `GetFuturePlayoutItemsById` w Live | Bez zmian: małe ryzyko (EPG legacy odświeża się z opóźnieniem); do obserwacji |
+| D6 | Alarmy: webhook CG System (`--webhook`), `alert_webhook` CG Playout, alarmy w przeglądarce Live; stan systemu w Trio i w Live | Bez zmian: uzupełniają się (różne zdarzenia) |
+| D7 | „Show/audycja” w trzech znaczeniach (paczka grafiki VizRS, `shows` w regułach CG, Audycje LIVE) | Tylko pojęcia: w UI Live używać „show VizRS”, „reguła audycji”, „audycja LIVE” |

@@ -2,6 +2,11 @@
 
 ## Niewydane
 
+- **Grafika kanału – „Kiedy strona wchodzi na antenę”:** przy każdej stronie VizRS kanału trzy źródła naraz – czas z Trio (⏱ kanał), reguły CG Playout z TAKE tej strony i element legacy z przypisaniami w harmonogramach, blokach i deco („Sprawdź przypisania w ramówce”); ostrzeżenie, gdy stronę wprowadza i reguła, i ramówka.
+- **Dziennik emisji:** grafika wprowadzona i zdjęta w Trio, makrem, karuzelą VizRS albo z Companion trafia do dziennika (operator „VizRS (poza panelem)”) – wymaga VizRS CG Playout z tego cyklu; starszy CG zapisuje tylko komendy z panelu.
+- **Kolekcje:** kolekcje audycji LIVE (`LIVE · …`) oznaczone pigułką „CG Playout” i tylko do odczytu – prowadzi je CG Playout razem z audycją; nazwa `LIVE · …` zarezerwowana.
+- **Wdrożenie:** `scripts/check-cg-overlay.sh` (też na początku `tests/deploy.sh`) pilnuje, żeby Caddyfile, usługa `live` i nakładka VAAPI były takie same jak w `docker-compose.live.yml` CG Playout; nakładka `compose.cg-playout.yml` dostała `TZ: Europe/Warsaw` jak w CG.
+
 ## 1.3.0-test.1 – wydanie testowe (2026-11-10, gałąź `next-v`)
 
 Wydanie wstępne z przebiegiem planu rozwoju [PLAN-mcr](docs/plany/PLAN-mcr.md) (K1–K18). Obrazy `ghcr.io/sdorpl/vizrs-live:1.3.0-test.1` i `vizrs-live-legacy:1.3.0-test.1` – bez przesuwania `:latest` (produkcja na `latest` bez zmian). Most: nowe wiersze białej listy (K3–K8) – do testu potrzebny obraz legacy z tej wersji. K12–K14 i webhook K17 zadziałają z VizRS CG Playout zgodnym z kontraktem (DOKUMENTACJA §3); starszy CG – te elementy UI się nie pokazują. Q1 (prawdziwy sygnał OBS, Plex) – ręcznie z użytkownikiem.

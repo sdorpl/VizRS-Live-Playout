@@ -18,11 +18,13 @@ const sec = (s) => (s == null ? '—' : `${Math.floor(s / 60)}:${String(Math.flo
 
 // ---------- Grafika kanału ----------
 VIEWS.grafika = async () => {
-  const [elements, health, live] = await Promise.all([
+  const [elements, health, live, graphics] = await Promise.all([
     has('GetAllGraphicsElements') ? cmd('GetAllGraphicsElements') : [],
     S.status.cg ? cg('health').catch((e) => e) : null,
     S.status.cg ? cg('live/state').catch(() => null) : null,
+    S.status.cg ? cg('live/graphics').catch((e) => e) : null,
   ]);
+  const rules = graphics && !(graphics instanceof Error) ? graphics.rules || {} : null;
   const channels = live?.channels || [];
 
   const refresh = has('RefreshGraphicsElements') ? btn('Wczytaj pliki elementów', async () => {
@@ -37,8 +39,7 @@ VIEWS.grafika = async () => {
     if (!pick.value) return pagesBox.replaceChildren(h('div', { class: 'empty' }, 'CG Playout nie zna jeszcze żadnego kanału.'));
     try {
       const r = await cg('pages/' + encodeURIComponent(pick.value));
-      pagesBox.replaceChildren(table(r?.pages || [], [['number', 'Nr', { class: 'num' }], ['name', 'Strona'], [(p) => (p.playout ? pill('własny playout', 'info') : '—'), 'Playout']],
-        { empty: 'Show VizRS nie ma stron dla tego kanału (albo CG Playout nie widzi VizRS).' }));
+      pagesBox.replaceChildren(whenTable(r?.pages || [], pick.value, rules, elements, loadPages));
     } catch (e) { pagesBox.replaceChildren(cgError(e)); }
   };
   // kanał z paska górnego jako domyślny wybór stron (i anteny podglądu)
@@ -55,12 +56,15 @@ VIEWS.grafika = async () => {
       table(health.captures || [], [['channel', 'Kanał'], ['size', 'Rozmiar'], ['fps', 'kl./s'], ['mode', 'Tryb'], ['drawn_by', 'Rysuje'], ['status', 'Stan']],
         { empty: 'Brak przechwytywania grafiki – żaden kanał nie gra teraz pozycji z elementem VizRS.' }),
       cmdNote('CG Playout GET /health')),
-    panel('Strony VizRS kanału', h('span', null, pick), pagesBox, cmdNote('CG Playout GET /etv/pages?channel=N')),
   ];
+  const whenPanel = !S.status.cg || health instanceof Error ? null : panel('Kiedy strona wchodzi na antenę', h('span', null, pick), pagesBox,
+      h('div', { class: 'hint pad' }, 'Trzy źródła naraz: czas strony z Trio (⏱ kanał – działa przez element legacy), reguły CG Playout z TAKE tej strony i element legacy przypisany w ramówce. Strona z więcej niż jednym źródłem może wejść dwa razy albo o innej porze, niż się wydaje.'),
+      cmdNote('CG Playout GET /etv/pages?channel=N', 'GET /api/live/graphics', 'GetProgramScheduleItems', 'GetBlockItems', 'GetDecoById'));
 
   return [
     head('Grafika kanału', 'Kiedy jaka strona VizRS wchodzi na antenę (reguły CG Playout), stan VizRS CG Playout, strony VizRS, podgląd anteny i elementy graficzne legacy.', refresh),
-    S.status.cg && !(health instanceof Error) ? await rulesPanel() : null,
+    whenPanel,
+    S.status.cg && !(health instanceof Error) ? rulesPanel(graphics) : null,
     h('div', { class: 'split wide' },
       h('div', { class: 'cols' }, cgPanel,
         panel('Elementy graficzne legacy', null,
@@ -72,6 +76,101 @@ VIEWS.grafika = async () => {
           || h('div', { class: 'note' }, 'Podgląd /output i Trio: uruchom panel z --vizrs-url (VIZRS_LIVE_VIZRS_URL), VizRS z tokenem – także z --vizrs-output-token.'))),
   ];
 };
+
+// ---------- Kiedy strona wchodzi na antenę: czas z Trio, reguły CG Playout, element legacy w ramówce ----------
+/** Numer strony VizRS elementu legacy: plik page-<nr>.yml albo nazwa „Strona (nr)” (synchronizacja CG Playout). */
+export const elementPage = (g) => {
+  const m = /page-(\d+)\.yml$/.exec(g.FileName || '') || /\((\d+)\)\s*$/.exec(g.Name || '');
+  return m ? m[1] : null;
+};
+
+/** Czas strony na kanale z Trio (`playout` strony VizRS: at, out, ref). */
+export function trioTime(p) {
+  const t = p?.playout;
+  if (!t || (t.at == null && t.out == null)) return null;
+  const end = t.ref === 'programme' ? 'audycji (EPG)' : 'pozycji';
+  const parts = [];
+  if (t.at != null) parts.push(t.at < 0 ? `wchodzi ${-t.at} s przed końcem ${end}` : `wchodzi ${t.at} s po starcie`);
+  if (t.out != null) parts.push(`schodzi ${t.out} s przed końcem`);
+  return parts.join(', ');
+}
+
+/** Reguły CG Playout, które wprowadzają stronę (TAKE z jej numerem), jako „kiedy · zakres”; kanał spoza reguły – pominięty. */
+export function rulesTaking(rules, number, channel) {
+  if (!rules) return [];
+  const takes = (text) => String(text).split('\n').some((line) => {
+    const [verb, targets = ''] = line.trim().split(/\s+/);
+    return /^take$/i.test(verb || '') && targets.split(',').includes(String(number));
+  });
+  return ruleRows(rules)
+    .filter((x) => x.cmd !== '-' && takes(x.cmd))
+    .filter((x) => !x.scope.startsWith('kanał ') || x.scope.startsWith(`kanał ${channel},`) || x.scope === `kanał ${channel}`)
+    .map((x) => `${x.when} · ${x.scope}`);
+}
+
+// Przypisania elementów graficznych w ramówce legacy (id elementu → [gdzie]); liczone na żądanie, bo to po zapytaniu na harmonogram, blok i deco.
+let USES = null;
+async function scanUses() {
+  const uses = new Map();
+  const add = (list, where) => (list || []).forEach((g) => { if (!uses.has(g.Id)) uses.set(g.Id, []); uses.get(g.Id).push(where); });
+  const [schedules, blocks, decoGroups] = await Promise.all([
+    has('GetAllProgramSchedules') ? cmd('GetAllProgramSchedules') : [],
+    has('GetAllBlocks') ? cmd('GetAllBlocks') : [],
+    has('GetAllDecoGroups') ? cmd('GetAllDecoGroups') : [],
+  ]);
+  await Promise.all([
+    ...(has('GetProgramScheduleItems') ? schedules : []).map(async (s) => {
+      for (const i of await cmd('GetProgramScheduleItems', { Id: s.Id })) add(i.GraphicsElements, `harmonogram „${s.Name}”, pozycja ${(i.Index ?? 0) + 1}`);
+    }),
+    ...(has('GetBlockItems') ? blocks : []).map(async (b) => {
+      for (const i of await cmd('GetBlockItems', { BlockId: b.Id })) add(i.GraphicsElements, `blok „${b.Name}”, pozycja ${(i.Index ?? 0) + 1}`);
+    }),
+    ...(has('GetDecosByDecoGroupId') && has('GetDecoById') ? decoGroups : []).map(async (g) => {
+      for (const d of await cmd('GetDecosByDecoGroupId', { DecoGroupId: g.Id })) {
+        const full = await cmd('GetDecoById', { DecoId: d.Id });
+        if (full?.GraphicsElementsMode !== 'Disable') add(full?.GraphicsElements, `deco „${d.Name}”`);
+      }
+    }),
+  ]);
+  return uses;
+}
+
+function whenTable(pages, channel, rules, elements, redraw) {
+  const byPage = new Map();
+  for (const g of elements || []) { const n = elementPage(g); if (n) byPage.set(n, [...(byPage.get(n) || []), g]); }
+  const scan = btn(USES ? 'Sprawdź przypisania ponownie' : 'Sprawdź przypisania w ramówce', async () => {
+    scan.disabled = true; scan.textContent = 'Sprawdzam…';
+    try { USES = await scanUses(); } catch (e) { toast('Legacy odrzucił odczyt ramówki: ' + e.message, 'bad'); }
+    redraw();
+  });
+  const sources = (p) => {
+    const els = byPage.get(String(p.number)) || [];
+    const used = USES ? els.flatMap((g) => USES.get(g.Id) || []) : null;
+    return { trio: trioTime(p), rules: rulesTaking(rules, p.number, channel), els, used };
+  };
+  const rows = pages.map((p) => ({ ...p, src: sources(p) }));
+  return h('div', { 'data-cg-when': '' },
+    table(rows, [
+      ['number', 'Nr', { class: 'num' }], ['name', 'Strona'],
+      [(p) => p.src.trio || h('span', { class: 'dim' }, 'start pozycji (domyślnie)'), 'Czas z Trio (⏱ kanał)'],
+      [(p) => (p.src.rules.length ? h('div', null, p.src.rules.map((x) => h('div', null, x))) : '—'), 'Reguły CG Playout'],
+      [(p) => {
+        if (!p.src.els.length) return '—';
+        const names = p.src.els.map((g) => g.Name).join(', ');
+        if (!p.src.used) return h('span', null, names, h('br'), h('span', { class: 'dim' }, 'przypisania: nie sprawdzono'));
+        return h('span', null, names, h('br'), p.src.used.length ? h('span', { class: 'dim' }, p.src.used.join('; ')) : h('span', { class: 'dim' }, 'nieprzypisany w ramówce'));
+      }, 'Element legacy w ramówce', { class: 'w' }],
+      [(p) => {
+        const { rules: r, used, els } = p.src;
+        if (r.length && used?.length) return pill('reguła i ramówka – może wejść dwa razy', 'warn');
+        if (r.length) return pill('reguła CG', 'info');
+        if (used?.length) return pill(p.src.trio ? 'ramówka, czas z Trio' : 'ramówka', 'info');
+        if (els.length && !used) return h('span', { class: 'dim' }, '? (sprawdź przypisania)');
+        return pill('nie wchodzi sama');
+      }, 'Skutek'],
+    ], { empty: 'Show VizRS nie ma stron dla tego kanału (albo CG Playout nie widzi VizRS).' }),
+    h('div', { class: 'bar pad' }, scan, USES ? h('span', { class: 'dim' }, 'przypisania z harmonogramów, bloków i deco legacy (stan z chwili sprawdzenia)') : null));
+}
 
 // ---------- Reguły grafiki (CG Playout GET/PUT /api/live/graphics) ----------
 // Puste pole = dziedzicz (wartość globalna), „-” = wyłączone (pusty tekst w CG Playout).
@@ -124,9 +223,9 @@ function rulesSummary(r) {
     cmdNote('CG Playout GET /api/live/graphics'));
 }
 
-async function rulesPanel() {
-  let doc;
-  try { doc = await cg('live/graphics'); } catch (e) {
+function rulesPanel(doc) {
+  if (doc instanceof Error || !doc) {
+    const e = doc || new Error('brak odpowiedzi');
     return panel('Reguły grafiki', null, h('div', { class: 'pad' },
       h('p', { class: 'dim' }, 'Ta wersja VizRS CG Playout nie ma API reguł grafiki (GET/PUT /api/live/graphics) – reguły zmienia się w jego config.json. Zaktualizuj CG Playout.'),
       cgError(e)));

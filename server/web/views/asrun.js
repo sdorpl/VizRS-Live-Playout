@@ -27,7 +27,7 @@ function exportCsv(rows, ch, day) {
 
 VIEWS.asrun = async () => {
   const title = 'Dziennik emisji';
-  const desc = 'Co faktycznie poszło na antenę: start i koniec pozycji, wprowadzone i zdjęte strony grafiki, przejęcia studia, zdjęcie całej grafiki. Zapis prowadzi VizRS CG Playout; eksport do CSV.';
+  const desc = 'Co faktycznie poszło na antenę: start i koniec pozycji, wprowadzone i zdjęte strony grafiki, przejęcia studia, zdjęcie całej grafiki. Zmiany z Trio, makr i karuzeli VizRS mają operatora „VizRS (poza panelem)”. Zapis prowadzi VizRS CG Playout; eksport do CSV.';
   if (!S.status.cg) return [head(title, desc), h('div', { class: 'note' }, 'VizRS CG Playout nie jest podłączony (VIZRS_LIVE_CG_URL) – dziennik emisji prowadzi CG Playout.')];
   let st;
   try { st = (await api('/api/cg/live/state')).result; } catch (e) { return [head(title, desc), h('div', { class: 'note err' }, 'VizRS CG Playout: ' + e.message)]; }
