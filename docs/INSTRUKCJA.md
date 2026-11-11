@@ -10,7 +10,7 @@ Web GUI ErsatzTV legacy **nie jest potrzebne** i jest zamknięte – wszystko ro
 2. Wpisz **token panelu** (`VIZRS_LIVE_TOKEN`) i „Zaloguj”. Sesja trwa 30 dni w tej przeglądarce; „wyloguj” = wyczyść ciasteczka strony.
 3. Po 10 nieudanych próbach w ciągu minuty panel przez minutę nie przyjmuje logowania („za dużo nieudanych logowań”) – odczekaj.
 
-Pasek górny: **wybór kanału** (obok nazwy panelu – Na antenie, EPG, Playouty i Sloty pokazują wtedy tylko ten kanał; „Wszystkie kanały” wyłącza filtr; przeglądarka pamięta wybór), stan mostu do legacy (zielony = działa), licznik playoutów z błędem budowy (klik → Playouty) i stan CG Playout. Liczby w menu – ile jest kanałów, kolekcji, playoutów itd.
+Pasek górny: **wybór kanału** (obok nazwy panelu – Na antenie, EPG, Playouty i Sloty pokazują wtedy tylko ten kanał; „Wszystkie kanały” wyłącza filtr; przeglądarka pamięta wybór), stan mostu do legacy (zielony = działa), licznik playoutów z błędem budowy (klik → Playouty) i stan CG Playout. Liczby w menu – ile jest kanałów, kolekcji, playoutów itd. Przycisk **☰** (lewy górny róg) zwija menu do samych ikon – więcej miejsca na ekran, nazwa pod kursorem; przeglądarka pamięta wybór. Na telefonie ☰ wysuwa menu z boku.
 
 ## 2. Codzienna praca
 

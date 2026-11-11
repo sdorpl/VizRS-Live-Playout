@@ -149,6 +149,33 @@ function operatorButton() {
   });
 }
 
+// ---------- menu: zwijanie do ikon (szeroki ekran, pamiętane) i szuflada (wąski ekran) ----------
+const NAV_KEY = 'vizrs-live-nav-min';
+function navToggle() {
+  const app = document.querySelector('.app');
+  const narrow = window.matchMedia('(max-width: 760px)');
+  const b = document.getElementById('nav-toggle');
+  // podpowiedź z nazwą ekranu – potrzebna, gdy menu pokazuje same ikony
+  document.querySelectorAll('.side a').forEach((a) => { a.title ||= a.firstChild?.textContent.trim() || ''; });
+  try { app.classList.toggle('nav-min', localStorage.getItem(NAV_KEY) === '1'); } catch { /* bez pamięci w przeglądarce */ }
+  const sync = () => b.setAttribute('aria-expanded', String(narrow.matches ? app.classList.contains('nav-open') : !app.classList.contains('nav-min')));
+  b.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (narrow.matches) app.classList.toggle('nav-open');
+    else {
+      const min = app.classList.toggle('nav-min');
+      try { localStorage.setItem(NAV_KEY, min ? '1' : '0'); } catch { /* bez pamięci w przeglądarce */ }
+    }
+    sync();
+  });
+  const close = () => { if (app.classList.contains('nav-open')) { app.classList.remove('nav-open'); sync(); } };
+  window.addEventListener('hashchange', close);
+  document.addEventListener('click', (e) => { if (!e.target.closest('.side')) close(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+  narrow.addEventListener('change', () => { app.classList.remove('nav-open'); sync(); });
+  sync();
+}
+
 function clock() {
   const c = document.getElementById('clock');
   const tick = () => (c.textContent = hms(new Date()));
@@ -158,6 +185,7 @@ function clock() {
 
 async function start() {
   clock();
+  navToggle();
   operatorButton();
   channelSelect();
   document.getElementById('st-monitor').addEventListener('click', () => openMonitor());

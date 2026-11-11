@@ -10,6 +10,7 @@
 <body>
 <div class="app">
   <header class="topbar">
+    <button id="nav-toggle" class="icon" type="button" aria-label="Menu" aria-controls="side" title="Zwiń / rozwiń menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
     <div class="brand">Viz<b>RS</b><span>Live</span></div>
     <select id="st-channel" aria-label="Kanał – filtr ekranów kanałowych" title="Na antenie, EPG, Playouty, Grafika kanału i Sloty pokazują tylko wybrany kanał" hidden></select>
     <span class="grow"></span>
@@ -23,7 +24,7 @@
     <button id="logout" hidden>Wyloguj</button>
   </header>
 
-  <nav class="side" aria-label="Menu">
+  <nav class="side" id="side" aria-label="Menu">
     <h3>Antena</h3>
     <a href="#antena">Na antenie</a>
     <a href="#epg">Przewodnik EPG</a>
