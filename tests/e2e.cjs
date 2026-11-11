@@ -552,10 +552,26 @@ function check(cond, msg) {
   await page.selectOption('#f-NormalizeLoudnessMode', 'LoudNorm');
   check(/−23 LUFS/.test(await page.textContent('main .form')), 'profil: podpowiedź −23 LUFS');
   await page.fill('#f-TargetLoudness', '-23');
+  await page.selectOption('#f-FrameRateChoice', '25');
+  check(/Next dopasowuje/.test(await page.textContent('.row:has(#f-FrameRateChoice) .hint')), 'klatkaż: podpowiedź o ustawieniu mostu');
   await page.click('button:has-text("Załóż profil")');
   await page.waitForSelector(`td:text-is("${profName}")`);
   const prof = (await api('GetAllFFmpegProfiles')).result.find((x) => x.Name === profName);
   check(prof && prof.Resolution.Name === '1280x720' && prof.NormalizeLoudnessMode === 'LoudNorm' && prof.TargetLoudness === -23, 'profil 720p zapisany (rozdzielczość, −23 LUFS)');
+  // klatkaż profilu: zapis w moście, NormalizeFramerate w legacy, filtr GetChannelFramerate na kanale z tym profilem
+  const frameRates = () => page.evaluate(async () => (await (await fetch('/api/framerates')).json()).result);
+  check((await frameRates()).rates[prof.Id] === '25' && prof.NormalizeFramerate === true, 'klatkaż 25 zapisany w moście, stała liczba klatek w legacy');
+  {
+    const all = (await api('GetAllChannels', { ShowDisabled: true })).result;
+    const frCh = String(Math.max(...all.map((c) => parseFloat(c.Number) || 0)) + 1);
+    const frChId = (await api('CreateChannel', { Name: 'E2E klatkaż ' + tag, Number: frCh, Group: 'Test', Categories: '', FFmpegProfileId: prof.Id, Logo: { Path: '', ContentType: '' },
+      StreamingEngine: 'Next', StreamingMode: 'HttpLiveStreamingSegmenter', PlayoutSource: 'Generated', PlayoutMode: 'Continuous', StreamSelectorMode: 'Default',
+      IdleBehavior: 'StopOnDisconnect', SubtitleMode: 'None', IsEnabled: true, ShowInEpg: true })).result.ChannelId;
+    const fr = (await api('GetChannelFramerate', { ChannelNumber: frCh })).result;
+    check(fr && fr.RFrameRate === '25', `filtr mostu: GetChannelFramerate kanału z profilem = 25 (${JSON.stringify(fr)})`);
+    await api('DeleteChannel', { ChannelId: frChId });
+  }
+  check(/25/.test(await page.textContent(`tr:has(td:text-is("${profName}"))`)), 'klatkaż w kolumnie Klatki');
   await rerender(() => page.click(`td:text-is("${profName}")`));
   await page.click('main .panel header button:has-text("Kopiuj")');
   await page.click('#dlg-buttons button:has-text("Kopiuj")');
@@ -568,6 +584,7 @@ function check(cond, msg) {
     await page.waitForSelector(`td:text-is("${n}")`, { state: 'detached' });
   }
   check(true, 'profil i kopia usunięte');
+  check((await frameRates()).rates[prof.Id] === undefined, 'klatkaż usuniętego profilu usunięty z mostu');
 
   // K4: własna rozdzielczość – nieparzysta odrzucona w przeglądarce, dodanie i usunięcie
   await page.fill('#res-w', '1001');

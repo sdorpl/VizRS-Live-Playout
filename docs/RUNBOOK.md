@@ -117,6 +117,7 @@ docker compose start ersatztv
 - Zawsze **przed** aktualizacją legacy (nowsze legacy migruje bazę, starsze już jej nie otworzy).
 - W kopii są sekrety (`*-secrets.json`: klucze Jellyfin/Emby/Plex, `api-secrets.json`) – szyfruj kopię poza serwerem.
 - `.env` (tokeny) kopiuj osobno.
+- W `etv-config` jest też katalog mostu `vizrs-bridge/` (klatkaż profili kodowania, `framerates.json`) – kopia całego wolumenu go obejmuje.
 
 ## 4. Aktualizacja
 

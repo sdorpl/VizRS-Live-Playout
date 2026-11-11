@@ -21,6 +21,8 @@ CreateFFmpegProfile
 UpdateFFmpegProfile
 CopyFFmpegProfile
 DeleteFFmpegProfile
+# klatkaż kanału, który legacy przekaże silnikowi (z nadpisaniem mostu – „Klatkaż” w profilu kodowania)
+GetChannelFramerate
 GetAllResolutions
 # własne rozdzielczości (K4, Settings → FFmpeg w legacy; usuwać można tylko IsCustom)
 CreateCustomResolution

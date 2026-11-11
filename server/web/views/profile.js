@@ -1,6 +1,6 @@
 // Profile kodowania (R5): jak silnik Next koduje kanał. Odpowiednik FFmpeg Profiles + FFmpeg Editor legacy.
 
-import { VIEWS, h, cmd, pl, pill, btn, panel, table, toast, confirmDlg, route, has, cmdNote, enumValues } from '../core.js';
+import { VIEWS, h, api, cmd, pl, pill, btn, panel, table, toast, confirmDlg, route, has, cmdNote, enumValues } from '../core.js';
 import { form } from '../form.js';
 import { crudView } from '../parts.js';
 
@@ -33,6 +33,38 @@ function nextHint(probe, supported) {
     return (kind === 'ok' ? '✓ ' : kind === 'bad' ? '✗ ' : kind === 'warn' ? '⚠ ' : '') + text
       + (codecs ? ` Dekodowanie: ${codecs.dec.join(', ') || '—'}; kodowanie: ${codecs.enc.join(', ') || '—'}.` : '');
   };
+}
+
+// ---------- klatkaż wyjściowy profilu (most: filtr na GetChannelFramerate, GET/POST /api/framerate…) ----------
+/** Wartości listy „Klatkaż”: source – bez wyrównywania, auto – wylicza legacy, liczba – ustawia most. */
+export const FRAME_RATES = [
+  ['source', 'jak materiał (bez wyrównywania)'],
+  ['auto', 'automatycznie – najniższy z ramówki (legacy)'],
+  ['25', '25 kl./s (PAL, TV w Polsce)'],
+  ['50', '50 kl./s'],
+  ['24000/1001', '23,976 kl./s'],
+  ['24', '24 kl./s'],
+  ['30000/1001', '29,97 kl./s'],
+  ['30', '30 kl./s'],
+  ['60000/1001', '59,94 kl./s'],
+  ['60', '60 kl./s'],
+];
+/** „30000/1001” → „29,97”; „25” → „25”. */
+export function fmtRate(r) {
+  const [n, d = '1'] = String(r).split('/');
+  const v = Number(n) / Number(d);
+  return Number.isFinite(v) ? String(Math.round(v * 1000) / 1000).replace('.', ',') : String(r);
+}
+/** Wybór z listy dla profilu: klatkaż ustawiony w moście, inaczej auto/source wg NormalizeFramerate. */
+export const rateChoice = (p, rates) => rates?.[p?.Id] ?? (p?.NormalizeFramerate ? 'auto' : 'source');
+/** Klatkaż do mostu z wyboru: liczba albo null (auto, source). */
+export const rateToBridge = (choice) => (/^\d/.test(choice || '') ? choice : null);
+
+function rateHint(v) {
+  const c = v.FrameRateChoice;
+  if (c === 'source') return 'Każdy materiał idzie z własnym klatkażem – przy mieszanej ramówce (25 i 23,976) część odbiorników gubi obraz na styku.';
+  if (c === 'auto') return 'Legacy wybiera najniższy klatkaż powyżej 23 kl./s spośród materiałów w playoucie – jeden film 23,976 wśród materiałów 25 ustawi cały kanał na 23,976.';
+  return `Kanał zawsze w ${fmtRate(c)} kl./s – Next dopasowuje każdy materiał, gubiąc albo powtarzając klatki. Ustawienie mostu VizRS (nie bazy legacy); działa od następnego startu strumienia kanału.`;
 }
 
 function loudHint(v) {
@@ -149,20 +181,25 @@ VIEWS.profile = crudView({
       cmd('GetAllChannels', { ShowDisabled: true }),
       // K5: stan sprzętu wg Next – starsze legacy bez komendy = brak (podpowiedź z ffmpeg jak dotąd)
       has('GetNextProbe') ? cmd('GetNextProbe').catch(() => null) : null]);
-    return { rows, resolutions, supported, fresh, channels, probe: has('GetNextProbe') ? (probe ?? false) : undefined };
+    // klatkaż profili w moście – starszy most bez /framerates = null (zostaje przełącznik legacy)
+    const fr = await api('/api/framerates').then((r) => r.result).catch(() => null);
+    return { rows, resolutions, supported, fresh, channels, fr, probe: has('GetNextProbe') ? (probe ?? false) : undefined };
   },
   id: (p) => p.Id,
-  cols: ({ channels }) => [
+  cols: ({ channels, fr }) => [
     ['Name', 'Nazwa'], ['Resolution.Name', 'Rozdzielczość'],
     [(p) => `${pl(p.VideoFormat)} · ${pl(p.BitDepth)}`, 'Obraz'], [(p) => (p.VideoBitrate ? p.VideoBitrate + ' kb/s' : '—'), 'Bitrate', { class: 'num' }],
     [(p) => `${pl(p.AudioFormat)} ${p.AudioBitrate ? p.AudioBitrate + ' kb/s' : ''}`, 'Dźwięk'],
     [(p) => (p.HardwareAcceleration === 'None' ? 'programowo' : pl(p.HardwareAcceleration)), 'Akceleracja'],
     [(p) => (p.NormalizeLoudnessMode === 'LoudNorm' ? `${p.TargetLoudness ?? '?'} LUFS` : '—'), 'Głośność'],
+    [(p) => { const c = rateChoice(p, fr?.active ? fr.rates : null); return c === 'source' ? '—' : c === 'auto' ? 'auto' : fmtRate(c); }, 'Klatki', { class: 'num' }],
     [(p) => { const n = channels.filter((c) => c.FFmpegProfileId === p.Id).length; return n ? pill(String(n), 'info') : '—'; }, 'Kanały'],
   ],
-  editor: (p, { resolutions, supported, fresh, probe }) => {
+  editor: (p, { resolutions, supported, fresh, probe, fr }) => {
     const base = { ...fresh, ...(p || {}), ResolutionId: (p || fresh).Resolution?.Id ?? resolutions[0]?.Id };
     if (!p) base.Name = '';
+    const rates = fr?.active;
+    if (rates) base.FrameRateChoice = rateChoice(p || fresh, fr.rates);
     const hw = enumValues('CreateFFmpegProfile', 'HardwareAcceleration')
       .filter((k) => k !== 'V4l2m2m')
       .map((k) => [k, k === 'None' ? 'brak (programowo)' : supported.includes(k) ? pl(k) : `${pl(k)} – sprzęt nie zgłasza`]);
@@ -182,7 +219,13 @@ VIEWS.profile = crudView({
       { key: 'VaapiDriver', label: 'Sterownik VAAPI', show: (v) => vid(v) && v.HardwareAcceleration === 'Vaapi' },
       { key: 'VaapiDevice', label: 'Urządzenie VAAPI', placeholder: '/dev/dri/renderD128', show: (v) => vid(v) && v.HardwareAcceleration === 'Vaapi' },
       { key: 'TonemapAlgorithm', label: 'Mapowanie HDR → SDR', show: vid },
-      { label: 'Obróbka', group: [{ key: 'NormalizeFramerate', kind: 'check', text: 'stała liczba klatek' }, { key: 'DeinterlaceVideo', kind: 'check', text: 'usuwaj przeplot' }], show: vid },
+      rates
+        ? { key: 'FrameRateChoice', label: 'Klatkaż', options: FRAME_RATES, optional: false, show: vid, hint: rateHint }
+        : null,
+      { label: 'Obróbka', group: [
+        rates ? null : { key: 'NormalizeFramerate', kind: 'check', text: 'stała liczba klatek' },
+        { key: 'DeinterlaceVideo', kind: 'check', text: 'usuwaj przeplot' }].filter(Boolean), show: vid,
+        hint: fr && !fr.active ? `Wybór klatkażu niedostępny – most: ${fr.problem}. Zostaje przełącznik legacy (najniższy klatkaż z ramówki).` : null },
       { sec: 'Dźwięk' },
       { key: 'AudioFormat', label: 'Kodek', show: aud, hint: (v) => (v.AudioFormat === 'AacLatm' ? 'AAC LATM tylko dla DVB-C; w pozostałych przypadkach AAC.' : v.AudioFormat === 'Copy' ? 'Dźwięk kopiowany bez zmian – zwykle powoduje problemy w odbiornikach.' : '') },
       { key: 'AudioBitrate', label: 'Bitrate', unit: 'kb/s', show: aud },
@@ -194,12 +237,22 @@ VIEWS.profile = crudView({
     ], base);
   },
   beforeSave: (ctx, d) => {
+    if (d.FrameRateChoice !== undefined) d.NormalizeFramerate = d.FrameRateChoice !== 'source';
     if (d.NormalizeAudio && d.NormalizeLoudnessMode === 'LoudNorm' && d.TargetLoudness == null) throw new Error('Pole „Poziom docelowy”: podaj poziom w LUFS (TV w Polsce: −23).');
   },
   footer: (p, { fresh }) => h('div', { class: 'hint pad dim' },
     'Ustawienia tylko dla starego silnika legacy (wątki, preset, profil H.264, B-klatki, wyświetlacz VAAPI) panel zostawia bez zmian',
     p ? '.' : ` (nowy profil: wartości domyślne legacy, np. profil ${fresh.VideoProfile || '—'}).`),
   below: (cur, { resolutions, rows }) => resolutionsPanel(resolutions, rows),
+  afterSave: async (id, { fr }, d) => {
+    if (!fr?.active || d.FrameRateChoice === undefined) return;
+    const want = rateToBridge(d.FrameRateChoice);
+    if (want === (fr.rates[id] ?? null)) return;
+    try { await api('/api/framerate/' + id, { method: 'POST', body: JSON.stringify({ rate: want }) }); } catch (e) { throw new Error('Profil zapisany, ale klatkaż nie: ' + e.message); }
+  },
+  afterDelete: async (p, { fr }) => {
+    if (fr?.active && fr.rates[p.Id] != null) await api('/api/framerate/' + p.Id, { method: 'POST', body: JSON.stringify({ rate: null }) });
+  },
   create: (d) => d,
   update: (d, p) => ({ ...d, FFmpegProfileId: p.Id }),
   createdId: (r) => r?.FFmpegProfileId,

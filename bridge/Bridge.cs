@@ -11,6 +11,8 @@
 //   GET  /vizrs-bridge/sessions          sesje nadawania legacy (IFFmpegSegmenterService.Workers -> HlsSessionModel)
 //   POST /vizrs-bridge/session/{Kanał}/stop  zatrzymanie sesji kanału, jak przycisk Stop w Channels.razor -> {"ok":true,"result":true|false}
 //   POST /vizrs-bridge/upload/{Rodzaj}    obraz (Logo|Watermark, treść = bajty pliku) -> SaveArtworkToDisk -> {"ok":true,"result":"<nazwa w pamięci legacy>"}
+//   GET  /vizrs-bridge/framerates        klatkaż wyjściowy profili kodowania -> {"ok":true,"result":{"active":…,"problem":…,"rates":{"<IdProfilu>":"25"}}}
+//   POST /vizrs-bridge/framerate/{IdProfilu}  {"rate":"25"|"30000/1001"|null} – ustawienie albo powrót do wyliczenia legacy
 //
 // Biała lista: plik VIZRS_BRIDGE_COMMANDS (domyślnie commands.txt obok DLL). Komendy spoza listy -> 403.
 
@@ -58,7 +60,11 @@ namespace VizRS.Bridge
     public sealed class BridgeHostingStartup : IHostingStartup
     {
         public void Configure(IWebHostBuilder builder) =>
-            builder.ConfigureServices(services => services.AddTransient<IStartupFilter, BridgeStartupFilter>());
+            builder.ConfigureServices(services =>
+            {
+                services.AddTransient<IStartupFilter, BridgeStartupFilter>();
+                FrameRates.Register(services);
+            });
     }
 
     internal sealed class BridgeStartupFilter : IStartupFilter
@@ -144,6 +150,14 @@ namespace VizRS.Bridge
                 {
                     await Upload(ctx, r["/upload/".Length..]);
                 }
+                else if (r == "/framerates" && HttpMethods.IsGet(ctx.Request.Method))
+                {
+                    await Json(ctx, 200, new { ok = true, result = FrameRates.Describe() });
+                }
+                else if (r.StartsWith("/framerate/", StringComparison.Ordinal) && HttpMethods.IsPost(ctx.Request.Method))
+                {
+                    await SetFrameRate(ctx, r["/framerate/".Length..]);
+                }
                 else
                 {
                     await Json(ctx, 404, new { ok = false, error = "nieznany adres mostu" });
@@ -173,6 +187,7 @@ namespace VizRS.Bridge
                     commandsAllowed = _registry.Allowed.Count,
                     commandsMissing = _registry.Missing,
                     commandsKnown = _registry.KnownCount,
+                    frameRate = new { active = FrameRates.Problem is null, problem = FrameRates.Problem },
                 },
             };
         }
@@ -327,6 +342,58 @@ namespace VizRS.Bridge
             await Json(ctx, 200, Results.Unwrap(result));
         }
 
+        /// <summary>Klatkaż wyjściowy profilu kodowania: {"rate":"25"} ustawia, {"rate":null} wraca do wyliczenia legacy.</summary>
+        private static async Task SetFrameRate(HttpContext ctx, string profile)
+        {
+            if (!int.TryParse(profile, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out int id) || id <= 0)
+            {
+                await Json(ctx, 400, new { ok = false, error = "zły identyfikator profilu kodowania" });
+                return;
+            }
+
+            if (FrameRates.Problem is { } problem)
+            {
+                await Json(ctx, 409, new { ok = false, error = "klatkaż profilu nieaktywny w tej wersji legacy: " + problem });
+                return;
+            }
+
+            string? rate;
+            try
+            {
+                using var ms = new MemoryStream();
+                await ctx.Request.Body.CopyToAsync(ms);
+                if (ms.Length > 4096)
+                {
+                    await Json(ctx, 413, new { ok = false, error = "za duże argumenty" });
+                    return;
+                }
+
+                using JsonDocument doc = JsonDocument.Parse(ms.Length == 0 ? "{}"u8.ToArray() : ms.ToArray());
+                JsonElement v = doc.RootElement.ValueKind == JsonValueKind.Object && doc.RootElement.TryGetProperty("rate", out JsonElement x) ? x : default;
+                rate = v.ValueKind switch
+                {
+                    JsonValueKind.String => v.GetString(),
+                    JsonValueKind.Null or JsonValueKind.Undefined => null,
+                    _ => throw new JsonException("pole rate: tekst albo null"),
+                };
+            }
+            catch (JsonException e)
+            {
+                await Json(ctx, 400, new { ok = false, error = "argumenty to nie JSON: " + e.Message });
+                return;
+            }
+
+            if (rate is not null && FrameRates.Invalid(rate) is { } why)
+            {
+                await Json(ctx, 400, new { ok = false, error = why });
+                return;
+            }
+
+            FrameRates.Set(id, rate);
+            Console.WriteLine($"[vizrs-bridge] profil {id}: klatkaż {rate ?? "jak wylicza legacy"}");
+            await Json(ctx, 200, new { ok = true, result = FrameRates.Describe() });
+        }
+
         /// <summary>Usługa sesji nadawania legacy (singleton z DI), szukana po nazwie typu – most nie odwołuje się do zestawów legacy.</summary>
         private static object? Segmenter(HttpContext ctx)
         {
@@ -427,6 +494,187 @@ namespace VizRS.Bridge
             ctx.Response.ContentLength = bytes.Length;
             ctx.Response.Headers.CacheControl = "no-store";
             await ctx.Response.Body.WriteAsync(bytes);
+        }
+    }
+
+    /// <summary>
+    /// Klatkaż wyjściowy profilu kodowania wybrany przez operatora. Legacy wylicza klatkaż kanału zapytaniem
+    /// GetChannelFramerate (tylko przy NormalizeFramerate: najniższy powyżej 23 kl./s z playoutu) i przekazuje go
+    /// silnikowi Next (normalization.video.frame_rate) albo staremu potokowi. Most dokłada do MediatR filtr tylko
+    /// na to zapytanie: gdy profil kanału ma ustawiony klatkaż, zwraca go zamiast wyliczenia legacy.
+    /// Ustawienia leżą w pliku mostu (VIZRS_BRIDGE_DATA, domyślnie /config/vizrs-bridge/framerates.json),
+    /// nie w bazie legacy. Typy legacy szukane po nazwie – inna wersja legacy = filtr nieaktywny (Problem), nie awaria.
+    /// </summary>
+    internal static class FrameRates
+    {
+        private const string RequestName = "ErsatzTV.Application.Channels.GetChannelFramerate, ErsatzTV.Application";
+        private const string ChannelQueryName = "ErsatzTV.Application.Channels.GetChannelByNumber, ErsatzTV.Application";
+        private const int MaxRate = 240; // jak ChannelConfigConverter.MaxNextFrameRate legacy
+
+        private static readonly ConcurrentDictionary<int, string> Rates = new();
+        private static readonly Lock FileLock = new();
+        private static Type? _channelQuery;
+
+        /// <summary>null – filtr działa; tekst – dlaczego nie (np. legacy zmienił zapytanie).</summary>
+        public static string? Problem { get; private set; } = "filtr nie został zarejestrowany";
+
+        private static string FilePath => Path.Combine(
+            Environment.GetEnvironmentVariable("VIZRS_BRIDGE_DATA") is { Length: > 0 } d ? d : "/config/vizrs-bridge",
+            "framerates.json");
+
+        public static void Register(IServiceCollection services)
+        {
+            try
+            {
+                Type request = Type.GetType(RequestName, true)!;
+                Type response = request.GetInterfaces()
+                    .Single(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IRequest<>))
+                    .GetGenericArguments()[0];
+                if (!OptionConverterFactory.IsOption(response) || response.GetGenericArguments()[0].FullName != "ErsatzTV.FFmpeg.FrameRate")
+                {
+                    throw new InvalidOperationException($"GetChannelFramerate zwraca {response}, nie Option<FrameRate>");
+                }
+
+                if (request.GetProperty("ChannelNumber")?.PropertyType != typeof(string))
+                {
+                    throw new InvalidOperationException("GetChannelFramerate bez pola ChannelNumber");
+                }
+
+                Type frameRate = response.GetGenericArguments()[0];
+                if (frameRate.GetConstructor([typeof(string)]) is null || response.GetMethod("Some", BindingFlags.Public | BindingFlags.Static, [frameRate]) is null)
+                {
+                    throw new InvalidOperationException("FrameRate albo Option w innej postaci");
+                }
+
+                _channelQuery = Type.GetType(ChannelQueryName, true)!;
+                services.AddTransient(
+                    typeof(IPipelineBehavior<,>).MakeGenericType(request, response),
+                    typeof(FrameRateBehavior<,>).MakeGenericType(request, response));
+                Problem = null;
+                Load();
+                Console.WriteLine($"[vizrs-bridge] klatkaż profili: filtr GetChannelFramerate aktywny, ustawione profile: {Rates.Count}");
+            }
+            catch (Exception e)
+            {
+                Problem = e.Message;
+                Console.WriteLine($"[vizrs-bridge] klatkaż profili nieaktywny: {e.Message}");
+            }
+        }
+
+        public static object Describe() => new
+        {
+            active = Problem is null,
+            problem = Problem,
+            rates = Rates.OrderBy(kv => kv.Key).ToDictionary(kv => kv.Key.ToString(System.Globalization.CultureInfo.InvariantCulture), kv => kv.Value),
+        };
+
+        /// <summary>Klatkaż „N” albo „N/D” w zakresie, który przyjmuje silnik Next (1–240 kl./s); null – poprawny.</summary>
+        public static string? Invalid(string rate)
+        {
+            string[] parts = rate.Split('/');
+            if (rate.Length > 20 || parts.Length > 2 || parts.Any(p => p.Length == 0 || !p.All(char.IsAsciiDigit)))
+            {
+                return "klatkaż: liczba całkowita albo ułamek N/D (np. 25, 30000/1001)";
+            }
+
+            long num = long.Parse(parts[0], System.Globalization.CultureInfo.InvariantCulture);
+            long den = parts.Length == 2 ? long.Parse(parts[1], System.Globalization.CultureInfo.InvariantCulture) : 1;
+            return num == 0 || den == 0 || num < den || num > den * MaxRate ? $"klatkaż poza zakresem 1–{MaxRate} kl./s" : null;
+        }
+
+        public static void Set(int profile, string? rate)
+        {
+            lock (FileLock)
+            {
+                if (rate is null)
+                {
+                    Rates.TryRemove(profile, out _);
+                }
+                else
+                {
+                    Rates[profile] = rate;
+                }
+
+                string path = FilePath;
+                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                string tmp = path + ".tmp";
+                File.WriteAllBytes(tmp, JsonSerializer.SerializeToUtf8Bytes(new SortedDictionary<int, string>(Rates)));
+                File.Move(tmp, path, true);
+            }
+        }
+
+        private static void Load()
+        {
+            string path = FilePath;
+            if (!File.Exists(path))
+            {
+                return;
+            }
+
+            try
+            {
+                foreach ((int k, string v) in JsonSerializer.Deserialize<Dictionary<int, string>>(File.ReadAllBytes(path)) ?? [])
+                {
+                    if (k > 0 && Invalid(v) is null)
+                    {
+                        Rates[k] = v;
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine($"[vizrs-bridge] {path} nieczytelny ({e.Message}) – klatkaż liczy legacy");
+            }
+        }
+
+        public static bool Any => !Rates.IsEmpty;
+
+        /// <summary>Klatkaż profilu kanału albo null (profil bez ustawienia, kanał nieznany).</summary>
+        public static async Task<string?> ForChannel(IServiceProvider services, string channel, CancellationToken ct)
+        {
+            if (_channelQuery is null)
+            {
+                return null;
+            }
+
+            object query = Activator.CreateInstance(_channelQuery, channel)!;
+            object? found = await services.GetRequiredService<ISender>().Send(query, ct);
+            object? vm = found?.GetType().GetProperty("Case")?.GetValue(found);
+            return vm?.GetType().GetProperty("FFmpegProfileId")?.GetValue(vm) is int id && Rates.TryGetValue(id, out string? rate) ? rate : null;
+        }
+
+        /// <summary>Option&lt;FrameRate&gt;.Some(new FrameRate(rate)) przez refleksję.</summary>
+        public static object Some(Type option, string rate)
+        {
+            Type frameRate = option.GetGenericArguments()[0];
+            object value = Activator.CreateInstance(frameRate, rate)!;
+            return option.GetMethod("Some", BindingFlags.Public | BindingFlags.Static, [frameRate])!.Invoke(null, [value])!;
+        }
+    }
+
+    /// <summary>Filtr MediatR na GetChannelFramerate (rejestrowany tylko dla tego zapytania, FrameRates.Register).</summary>
+    public sealed class FrameRateBehavior<TRequest, TResponse>(IServiceProvider services) : IPipelineBehavior<TRequest, TResponse>
+        where TRequest : notnull
+    {
+        public async Task<TResponse> Handle(TRequest request, RequestHandlerDelegate<TResponse> next, CancellationToken cancellationToken)
+        {
+            if (FrameRates.Any && typeof(TRequest).GetProperty("ChannelNumber")?.GetValue(request) is string channel)
+            {
+                try
+                {
+                    if (await FrameRates.ForChannel(services, channel, cancellationToken) is { } rate)
+                    {
+                        Console.WriteLine($"[vizrs-bridge] kanał {channel}: klatkaż {rate} (profil kodowania, VizRS Live)");
+                        return (TResponse)FrameRates.Some(typeof(TResponse), rate);
+                    }
+                }
+                catch (Exception e) when (e is not OperationCanceledException)
+                {
+                    Console.WriteLine($"[vizrs-bridge] kanał {channel}: klatkaż profilu pominięty ({e.Message}) – liczy legacy");
+                }
+            }
+
+            return await next();
         }
     }
 

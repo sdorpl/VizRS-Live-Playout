@@ -742,6 +742,17 @@ fn route(app: &App, req: &Request) -> Response {
         }
         ("GET", "/api/commands") => forward(app.bridge.get("/commands"), "commands"),
         ("GET", "/api/sessions") => forward(app.bridge.get("/sessions"), "sessions"),
+        ("GET", "/api/framerates") => forward(app.bridge.get("/framerates"), "framerates"),
+        ("POST", p) if p.starts_with("/api/framerate/") => {
+            let id = &p["/api/framerate/".len()..];
+            if !profile_id(id) {
+                return Response::error(400, "zły identyfikator profilu kodowania");
+            }
+            forward(
+                app.bridge.post(&format!("/framerate/{id}"), &req.body),
+                "framerate",
+            )
+        }
         ("POST", p) if p.starts_with("/api/session/") => session(app, &p["/api/session/".len()..]),
         ("POST", p) if p.starts_with(http::UPLOAD_PREFIX) => {
             upload(app, req, &p[http::UPLOAD_PREFIX.len()..])
@@ -853,6 +864,11 @@ pub fn image_type_ok(content_type: &str, b: &[u8]) -> bool {
         "image/webp" => b.len() >= 12 && b.starts_with(b"RIFF") && &b[8..12] == b"WEBP",
         _ => false,
     }
+}
+
+/// Identyfikator profilu kodowania w adresie `/api/framerate/{id}`: liczba 1–999999999.
+fn profile_id(s: &str) -> bool {
+    (1..=9).contains(&s.len()) && s.bytes().all(|b| b.is_ascii_digit()) && !s.starts_with('0')
 }
 
 /// `POST /api/upload/{Logo|Watermark}`: obraz do pamięci obrazów legacy przez most; wynik = nazwa pliku.
@@ -1458,6 +1474,14 @@ mod tests {
         assert!(image_type_ok("image/webp", b"RIFF\0\0\0\0WEBPVP8 "));
         assert!(!image_type_ok("image/svg+xml", b"<svg"));
         assert!(!image_type_ok("text/html", b"<html"));
+    }
+
+    #[test]
+    fn profile_id_guards() {
+        assert!(profile_id("1") && profile_id("42") && profile_id("999999999"));
+        for bad in ["", "0", "01", "-1", "1/2", "../x", "1a", "1234567890"] {
+            assert!(!profile_id(bad), "{bad}");
+        }
     }
 
     #[test]

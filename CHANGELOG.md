@@ -2,6 +2,7 @@
 
 ## Niewydane
 
+- **Profile kodowania – „Klatkaż”:** stały klatkaż wyjściowy kanału (25, 50, 23,976, 29,97…), którego legacy nie pozwala wpisać – most nadpisuje wyliczenie legacy (`GetChannelFramerate`, najniższy klatkaż z ramówki) dla kanałów z tym profilem; silnik Next dopasowuje do niego każdy materiał. Do wyboru też „automatycznie” (jak legacy) i „jak materiał”. Wymaga mostu z tego wydania (obraz `vizrs-live-legacy`); starszy most – zostaje przełącznik legacy.
 - **Grafika kanału – „Kiedy strona wchodzi na antenę”:** przy każdej stronie VizRS kanału trzy źródła naraz – czas z Trio (⏱ kanał), reguły CG Playout z TAKE tej strony i element legacy z przypisaniami w harmonogramach, blokach i deco („Sprawdź przypisania w ramówce”); ostrzeżenie, gdy stronę wprowadza i reguła, i ramówka.
 - **Dziennik emisji:** grafika wprowadzona i zdjęta w Trio, makrem, karuzelą VizRS albo z Companion trafia do dziennika (operator „VizRS (poza panelem)”) – wymaga VizRS CG Playout z tego cyklu; starszy CG zapisuje tylko komendy z panelu.
 - **Kolekcje:** kolekcje audycji LIVE (`LIVE · …`) oznaczone pigułką „CG Playout” i tylko do odczytu – prowadzi je CG Playout razem z audycją; nazwa `LIVE · …` zarezerwowana.

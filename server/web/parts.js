@@ -24,6 +24,7 @@ import { h, btn, head, panel, cmdNote, table, toast, dialog, confirmDlg, cmd, ar
  *   below: (row, ctx) => węzeł | [węzły],            // pod listą i edytorem, na całą szerokość (np. edytor pozycji)
  *   beforeSave: (ctx) => void,                       // sprawdzenie przed zapisem; Error = komunikat, nic nie zapisuje
  *   afterSave: async (id, ctx) => void,              // po zapisie (np. zapis pozycji); Error = komunikat
+ *   afterDelete: async (row, ctx) => void,           // po usunięciu (np. sprzątanie ustawień poza legacy); Error = komunikat
  *   locked: (row, ctx) => węzeł | null,              // pozycja zarządzana gdzie indziej: uwaga zamiast „Zapisz”, „Usuń”, „Kopiuj”
  * }
  */
@@ -67,8 +68,10 @@ export function crudView(cfg) {
     const remove = async () => {
       const text = cfg.confirmDelete ? cfg.confirmDelete(current, ctx) : `Usunąć „${noun.one(current)}”? Tego nie da się cofnąć.`;
       if (!(await confirmDlg('Usuń', text, 'Usuń'))) return;
-      try { await cmd(c.delete, cfg.del(current)); sel = null; toast(`${noun.one(current)}: usunięto.`, 'ok'); route(true); }
-      catch (e) { toast('Legacy odrzucił usunięcie: ' + e.message, 'bad'); }
+      try { await cmd(c.delete, cfg.del(current)); sel = null; toast(`${noun.one(current)}: usunięto.`, 'ok'); }
+      catch (e) { return toast('Legacy odrzucił usunięcie: ' + e.message, 'bad'); }
+      try { if (cfg.afterDelete) await cfg.afterDelete(current, ctx); } catch (e) { toast(e.message, 'bad'); }
+      route(true);
     };
     const copy = async () => {
       const input = h('input', { id: 'copy-name', value: noun.one(current) + ' (kopia)' });

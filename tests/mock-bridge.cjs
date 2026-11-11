@@ -88,6 +88,8 @@ const res = [
   { Id: 3, Name: '720x576', Width: 720, Height: 576, IsCustom: false },
   { Id: 9, Name: '1024x576', Width: 1024, Height: 576, IsCustom: true },
 ];
+/** Klatkaż profili w moście (GET /framerates) – profil 2 ustawiony na 25. */
+const FRAME_RATES = { 2: '25' };
 const profile = (Id, Name, r, hw, extra = {}) => ({
   Id, Name, ThreadCount: 0, NormalizeAudio: true, NormalizeVideo: true, HardwareAcceleration: hw, VaapiDisplay: 'drm', VaapiDriver: 'Default', VaapiDevice: '',
   QsvExtraHardwareFrames: 64, Resolution: res[r], ScalingBehavior: 'ScaleAndPad', PadMode: 'Software', VideoFormat: 'H264', VideoProfile: 'high', VideoPreset: 'veryfast',
@@ -157,6 +159,7 @@ const H = {
   GetAllChannelsForSort: () => DB.channels.map((c) => ({ Id: c.Id, Number: c.Number, Name: c.Name, OriginalNumber: c.Number, HasChanged: false })),
   UpdateChannelNumbers: (a) => { for (const x of a.Channels || []) { const c = DB.channels.find((y) => y.Id === x.Id); if (c) c.Number = x.Number; } return null; },
   GetAllFFmpegProfiles: () => DB.profiles,
+  GetChannelFramerate: (a) => { const ch = DB.channels.find((c) => c.Number === a.ChannelNumber); const r = ch && FRAME_RATES[ch.FFmpegProfileId]; return r ? { FrameRateString: r, RFrameRate: r } : null; },
   NewFFmpegProfile: () => ({ ...profile(0, 'Nowy profil', 0, 'None'), Id: 0 }),
   GetAllResolutions: () => DB.resolutions,
   CreateCustomResolution: (a) => { DB.resolutions.push({ Id: Math.max(...DB.resolutions.map((r) => r.Id)) + 1, Name: `${a.Width}x${a.Height}`, Width: a.Width, Height: a.Height, IsCustom: true }); return null; },
@@ -251,6 +254,14 @@ http.createServer((req, res) => {
     if (p === '/commands') return reply(res, 200, { ok: true, result: META });
     if (p === '/sessions') return reply(res, 200, { ok: true, result: [{ ChannelNumber: '24', State: 'Running', TranscodedUntil: iso(now + 60e3), LastAccess: iso(now), StartedAt: iso(now - 3600e3) }] });
     if (p.startsWith('/session/')) return reply(res, 200, { ok: true, result: true });
+    if (p === '/framerates') return reply(res, 200, { ok: true, result: { active: true, problem: null, rates: FRAME_RATES } });
+    if (p.startsWith('/framerate/')) {
+      let rate = null;
+      try { rate = JSON.parse(body || '{}').rate ?? null; } catch { return reply(res, 400, { ok: false, error: 'zły JSON' }); }
+      const id = p.slice('/framerate/'.length);
+      if (rate == null) delete FRAME_RATES[id]; else FRAME_RATES[id] = rate;
+      return reply(res, 200, { ok: true, result: { active: true, problem: null, rates: FRAME_RATES } });
+    }
     if (p.startsWith('/command/')) {
       const name = p.slice('/command/'.length);
       if (!allowed.includes(name)) return reply(res, 403, { ok: false, error: `komenda '${name}' nie jest dozwolona (biała lista mostu)` });
