@@ -55,6 +55,11 @@ const STATIC: &[(&str, &str, &str)] = &[
         include_str!("../web/cmdedit.js"),
     ),
     (
+        "/clip.js",
+        "text/javascript; charset=utf-8",
+        include_str!("../web/clip.js"),
+    ),
+    (
         "/alarms.js",
         "text/javascript; charset=utf-8",
         include_str!("../web/alarms.js"),
@@ -745,6 +750,8 @@ fn route(app: &App, req: &Request) -> Response {
         ("GET", p) if p.starts_with("/api/stream/") => {
             stream_proxy(app, &p["/api/stream/".len()..])
         }
+        ("POST", p) if p.starts_with("/api/play/") => play(app, &p["/api/play/".len()..]),
+        ("GET", p) if p.starts_with("/api/artwork/") => artwork(app, &p["/api/artwork/".len()..]),
         ("GET", "/api/commands") => forward(app.bridge.get("/commands"), "commands"),
         ("GET", "/api/sessions") => forward(app.bridge.get("/sessions"), "sessions"),
         ("GET", "/api/framerates") => forward(app.bridge.get("/framerates"), "framerates"),
@@ -1001,7 +1008,103 @@ pub fn stream_path(rest: &str) -> Option<(String, &'static str)> {
         && name
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-');
-    (channel_number(ch) && name_ok).then(|| (format!("/iptv/session/{ch}/{file}"), ct))
+    // `.troubleshooting` – sesja testu odtwarzania legacy (odtwarzanie pozycji z Przeglądarki, `play`)
+    ((channel_number(ch) || ch == PLAY_SESSION) && name_ok)
+        .then(|| (format!("/iptv/session/{ch}/{file}"), ct))
+}
+
+/// Katalog sesji testu odtwarzania legacy (`/iptv/session/.troubleshooting/…`).
+const PLAY_SESSION: &str = ".troubleshooting";
+
+/// `{pozycja}/{profil}/{sekunda}` → test odtwarzania legacy (`/api/troubleshoot/playback.m3u8`): 30 s pozycji
+/// od `sekunda`, kodowane profilem; segmenter HLS (MPEG-TS), silnik legacy. Sekunda do 7 dni.
+pub fn play_path(rest: &str) -> Option<String> {
+    let [item, profile, seek] = rest.split('/').collect::<Vec<_>>()[..] else {
+        return None;
+    };
+    let seek_ok = (1..=6).contains(&seek.len())
+        && seek.bytes().all(|b| b.is_ascii_digit())
+        && seek.parse::<u32>().is_ok_and(|n| n <= 7 * 86_400);
+    (profile_id(item) && profile_id(profile) && seek_ok).then(|| {
+        format!("/api/troubleshoot/playback.m3u8?mediaItem={item}&ffmpegProfile={profile}&streamingMode=HttpLiveStreamingSegmenter&streamingEngine=Legacy&seekSeconds={seek}")
+    })
+}
+
+/// `POST /api/play/{pozycja}/{profil}/{sekunda}` – fragment pozycji do odtworzenia w panelu. Legacy czeka,
+/// aż powstaną pierwsze segmenty, i przekierowuje na playlistę sesji testowej; panel oddaje jej adres przez
+/// `/api/stream/` (ten sam pośrednik HLS co podgląd kanału). Jedna sesja testowa naraz w całym legacy.
+fn play(app: &App, rest: &str) -> Response {
+    let Some(path) = play_path(rest) else {
+        return Response::error(400, "zły adres odtwarzania (pozycja/profil/sekunda)");
+    };
+    match app.bridge.get_plain(&path) {
+        Ok(r) if r.status == 302 || r.status == 200 => Response::json(
+            200,
+            format!(
+                "{{\"ok\":true,\"result\":{{\"playlist\":\"/api/stream/session/{PLAY_SESSION}/live.m3u8\"}}}}"
+            ),
+        ),
+        Ok(r) if r.status == 404 => Response::error(
+            409,
+            "legacy nie uruchomił odtwarzania – trwa inny test odtwarzania (spróbuj za chwilę), pozycja nie ma pliku albo profil nie istnieje (Logi legacy)",
+        ),
+        Ok(r) if r.status == 401 || r.status == 403 => Response::error(
+            502,
+            "legacy wymaga logowania do web GUI – test odtwarzania (/api/troubleshoot) jest dla panelu niedostępny",
+        ),
+        Ok(r) if r.status == 500 => Response::error(
+            502,
+            "legacy: kodowanie fragmentu nie powiodło się – spróbuj innego profilu kodowania (np. bez akceleracji sprzętowej); szczegóły w Logach legacy",
+        ),
+        Ok(r) => Response::error(502, &format!("legacy: odpowiedź {} przy odtwarzaniu", r.status)),
+        Err(e) => Response::error(502, &e),
+    }
+}
+
+/// `{posters|thumbnails|fanart}/{plik hex}` albo `…/{jellyfin|emby|plex}/{id}` (pole `Poster` legacy) →
+/// obraz legacy `/artwork/…`. Panel podaje okładki sam: adres dla widzów (`--stream-url`) bywa
+/// `localhost`, niewidoczny z innego komputera albo telefonu.
+pub fn artwork_path(rest: &str) -> Option<String> {
+    let parts = rest.split('/').collect::<Vec<_>>();
+    let ok = match parts[..] {
+        [dir, file] => {
+            matches!(dir, "posters" | "thumbnails" | "fanart")
+                && (1..=64).contains(&file.len())
+                && file.bytes().all(|b| b.is_ascii_hexdigit())
+        }
+        [dir, src, id] => {
+            matches!(dir, "posters" | "thumbnails" | "fanart")
+                && matches!(src, "jellyfin" | "emby" | "plex")
+                && profile_id(id)
+        }
+        _ => false,
+    };
+    ok.then(|| format!("/artwork/{rest}"))
+}
+
+/// Typ obrazu po pierwszych bajtach (legacy podaje okładki Jellyfin/Emby/Plex w ich formacie).
+fn image_type(b: &[u8]) -> &'static str {
+    match b {
+        [0x89, b'P', b'N', b'G', ..] => "image/png",
+        [b'G', b'I', b'F', ..] => "image/gif",
+        [b'R', b'I', b'F', b'F', _, _, _, _, b'W', b'E', b'B', b'P', ..] => "image/webp",
+        _ => "image/jpeg",
+    }
+}
+
+fn artwork(app: &App, rest: &str) -> Response {
+    let Some(path) = artwork_path(rest) else {
+        return Response::error(404, "nieznany adres okładki");
+    };
+    match app.bridge.get_plain(&path) {
+        Ok(r) if r.status == 200 && !r.body.is_empty() => {
+            let ct = image_type(&r.body);
+            Response::new(200, ct, r.body)
+        }
+        Ok(r) if r.status == 404 => Response::error(404, "legacy nie ma tej okładki"),
+        Ok(r) => Response::error(502, &format!("legacy: odpowiedź {} dla okładki", r.status)),
+        Err(e) => Response::error(502, &e),
+    }
 }
 
 /// Adresy sesji w playliście legacy (`http://host:port/iptv/session/…`, legacy składa je z nagłówka
@@ -1479,6 +1582,59 @@ mod tests {
         assert!(image_type_ok("image/webp", b"RIFF\0\0\0\0WEBPVP8 "));
         assert!(!image_type_ok("image/svg+xml", b"<svg"));
         assert!(!image_type_ok("text/html", b"<html"));
+    }
+
+    #[test]
+    fn play_and_artwork_paths() {
+        assert_eq!(
+            play_path("42/1/90").as_deref(),
+            Some("/api/troubleshoot/playback.m3u8?mediaItem=42&ffmpegProfile=1&streamingMode=HttpLiveStreamingSegmenter&streamingEngine=Legacy&seekSeconds=90")
+        );
+        assert!(play_path("42/1/0").is_some());
+        for bad in [
+            "42/1",
+            "0/1/0",
+            "42/0/0",
+            "42/1/-5",
+            "42/1/604801",
+            "42/1/1/2",
+            "x/1/0",
+            "42/1/0&a=1",
+        ] {
+            assert!(play_path(bad).is_none(), "{bad}");
+        }
+        assert_eq!(
+            stream_path(".troubleshooting/x"),
+            None,
+            "sama nazwa katalogu bez session/ – nie"
+        );
+        assert_eq!(
+            stream_path("session/.troubleshooting/live000003.ts").map(|x| x.0),
+            Some("/iptv/session/.troubleshooting/live000003.ts".to_string())
+        );
+        assert!(stream_path("session/..troubleshooting/live.m3u8").is_none());
+        assert_eq!(
+            artwork_path("posters/jellyfin/5").as_deref(),
+            Some("/artwork/posters/jellyfin/5")
+        );
+        assert_eq!(
+            artwork_path("thumbnails/0a1b2c").as_deref(),
+            Some("/artwork/thumbnails/0a1b2c")
+        );
+        for bad in [
+            "posters/../x",
+            "logos/abc",
+            "posters/jellyfin/0",
+            "posters/kodi/5",
+            "posters/abc.jpg",
+            "posters/jellyfin/5/6",
+            "posters",
+        ] {
+            assert!(artwork_path(bad).is_none(), "{bad}");
+        }
+        assert_eq!(image_type(b"\x89PNG\r\n"), "image/png");
+        assert_eq!(image_type(b"RIFF1234WEBPVP8"), "image/webp");
+        assert_eq!(image_type(&[0xff, 0xd8, 0xff]), "image/jpeg");
     }
 
     #[test]

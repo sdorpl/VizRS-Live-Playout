@@ -507,6 +507,23 @@ function check(cond, msg) {
   await page.click('main tbody tr');
   await page.waitForSelector('#item-card');
   check(/H\.264/.test(await page.textContent('#item-card')), 'karta pozycji: strumień H.264');
+  // odtwarzanie pozycji w karcie: test odtwarzania legacy przez POST /api/play, HLS przez /api/stream/session/.troubleshooting/
+  check(await page.isVisible('#item-card [data-clip] button:has-text("Odtwórz")'), 'karta pozycji: sekcja „Odtwarzanie”');
+  const play = await page.evaluate(async () => {
+    const H = { 'X-VizRS-Live': '1', 'Content-Type': 'application/json' };
+    const id = Number(document.querySelector('#item-card dl.kv dd:last-of-type')?.textContent);
+    const prof = document.querySelector('#item-card [data-clip] select')?.value;
+    const r = await (await fetch(`/api/play/${id}/${prof}/0`, { method: 'POST', headers: H, body: '' })).json();
+    if (!r.ok) return { err: r.error };
+    const pl = await (await fetch(r.result.playlist, { cache: 'no-store' })).text();
+    const seg = pl.split('\n').find((l) => l && !l.startsWith('#'));
+    const ts = seg ? (await fetch(new URL(seg, location.origin + r.result.playlist).href)).status : 0;
+    const bad = (await fetch('/api/play/1/1/x', { method: 'POST', headers: H, body: '' })).status;
+    const noCsrf = (await fetch(`/api/play/${id}/${prof}/0`, { method: 'POST', body: '' })).status;
+    return { pl: pl.slice(0, 7), ts, bad, noCsrf };
+  });
+  check(play.pl === '#EXTM3U' && play.ts === 200 && play.bad === 400 && play.noCsrf === 403,
+    `odtwarzanie pozycji: playlista i segment z testu odtwarzania legacy, zły adres 400, bez X-VizRS-Live 403 (${JSON.stringify(play)})`);
   await page.click('#dlg-buttons button:has-text("Zamknij")');
   // M4: kafle (pamiętane), karta z kafla, „Zapisz jako kolekcję inteligentną” z zapytania
   await rerender(() => page.click('main .panel header button:has-text("Kafle")'));

@@ -7,6 +7,7 @@
 
 import { VIEWS, h, btn, head, panel, pill, cmd, pl, table, toast, dialog, confirmDlg, route, cmdNote, missing, missingNote, S, legacyUrl, has } from '../core.js';
 import { followTask } from '../tasks.js';
+import { clipSection, seconds } from '../clip.js';
 import { form } from '../form.js';
 import { crudView } from '../parts.js';
 
@@ -149,13 +150,13 @@ const VIEW_KEY = 'vizrs-live-media-view';
 const viewMode = (set) => {
   try { if (set) localStorage.setItem(VIEW_KEY, set); return localStorage.getItem(VIEW_KEY) || 'tabela'; } catch { return set || 'tabela'; }
 };
-/** Okładka legacy (/artwork/…, otwarte dla widzów przez proxy) – plakat filmu/serialu, miniatura pozostałych; bez obrazu null. */
-function poster(kind, c) {
-  if (!c.Poster) return null;
+/** Okładka legacy przez serwer panelu (/api/artwork/… → /artwork/…; adres dla widzów bywa „localhost”) –
+ * plakat filmu/serialu/sezonu, miniatura pozostałych; bez obrazu null. */
+function poster(kind, c, cls) {
+  if (!c?.Poster) return null;
   const dir = ['Movies', 'Shows', 'Seasons'].includes(kind) ? 'posters' : 'thumbnails';
-  const src = legacyUrl(`artwork/${dir}/${c.Poster}`);
-  if (!src) return null;
-  const img = h('img', { src, alt: '', loading: 'lazy' });
+  const src = `/api/artwork/${dir}/${String(c.Poster).split('/').map(encodeURIComponent).join('/')}`;
+  const img = h('img', { src, alt: '', loading: 'lazy', class: cls });
   img.addEventListener('error', () => img.remove());
   return img;
 }
@@ -237,6 +238,7 @@ function imageFoldersPanel() {
 // Serial, sezon i artysta to pozycje zbiorcze bez pliku: GetMediaItemInfo legacy rzuca dla nich wyjątek
 // (MediaItemExtensions.GetHeadVersion – brak wersji pliku). Ich karta pokazuje zawartość z indeksu wyszukiwania.
 const GROUP_KINDS = ['Shows', 'Seasons', 'Artists'];
+const PLAY_CMDS = ['GetAllFFmpegProfiles'];
 const ALL = 1000;
 const epLabel = (e) => `S${String(e.Season ?? 0).padStart(2, '0')}E${String(e.Episode ?? 0).padStart(2, '0')}`;
 const quoted = (s) => `"${String(s).replace(/["\\]/g, ' ')}"`;
@@ -245,7 +247,8 @@ const quoted = (s) => `"${String(s).replace(/["\\]/g, ' ')}"`;
 async function groupCard(id, title, kind, card, back) {
   const kv = (rows) => h('dl', { class: 'kv' }, rows.filter((r) => r[1] != null && r[1] !== '').flatMap(([k, v]) => [h('dt', null, k), h('dd', null, String(v))]));
   const buttons = [...(back ? [['‹ Wróć', 'back']] : []), ['Zamknij', true, 'acc']];
-  const open = async (body) => { if ((await dialog(title, h('div', { class: 'card', id: 'item-card' }, body), buttons)) === 'back') back(); };
+  const art = poster(kind === 'Artists' ? 'Shows' : kind, card, 'card-poster');
+  const open = async (body) => { if ((await dialog(title, h('div', { class: 'card', id: 'item-card' }, art ? h('div', { class: 'card-head' }, art, h('div', null, body[0])) : body[0], body.slice(1)), buttons)) === 'back') back(); };
   if (kind === 'Artists') {
     return open([kv([['Rodzaj', 'artysta'], ['Id', id]]), h('p', { class: 'dim pad' }, 'Artysta grupuje utwory i teledyski – znajdziesz je w zakładkach „Utwory” i „Teledyski” (szukaj po tytule).')]);
   }
@@ -266,11 +269,11 @@ async function groupCard(id, title, kind, card, back) {
   const self = () => groupCard(id, title, kind, card, back);
   const epTable = table(eps, [[(e) => h('span', { class: 'mono' }, epLabel(e)), 'Odcinek'], ['Title', 'Tytuł', { class: 'w' }], [(e) => statePill(e.State), 'Stan'],
     [(e) => h('span', { class: 'mono dim' }, (e.Path || '').split('/').pop()), 'Plik', { class: 'w' }]],
-  { onRow: (e) => itemCard(e.MediaItemId, `${showTitle} · ${epLabel(e)} ${e.Title || ''}`.trim(), 'Episodes', e, self), empty: 'Brak odcinków w indeksie legacy – zeskanuj bibliotekę.' });
+  { onRow: (e) => itemCard(e.MediaItemId, `${showTitle} · ${epLabel(e)} ${e.Title || ''}`.trim(), 'Episodes', { ...e, ShowPoster: card?.Poster || card?.ShowPoster }, self), empty: 'Brak odcinków w indeksie legacy – zeskanuj bibliotekę.' });
   const per = (sid) => eps.filter((e) => e.SeasonId === sid).length;
   const seasonTable = kind === 'Shows' && seasons.length ? [h('h3', null, 'Sezony'), table(seasons, [
     [(x) => `Sezon ${x.TelevisionSeasonNumber ?? '?'}`, 'Sezon'], [(x) => per(x.TelevisionSeasonId), 'Odcinki', { class: 'num' }], ['TelevisionSeasonId', 'Id', { class: 'num' }]],
-  { onRow: (x) => groupCard(x.TelevisionSeasonId, `${showTitle} · sezon ${x.TelevisionSeasonNumber ?? '?'}`, 'Seasons', x, self) })] : null;
+  { onRow: (x) => groupCard(x.TelevisionSeasonId, `${showTitle} · sezon ${x.TelevisionSeasonNumber ?? '?'}`, 'Seasons', { ...x, Poster: x.Poster || card?.Poster }, self) })] : null;
   return open([
     kv([['Rodzaj', kind === 'Shows' ? 'serial' : 'sezon'], kind === 'Seasons' ? ['Serial', showTitle] : null, kind === 'Shows' ? ['Sezony', seasons.length] : null,
       ['Odcinki', eps.length], ['Id', id]].filter(Boolean)),
@@ -289,12 +292,23 @@ export async function itemCard(id, title, kind, card, back) {
     [(s) => (s.Codec || '').toUpperCase() === 'H264' ? 'H.264' : s.Codec, 'Kodek'], ['Profile', 'Profil'], ['Language', 'Język'], ['Channels', 'Kanały', { class: 'num' }],
     [(s) => [s.Default ? 'domyślny' : '', s.Forced ? 'wymuszony' : ''].filter(Boolean).join(', '), 'Flagi']], { empty: 'Brak strumieni – legacy jeszcze nie przeanalizował pliku.' });
   const chapters = info.Chapters?.length ? table(info.Chapters, [['ChapterId', '#', { class: 'num' }], ['StartTime', 'Od'], ['EndTime', 'Do'], ['Title', 'Tytuł']]) : null;
-  await dialog(info.Title || title, h('div', { class: 'card', id: 'item-card' },
-    kv([['Rodzaj', info.Kind], ['Biblioteka', info.LibraryName], ['Stan', statePill(info.State) || 'OK'], ['Czas', info.Duration],
-      ['Obraz', info.Width ? `${info.Width}×${info.Height}, ${info.DisplayAspectRatio || ''} ${info.VideoScanKind === 'Interlaced' ? 'z przeplotem' : ''}`.trim() : null],
-      ['Klatki', info.RFrameRate], ['Id', info.Id]]),
-    h('h3', null, 'Strumienie'), streams, chapters ? [h('h3', null, 'Rozdziały'), chapters] : null, cmdNote('GetMediaItemInfo')),
-  [...(back ? [['‹ Wróć', 'back']] : []), ['Zamknij', true, 'acc']]).then((v) => { if (v === 'back') back(); });
+  // odtwarzanie w karcie: test odtwarzania legacy po 30 s (clip.js); obrazy – bez
+  let clip = null;
+  if (kind !== 'Images' && PLAY_CMDS.every(has)) {
+    const profiles = await cmd('GetAllFFmpegProfiles').catch(() => []);
+    clip = profiles.length ? clipSection(id, seconds(info.Duration), profiles) : null;
+  }
+  const art = poster(kind, card, 'card-poster') || (card?.ShowPoster ? poster('Shows', { Poster: card.ShowPoster }, 'card-poster') : null);
+  const facts = kv([['Rodzaj', info.Kind], ['Biblioteka', info.LibraryName], ['Stan', statePill(info.State) || 'OK'], ['Czas', info.Duration],
+    ['Obraz', info.Width ? `${info.Width}×${info.Height}, ${info.DisplayAspectRatio || ''} ${info.VideoScanKind === 'Interlaced' ? 'z przeplotem' : ''}`.trim() : null],
+    ['Klatki', info.RFrameRate], ['Id', info.Id]]);
+  const v = await dialog(info.Title || title, h('div', { class: 'card', id: 'item-card' },
+    art ? h('div', { class: 'card-head' }, art, facts) : facts,
+    clip ? [h('h3', null, 'Odtwarzanie'), clip.el] : null,
+    h('h3', null, 'Strumienie'), streams, chapters ? [h('h3', null, 'Rozdziały'), chapters] : null, cmdNote('GetMediaItemInfo', ...(clip ? ['legacy /api/troubleshoot/playback'] : []))),
+  [...(back ? [['‹ Wróć', 'back']] : []), ['Zamknij', true, 'acc']]);
+  clip?.stop();
+  if (v === 'back') back();
 }
 
 async function search(kind, q, page) {
@@ -349,7 +363,7 @@ VIEWS.przegladarka = async () => {
       tile.addEventListener('keydown', (e) => { if (e.key === 'Enter') open(e); });
       return tile;
     })) : h('div', { class: 'empty' }, empty))
-    : table(rows, [...(canAdd ? [pickCol] : []), ['Title', 'Tytuł', { class: 'w' }], ['Subtitle', 'Opis / plik'], [(c) => statePill(c.State), 'Stan'], ['MediaItemId', 'Id', { class: 'num' }]],
+    : table(rows, [...(canAdd ? [pickCol] : []), ...(['Movies', 'Shows', 'Seasons'].includes(B.tab) ? [[(c) => poster(B.tab, c, 'row-poster') || h('span', { class: 'row-poster none' }), '']] : []), ['Title', 'Tytuł', { class: 'w' }], ['Subtitle', 'Opis / plik'], [(c) => statePill(c.State), 'Stan'], ['MediaItemId', 'Id', { class: 'num' }]],
       { onRow: (c) => itemCard(c.MediaItemId, c.Title, B.tab, c), empty });
   const modeBtn = (m, t) => { const b = btn(t, () => { viewMode(m); route(true); }); b.classList.toggle('on', m === mode); b.setAttribute('aria-pressed', String(m === mode)); return b; };
   const pager = pages > 1 ? h('div', { class: 'bar pad pager' },

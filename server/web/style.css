@@ -535,6 +535,19 @@ dl.kv dd { flex-wrap: wrap; }
 [data-rules] .form input[type=number] { width: 11em; }
 @media (max-width: 560px) { .ce-field { grid-template-columns: 1fr auto; } .ce-field > .dim { display: none; } .ce-fields { padding-left: 0; } .ce-prev { max-width: 100%; text-align: left; } }
 
+/* Przeglądarka: okładki (przez /api/artwork/…) i odtwarzanie pozycji w karcie (clip.js) */
+.card-head { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 16px; align-items: start; }
+.card-head dl.kv { padding-top: 0; }
+img.card-poster { width: 150px; max-height: 225px; object-fit: cover; border-radius: var(--r-sm); border: 1px solid var(--line); box-shadow: 0 8px 24px rgba(0, 0, 0, .4); background: var(--panel2); display: block; }
+img.row-poster, .row-poster.none { width: 30px; height: 44px; object-fit: cover; border-radius: 3px; display: block; background: var(--panel2); border: 1px solid var(--line); }
+td:has(> .row-poster) { padding-top: 4px; padding-bottom: 4px; width: 1%; }
+.clip { display: grid; gap: 8px; }
+.clip-video { width: 100%; aspect-ratio: 16 / 9; background: #000; border-radius: var(--r-sm); border: 1px solid var(--line); display: block; }
+.clip .clip-from { width: 7em; }
+.clip select { width: auto; max-width: 220px; }
+.clip .hint { color: var(--dim); font-size: 12px; }
+@media (max-width: 560px) { .card-head { grid-template-columns: 1fr; } img.card-poster { width: 120px; } }
+
 /* banner alarmów (K17) między paskiem górnym a menu – osobny wiersz siatki, zwinięty, gdy ukryty */
 .app { grid-template-rows: auto auto 1fr; }
 .app > .topbar { grid-row: 1; }
