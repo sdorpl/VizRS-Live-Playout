@@ -21,9 +21,10 @@ function check(cond, msg) {
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
   const errors = [];
+  let expectFail = false; // testy negatywne API z poziomu strony: zamierzone 4xx nie są błędami
   page.on('pageerror', (e) => errors.push(e.message));
-  page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
-  page.on('response', (r) => r.status() >= 400 && errors.push(`${r.status()} ${r.request().method()} ${r.url()}`));
+  page.on('console', (m) => m.type() === 'error' && !(expectFail && /Failed to load resource/.test(m.text())) && errors.push(m.text()));
+  page.on('response', (r) => r.status() >= 400 && !expectFail && errors.push(`${r.status()} ${r.request().method()} ${r.url()}`));
 
 
   // ---------- R9: atrapa VizRS CG Playout (127.0.0.1:18700, panel uruchomiony z --cg-url przez tests/stack.sh) ----------
@@ -515,7 +516,9 @@ function check(cond, msg) {
   await page.waitForSelector('#item-card');
   check(/H\.264/.test(await page.textContent('#item-card')), 'karta pozycji: strumień H.264');
   // odtwarzanie pozycji w karcie: test odtwarzania legacy przez POST /api/play, HLS przez /api/stream/session/.troubleshooting/
-  check(await page.isVisible('#item-card [data-clip] button:has-text("Odtwórz")'), 'karta pozycji: sekcja „Odtwarzanie”');
+  // plik, który przeglądarka zagra sama, startuje w odtwarzaczu wprost (sekcja legacy [data-clip] ukryta pod „Przez legacy”)
+  check(await page.locator('#item-card button:has-text("Odtwórz")').first().isVisible(), 'karta pozycji: sekcja „Odtwarzanie”');
+  expectFail = true;
   const play = await page.evaluate(async () => {
     const H = { 'X-VizRS-Live': '1', 'Content-Type': 'application/json' };
     const id = Number(document.querySelector('#item-card dl.kv dd:last-of-type')?.textContent);
@@ -535,6 +538,8 @@ function check(cond, msg) {
     return [await open({ source: 'local', title: 'x', path: '/etc/passwd' }), await open({ source: 'local', title: 'x', path: '../../etc/passwd' }),
       await open({ source: 'kodi', path: 'x' }), (await fetch('/api/vod/zzz')).status];
   });
+  await page.waitForTimeout(200); // ostatnie zdarzenia konsoli z testów negatywnych
+  expectFail = false;
   check(JSON.stringify(vod) === '[404,404,400,404]', `odtwarzanie wprost: tylko pliki bibliotek, znane źródła i identyfikatory (${vod})`);
   check(play.pl === '#EXTM3U' && play.ts === 200 && play.bad === 400 && play.noCsrf === 403,
     `odtwarzanie pozycji: playlista i segment z testu odtwarzania legacy, zły adres 400, bez X-VizRS-Live 403 (${JSON.stringify(play)})`);
@@ -1638,7 +1643,11 @@ function check(cond, msg) {
       return { t: v.currentTime, w: v.videoWidth, h: v.videoHeight, dropped: v.getVideoPlaybackQuality().droppedVideoFrames, info: document.querySelector('#mon-info').textContent };
     });
     check(st.t - t1 > 4 && st.w === 1920 && st.h === 1080, `podgląd: gra dalej po zmianie ekranu, przez granice segmentów (${(st.t - t1).toFixed(1)} s, ${st.w}×${st.h}, zgubione klatki: ${st.dropped})`);
-    check(/zgodnie z zegarem anteny|opóźnienie 0\.\d s/.test(st.info) && /H\.264 · AAC/.test(st.info), `podgląd: obraz równo z zegarem anteny, H.264 i AAC (${st.info})`);
+    // po zmianie stałego opóźnienia (najgorsze spóźnienie segmentu + zapas) odtwarzacz wyrównuje się tempem albo skokiem
+    const sync = /równo z zegarem anteny|(opóźnienie|wyprzedzenie) 0\.\d s/;
+    await page.waitForFunction((src) => new RegExp(src).test(document.querySelector('#mon-info').textContent), sync.source, { timeout: 20000 }).catch(() => {});
+    const info = await page.textContent('#mon-info');
+    check(sync.test(info) && /H\.264 · AAC/.test(info), `podgląd: obraz równo z zegarem anteny, H.264 i AAC (${info})`);
     await shot('podglad');
     await page.click('#mon-close');
     check(await page.evaluate(() => document.querySelector('#monitor').hidden && !document.querySelector('#mon-video').getAttribute('src')), 'podgląd: zamknięcie odłącza strumień');
