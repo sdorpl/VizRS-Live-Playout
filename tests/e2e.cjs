@@ -96,6 +96,15 @@ function check(cond, msg) {
         return send(200, { listeners: CG.inputs || [{ channel: '24', url: 'rtmp://0.0.0.0:1936/live/studio-klucz' }], from: CG.inputs ? 'panel' : 'env', store: true, ingest: true, ports: { rtmp: [1936, 1943], srt: [9000, 9007] } });
       }
       if (u === '/api/live/inputs' && q.method === 'PUT') { CG.inputs = body.listeners; return send(200, { listeners: CG.inputs, from: 'panel' }); }
+      // koder nakładki (CG Playout GET/PUT /api/live/encoder): .env sidecara = veryfast, bez opcji x264
+      if (u === '/api/live/encoder') {
+        if (q.method === 'PUT') CG.encoder = { preset: body.preset || '', x264_params: body.x264_params || '' };
+        const set = CG.encoder || { preset: '', x264_params: '' }, env = { preset: 'veryfast', x264_params: '' };
+        const pick = (k) => set[k] || env[k];
+        const from = (k) => (set[k] ? 'panel' : env[k] ? 'env' : 'default');
+        return send(200, { set, env, used: { preset: pick('preset'), x264_params: pick('x264_params') }, from: { preset: from('preset'), x264_params: from('x264_params') },
+          store: true, presets: ['ultrafast', 'superfast', 'veryfast', 'faster', 'fast', 'medium', 'slow', 'slower', 'veryslow', 'placebo'], x264_keys: ['bframes', 'subme'] });
+      }
       if ((u === '/api/live/graphics/off' || u === '/api/live/graphics/on') && q.method === 'POST') {
         CG.graphicsOff = u.endsWith('/off');
         return send(200, { library: null, store: true, graphics_off: CG.graphicsOff });
@@ -522,6 +531,13 @@ function check(cond, msg) {
     const noCsrf = (await fetch(`/api/play/${id}/${prof}/0`, { method: 'POST', body: '' })).status;
     return { pl: pl.slice(0, 7), ts, bad, noCsrf };
   });
+  const vod = await page.evaluate(async () => {
+    const H = { 'X-VizRS-Live': '1', 'Content-Type': 'application/json' };
+    const open = (b) => fetch('/api/vod/open', { method: 'POST', headers: H, body: JSON.stringify(b) }).then((r) => r.status);
+    return [await open({ source: 'local', title: 'x', path: '/etc/passwd' }), await open({ source: 'local', title: 'x', path: '../../etc/passwd' }),
+      await open({ source: 'kodi', path: 'x' }), (await fetch('/api/vod/zzz')).status];
+  });
+  check(JSON.stringify(vod) === '[404,404,400,404]', `odtwarzanie wprost: tylko pliki bibliotek, znane źródła i identyfikatory (${vod})`);
   check(play.pl === '#EXTM3U' && play.ts === 200 && play.bad === 400 && play.noCsrf === 403,
     `odtwarzanie pozycji: playlista i segment z testu odtwarzania legacy, zły adres 400, bez X-VizRS-Live 403 (${JSON.stringify(play)})`);
   await page.click('#dlg-buttons button:has-text("Zamknij")');
@@ -563,6 +579,15 @@ function check(cond, msg) {
   const profName = 'E2E 720p ' + tag;
   await page.goto(`${BASE}/#profile`);
   await page.waitForSelector('main[data-view="profile"]');
+  // koder nakładki CG: stan z .env, zapis presetu i zmierzonych opcji x264 przez pośrednika
+  check(/veryfast \(z \.env\)/.test(await page.textContent('main')), 'koder CG: preset w użyciu z .env');
+  await page.selectOption('#enc-preset', 'superfast');
+  await page.selectOption('#enc-x264', 'bframes=0:subme=0');
+  await rerender(() => page.click('button:has-text("Zapisz koder")'));
+  check(CG.encoder && CG.encoder.preset === 'superfast' && CG.encoder.x264_params === 'bframes=0:subme=0', `koder CG: PUT /api/live/encoder (${JSON.stringify(CG.encoder)})`);
+  check(/superfast \(ustawione w panelu\)/.test(await page.textContent('main')) && /bframes=0:subme=0 \(ustawione w panelu\)/.test(await page.textContent('main')), 'koder CG: po zapisie wartości z panelu');
+  await page.selectOption('#enc-x264', 'custom');
+  check(await page.isVisible('#enc-x264-custom'), 'koder CG: pole własnych opcji po wyborze „własne…”');
   await rerender(() => page.click('text=+ Nowy profil'));
   await page.fill('#f-Name', profName);
   await page.selectOption('#f-ResolutionId', { label: '1280x720' });

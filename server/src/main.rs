@@ -5,6 +5,8 @@
 
 mod bridge;
 mod http;
+mod json;
+mod vod;
 
 use std::net::{IpAddr, TcpListener, TcpStream};
 use std::path::PathBuf;
@@ -751,6 +753,10 @@ fn route(app: &App, req: &Request) -> Response {
             stream_proxy(app, &p["/api/stream/".len()..])
         }
         ("POST", p) if p.starts_with("/api/play/") => play(app, &p["/api/play/".len()..]),
+        ("POST", "/api/vod/open") => vod::open(&app.bridge, &req.body),
+        ("GET", p) if p.starts_with("/api/vod/") => {
+            vod::serve(&app.bridge, &p["/api/vod/".len()..], req)
+        }
         ("GET", p) if p.starts_with("/api/artwork/") => artwork(app, &p["/api/artwork/".len()..]),
         ("GET", "/api/commands") => forward(app.bridge.get("/commands"), "commands"),
         ("GET", "/api/sessions") => forward(app.bridge.get("/sessions"), "sessions"),
@@ -1196,6 +1202,8 @@ pub fn cg_path(method: &str, rest: &str) -> Option<String> {
         ("POST", ["live", "graphics", a @ ("off" | "on")]) => format!("/api/live/graphics/{a}"),
         ("PUT", ["live", "settings"]) => "/api/live/settings".into(),
         ("GET" | "PUT", ["live", "inputs"]) => "/api/live/inputs".into(),
+        // koder programowy nakładki ffmpeg (preset, opcje x264) – encoder.json CG Playout
+        ("GET" | "PUT", ["live", "encoder"]) => "/api/live/encoder".into(),
         ("GET", ["live", "shows"]) | ("POST", ["live", "shows"]) => "/api/live/shows".into(),
         ("POST", ["live", "shows", "scan"]) => "/api/live/shows/scan".into(),
         ("PUT" | "DELETE", ["live", "shows", id]) => format!("/api/live/shows/{id}"),
@@ -1828,6 +1836,16 @@ mod tests {
             Some("/api/live/inputs")
         );
         assert_eq!(cg_path("DELETE", "live/inputs"), None);
+        assert_eq!(
+            cg_path("PUT", "live/encoder").as_deref(),
+            Some("/api/live/encoder")
+        );
+        assert_eq!(
+            cg_path("GET", "live/encoder").as_deref(),
+            Some("/api/live/encoder")
+        );
+        assert_eq!(cg_path("DELETE", "live/encoder"), None);
+        assert_eq!(cg_path("PUT", "live/encoder/x"), None);
         assert_eq!(operator_name(None), "VizRS Live");
         assert_eq!(operator_name(Some("  ")), "VizRS Live");
         assert_eq!(

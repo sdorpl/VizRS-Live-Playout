@@ -206,3 +206,84 @@ export function clipSection(item, duration, profiles) {
       (duration ? `Długość: ${clock(duration)}.` : '')));
   return { el, stop: () => player.stop() };
 }
+
+// ---------- odtwarzanie bez legacy i bez transkodowania (/api/vod/…) ----------
+const VIDEO_OK = { h264: 'avc1.640028', vp8: 'vp8', vp9: 'vp09.00.10.08', av1: 'av01.0.05M.08', hevc: 'hvc1.1.6.L93.B0' };
+const AUDIO_OK = { aac: 'mp4a.40.2', mp3: 'mp3', opus: 'opus', vorbis: 'vorbis', flac: 'flac', ac3: 'ac-3', eac3: 'ec-3' };
+
+/** Czy przeglądarka zagra plik sama: kodek obrazu i dźwięku z GetMediaItemInfo. Zwraca {ok, why}. */
+export function directSupport(streams, path) {
+  const v = document.createElement('video');
+  const can = (t) => !!v.canPlayType(t) || !!(window.MediaSource && MediaSource.isTypeSupported(t));
+  const ext = String(path || '').toLowerCase().split('.').pop();
+  const box = ext === 'webm' || ext === 'mkv' ? 'video/webm' : 'video/mp4';
+  const vs = (streams || []).find((s) => s.Kind === 'Video');
+  const as = (streams || []).find((s) => s.Kind === 'Audio');
+  const vc = String(vs?.Codec || '').toLowerCase().replace('h265', 'hevc');
+  const ac = String(as?.Codec || '').toLowerCase();
+  if (['avi', 'ts', 'm2ts', 'mpg', 'mpeg', 'wmv', 'flv'].includes(ext)) return { ok: false, why: `kontener .${ext} – przeglądarka go nie odtworzy` };
+  if (vs && !(VIDEO_OK[vc] && can(`${box}; codecs="${VIDEO_OK[vc]}"`))) return { ok: false, why: `obraz ${vc || '?'} – przeglądarka go nie dekoduje` };
+  if (as && !(AUDIO_OK[ac] && can(`${box}; codecs="${AUDIO_OK[ac]}"`))) return { ok: true, why: `dźwięk ${ac} – przeglądarka może go nie odtworzyć (obraz bez dźwięku)` };
+  return { ok: true, why: '' };
+}
+
+/**
+ * Sekcja „Odtwarzanie” karty pozycji. direct – {source: 'jellyfin'|'local', title, path} albo null (tylko przez legacy);
+ * plik gra przeglądarka sama (/api/vod/…, bez legacy i transkodowania), a gdy nie umie – przełącza na test odtwarzania legacy.
+ * Zwraca { el, stop }.
+ */
+export function playSection(item, duration, profiles, direct, streams) {
+  const legacy = profiles.length ? clipSection(item, duration, profiles) : null;
+  if (!direct) return legacy;
+  const sup = directSupport(streams, direct.path);
+  const video = h('video', { class: 'clip-video', controls: true, playsinline: true, preload: 'metadata', hidden: true });
+  const state = h('span', { class: 'pill' }, 'gotowe');
+  const info = h('span', { class: 'dim' }, sup.why);
+  const from = h('input', { class: 'mono clip-from', value: '0:00', 'aria-label': 'Odtwarzaj od (g:mm:ss)', title: 'Od którego miejsca: 1:23:45, 12:30 albo sekundy' });
+  const set = (text, kind) => { state.textContent = { '': 'ŁADUJĘ', on: 'GRA', bad: 'BŁĄD', none: 'PAUZA' }[kind] ?? kind; state.className = 'pill' + (kind ? ' ' + kind : ''); info.textContent = text; };
+  let url = null;
+  const directBox = h('div', { class: 'clip', 'data-vod': '' });
+  const legacyBox = h('div', { hidden: true }, legacy?.el || h('div', { class: 'dim' }, 'Brak profilu kodowania – podgląd przez legacy niedostępny.'));
+  const toLegacy = (why) => {
+    video.pause(); video.removeAttribute('src'); video.load();
+    directBox.hidden = true; legacyBox.hidden = false;
+    if (why) legacyBox.prepend(h('div', { class: 'note' }, why));
+  };
+  const go = async (s) => {
+    const t = s ?? parseClock(from.value);
+    if (t == null) return set('Podaj czas jako g:mm:ss, m:ss albo sekundy.', 'bad');
+    from.value = clock(t);
+    try {
+      if (!url) {
+        set(direct.source === 'jellyfin' ? 'Szukam pozycji w Jellyfin…' : 'Otwieram plik…', '');
+        url = (await api('/api/vod/open', { method: 'POST', body: JSON.stringify(direct) })).result.url;
+        video.src = url;
+      }
+      video.hidden = false;
+      const seek = () => { video.currentTime = Math.min(t, (video.duration || duration || t + 1) - 0.5); video.play().catch(() => {}); };
+      if (video.readyState >= 1) seek(); else video.addEventListener('loadedmetadata', seek, { once: true });
+    } catch (e) { set(e.message, 'bad'); }
+  };
+  video.addEventListener('playing', () => set(`plik prosto z ${direct.source === 'jellyfin' ? 'Jellyfin' : 'biblioteki'} – bez transkodowania${sup.why ? ' · ' + sup.why : ''}`, 'on'));
+  video.addEventListener('pause', () => { if (!video.ended && url) set(`pauza · ${clock(video.currentTime)}`, 'none'); });
+  video.addEventListener('waiting', () => set('buforuję…', ''));
+  video.addEventListener('error', () => {
+    const code = video.error?.code;
+    if (!url) return;
+    toLegacy(code === 4 || code === 3 ? 'Przeglądarka nie odtworzy tego pliku wprost (kodek albo kontener) – podgląd przez legacy z transkodowaniem.' : 'Plik nie dotarł (' + (video.error?.message || 'błąd sieci') + ') – podgląd przez legacy.');
+  });
+  from.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+  const here = () => (video.hidden ? parseClock(from.value) ?? 0 : video.currentTime);
+  directBox.append(video,
+    h('div', { class: 'bar' },
+      btn('▶ Odtwórz', () => go(), 'acc'), h('label', null, 'od'), from,
+      btn('‹ 30 s', () => go(Math.max(0, here() - CLIP))), btn('30 s ›', () => go(here() + CLIP)),
+      h('span', { class: 'grow' }),
+      legacy ? btn('Przez legacy (transkodowanie)', () => toLegacy('')) : null),
+    h('div', { class: 'bar' }, state, info),
+    h('div', { class: 'hint' }, `Plik idzie prosto ${direct.source === 'jellyfin' ? 'z Jellyfin' : 'z biblioteki lokalnej'} przez serwer panelu, bez legacy i bez transkodowania – pełne przewijanie paskiem odtwarzacza.` + (duration ? ` Długość: ${clock(duration)}.` : '')));
+  if (!sup.ok) { toLegacy(`Odtwarzanie wprost niemożliwe: ${sup.why}. Podgląd przez legacy z transkodowaniem.`); }
+  const el = h('div', null, directBox, legacyBox);
+  if (legacy) legacyBox.querySelector('[data-clip]')?.append(h('div', { class: 'bar' }, btn('‹ Wprost z pliku', () => { legacy.stop(); legacyBox.hidden = true; directBox.hidden = false; })));
+  return { el, stop: () => { video.pause(); video.removeAttribute('src'); video.load(); legacy?.stop(); } };
+}

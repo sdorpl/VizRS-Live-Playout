@@ -50,6 +50,77 @@ pub struct Bridge {
 pub struct Reply {
     pub status: u16,
     pub body: Vec<u8>,
+    /// nagłówki odpowiedzi (nazwa małymi literami, wartość)
+    pub headers: Vec<(String, String)>,
+}
+
+impl Reply {
+    pub fn header(&self, name: &str) -> Option<&str> {
+        self.headers
+            .iter()
+            .find(|(k, _)| k == name)
+            .map(|(_, v)| v.as_str())
+    }
+}
+
+/// `GET` pod dowolny adres `http://` (Jellyfin – odtwarzanie bez legacy, `vod`): `path` z zapytaniem,
+/// `extra` – wiersze nagłówka zakończone `\r\n`; treść najwyżej `limit` bajtów (więcej = ucięte).
+pub fn fetch(target: &Target, path: &str, extra: &str, limit: u64) -> Result<Reply, String> {
+    send(
+        target,
+        "GET",
+        &format!("{}{path}", target.base),
+        b"",
+        extra,
+        limit,
+        "serwer mediów",
+        false,
+    )
+}
+
+/// Jedno żądanie HTTP/1.1 (bez TLS, `Connection: close`).
+#[allow(clippy::too_many_arguments)]
+fn send(
+    t: &Target,
+    method: &str,
+    full_path: &str,
+    body: &[u8],
+    extra: &str,
+    limit: u64,
+    who: &str,
+    strict: bool,
+) -> Result<Reply, String> {
+    let addr = (t.host.as_str(), t.port)
+        .to_socket_addrs()
+        .map_err(|e| format!("{who} {}:{} nieosiągalny: {e}", t.host, t.port))?
+        .next()
+        .ok_or_else(|| format!("{who} {}: brak adresu", t.host))?;
+    let mut s = TcpStream::connect_timeout(&addr, Duration::from_secs(3))
+        .map_err(|e| format!("{who} {}:{} nie odpowiada: {e}", t.host, t.port))?;
+    let _ = s.set_read_timeout(Some(Duration::from_secs(60)));
+    let _ = s.set_write_timeout(Some(Duration::from_secs(10)));
+    let host = if t.port == 80 {
+        t.host.clone()
+    } else {
+        format!("{}:{}", t.host, t.port)
+    };
+    let head = format!(
+        "{method} {full_path} HTTP/1.1\r\nHost: {host}\r\n{extra}Content-Length: {}\r\nConnection: close\r\nUser-Agent: vizrs-live/{}\r\n\r\n",
+        body.len(),
+        env!("CARGO_PKG_VERSION")
+    );
+    s.write_all(head.as_bytes())
+        .and_then(|_| s.write_all(body))
+        .map_err(|e| format!("{who}: zapis: {e}"))?;
+    let mut raw = Vec::new();
+    s.take(limit + 64 * 1024)
+        .read_to_end(&mut raw)
+        .map_err(|e| format!("{who}: odczyt: {e}"))?;
+    if strict {
+        parse_reply(&raw)
+    } else {
+        parse_reply_lenient(&raw)
+    }
 }
 
 impl Bridge {
@@ -119,36 +190,22 @@ impl Bridge {
         extra: &str,
     ) -> Result<Reply, String> {
         let t = &self.target;
-        let addr = (t.host.as_str(), t.port)
-            .to_socket_addrs()
-            .map_err(|e| format!("most {}:{} nieosiągalny: {e}", t.host, t.port))?
-            .next()
-            .ok_or_else(|| format!("most {}: brak adresu", t.host))?;
-        let mut s = TcpStream::connect_timeout(&addr, Duration::from_secs(3))
-            .map_err(|e| format!("most {}:{} nie odpowiada: {e}", t.host, t.port))?;
-        let _ = s.set_read_timeout(Some(Duration::from_secs(60)));
-        let _ = s.set_write_timeout(Some(Duration::from_secs(10)));
-        let head = format!(
-            "{method} {}{prefix}{path} HTTP/1.1\r\nHost: {}:{}\r\n{extra}Content-Length: {}\r\nConnection: close\r\nUser-Agent: vizrs-live/{}\r\n\r\n",
-            t.base,
-            t.host,
-            t.port,
-            body.len(),
-            env!("CARGO_PKG_VERSION")
-        );
-        s.write_all(head.as_bytes())
-            .and_then(|_| s.write_all(body))
-            .map_err(|e| format!("most: zapis: {e}"))?;
-        let mut raw = Vec::new();
-        s.take(32 * 1024 * 1024)
-            .read_to_end(&mut raw)
-            .map_err(|e| format!("most: odczyt: {e}"))?;
-        parse_reply(&raw)
+        send(
+            t,
+            method,
+            &format!("{}{prefix}{path}", t.base),
+            body,
+            extra,
+            32 * 1024 * 1024,
+            "most",
+            true,
+        )
     }
 }
 
-/// Odpowiedź HTTP/1.1: status + treść (Content-Length, chunked albo do końca połączenia).
-pub fn parse_reply(raw: &[u8]) -> Result<Reply, String> {
+/// Nagłówek odpowiedzi: (koniec nagłówka, status, nagłówki, chunked, Content-Length).
+type Head = (usize, u16, Vec<(String, String)>, bool, Option<usize>);
+fn parse_head(raw: &[u8]) -> Result<Head, String> {
     let end = raw
         .windows(4)
         .position(|w| w == b"\r\n\r\n")
@@ -162,9 +219,11 @@ pub fn parse_reply(raw: &[u8]) -> Result<Reply, String> {
         .ok_or("most: zły wiersz statusu")?;
     let mut chunked = false;
     let mut length = None;
+    let mut headers = Vec::new();
     for l in lines {
         if let Some((k, v)) = l.split_once(':') {
             let (k, v) = (k.trim(), v.trim());
+            headers.push((k.to_ascii_lowercase(), v.to_string()));
             if k.eq_ignore_ascii_case("transfer-encoding") && v.eq_ignore_ascii_case("chunked") {
                 chunked = true;
             } else if k.eq_ignore_ascii_case("content-length") {
@@ -172,7 +231,29 @@ pub fn parse_reply(raw: &[u8]) -> Result<Reply, String> {
             }
         }
     }
-    let rest = &raw[end + 4..];
+    Ok((end + 4, status, headers, chunked, length))
+}
+
+/// Jak [`parse_reply`], ale treść ucięta limitem odczytu (strumień mediów) nie jest błędem.
+fn parse_reply_lenient(raw: &[u8]) -> Result<Reply, String> {
+    let (start, status, headers, chunked, length) = parse_head(raw)?;
+    let rest = &raw[start..];
+    let body = if chunked {
+        dechunk(rest)?
+    } else {
+        rest[..length.map_or(rest.len(), |n| n.min(rest.len()))].to_vec()
+    };
+    Ok(Reply {
+        status,
+        body,
+        headers,
+    })
+}
+
+/// Odpowiedź HTTP/1.1: status + treść (Content-Length, chunked albo do końca połączenia).
+pub fn parse_reply(raw: &[u8]) -> Result<Reply, String> {
+    let (start, status, headers, chunked, length) = parse_head(raw)?;
+    let rest = &raw[start..];
     let body = if chunked {
         dechunk(rest)?
     } else if let Some(n) = length {
@@ -180,7 +261,11 @@ pub fn parse_reply(raw: &[u8]) -> Result<Reply, String> {
     } else {
         rest.to_vec()
     };
-    Ok(Reply { status, body })
+    Ok(Reply {
+        status,
+        body,
+        headers,
+    })
 }
 
 fn dechunk(mut data: &[u8]) -> Result<Vec<u8>, String> {

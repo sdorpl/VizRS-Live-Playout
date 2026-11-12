@@ -5,6 +5,7 @@
 #   1. Caddyfile proxy: docker/proxy.Caddyfile  =  configs.live-proxy w docker-compose.live.yml CG Playout
 #   2. środowisko usługi `live`: compose.cg-playout.yml  =  docker-compose.live.yml CG Playout (bez komunikatów :?…)
 #   3. compose.vaapi.yml  =  docker-compose.vaapi.yml CG Playout (bez komentarzy)
+#   4. wolumeny usługi `live` (media dla odtwarzania bez legacy): compose.cg-playout.yml  =  docker-compose.live.yml CG Playout
 #
 # Źródłem jest to repo (VizRS Live): rozjazd poprawia się po stronie CG Playout, chyba że zmiana wyszła stamtąd.
 # Użycie: scripts/check-cg-overlay.sh [katalog CG Playout]   (domyślnie VIZRS_CG_DIR albo ../VirtRS CG Playout)
@@ -29,6 +30,13 @@ envof() {
 }
 d=$(diff <(envof compose.cg-playout.yml) <(envof "$CG_LIVE") || true)
 [ -z "$d" ] || report "środowisko usługi live różni się (< compose.cg-playout.yml, > $CG_LIVE):" "$d"
+
+# 2b. wolumeny usługi live
+volof() {
+  awk '/^  live:/{s=1;next} s&&/^  [a-z]/{s=0} s&&/^    volumes:/{e=1;next} e&&/^    [a-z]/{e=0} s&&e' "$1" | grep -v '^\s*#' | sed 's/^\s*//' | sed '/^$/d' | sort
+}
+d=$(diff <(volof compose.cg-playout.yml) <(volof "$CG_LIVE") || true)
+[ -z "$d" ] || report "wolumeny usługi live różnią się (< compose.cg-playout.yml, > $CG_LIVE):" "$d"
 
 # 3. VAAPI
 if [ -f "$CG_DIR/docker-compose.vaapi.yml" ]; then

@@ -55,5 +55,8 @@ services:
       VIZRS_LIVE_MULTIVIEW_MAX: ${VIZRS_LIVE_MULTIVIEW_MAX:-4}
       VIZRS_LIVE_CG_URL: ${VIZRS_LIVE_CG_URL:-}
       VIZRS_LIVE_CG_TOKEN: ${VIZRS_LIVE_CG_TOKEN:-}
+    # media tak jak w legacy (te same ścieżki), tylko odczyt – odtwarzanie plików lokalnych w Przeglądarce bez legacy
+    volumes:
+      - ${MEDIA_DIR:-./media}:/media:ro
     ports:
       - "8090:8090"

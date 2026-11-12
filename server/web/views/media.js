@@ -7,7 +7,7 @@
 
 import { VIEWS, h, btn, head, panel, pill, cmd, pl, table, toast, dialog, confirmDlg, route, cmdNote, missing, missingNote, S, legacyUrl, has } from '../core.js';
 import { followTask } from '../tasks.js';
-import { clipSection, seconds } from '../clip.js';
+import { playSection, seconds } from '../clip.js';
 import { form } from '../form.js';
 import { crudView } from '../parts.js';
 
@@ -282,6 +282,18 @@ async function groupCard(id, title, kind, card, back) {
     cmdNote('QuerySearchIndexEpisodes', ...(kind === 'Shows' ? ['QuerySearchIndexSeasons'] : []))]);
 }
 
+/** Źródło pliku do odtwarzania wprost: Jellyfin (pozycje Jellyfin… z legacy) albo plik biblioteki lokalnej; Emby, Plex,
+ * strumienie zdalne – null (zostaje legacy). Ścieżka: z karty (odcinki), GetMovieById (filmy), względna z karty „Inne”. */
+async function directSource(id, kind, info, card) {
+  const k = String(info.Kind || '');
+  if (/^(Emby|Plex)/.test(k) || kind === 'RemoteStreams') return null;
+  const source = /^Jellyfin/.test(k) ? 'jellyfin' : 'local';
+  let path = card?.Path || card?.LocalPath;
+  if (!path && kind === 'Movies' && has('GetMovieById')) path = (await cmd('GetMovieById', { Id: id }).catch(() => null))?.Path;
+  if (!path && source === 'local' && kind === 'OtherVideos') path = card?.Subtitle;
+  return path ? { source, title: card?.Title || info.Title || '', path } : null;
+}
+
 /** Karta pozycji: GetMediaItemInfo (strumienie, rozdziały, czas); serial, sezon, artysta – groupCard (lista odcinków, skan, napisy – K8). */
 export async function itemCard(id, title, kind, card, back) {
   if (GROUP_KINDS.includes(kind)) return groupCard(id, title, kind, card, back);
@@ -292,11 +304,13 @@ export async function itemCard(id, title, kind, card, back) {
     [(s) => (s.Codec || '').toUpperCase() === 'H264' ? 'H.264' : s.Codec, 'Kodek'], ['Profile', 'Profil'], ['Language', 'Język'], ['Channels', 'Kanały', { class: 'num' }],
     [(s) => [s.Default ? 'domyślny' : '', s.Forced ? 'wymuszony' : ''].filter(Boolean).join(', '), 'Flagi']], { empty: 'Brak strumieni – legacy jeszcze nie przeanalizował pliku.' });
   const chapters = info.Chapters?.length ? table(info.Chapters, [['ChapterId', '#', { class: 'num' }], ['StartTime', 'Od'], ['EndTime', 'Do'], ['Title', 'Tytuł']]) : null;
-  // odtwarzanie w karcie: test odtwarzania legacy po 30 s (clip.js); obrazy – bez
+  // odtwarzanie w karcie (clip.js): plik wprost z Jellyfin albo biblioteki lokalnej (/api/vod/…, bez legacy i transkodowania),
+  // zapasowo test odtwarzania legacy po 30 s; obrazy – bez
   let clip = null;
-  if (kind !== 'Images' && PLAY_CMDS.every(has)) {
-    const profiles = await cmd('GetAllFFmpegProfiles').catch(() => []);
-    clip = profiles.length ? clipSection(id, seconds(info.Duration), profiles) : null;
+  if (kind !== 'Images') {
+    const profiles = PLAY_CMDS.every(has) ? await cmd('GetAllFFmpegProfiles').catch(() => []) : [];
+    const direct = await directSource(id, kind, info, card);
+    clip = playSection(id, seconds(info.Duration), profiles, direct, info.Streams);
   }
   const art = poster(kind, card, 'card-poster') || (card?.ShowPoster ? poster('Shows', { Poster: card.ShowPoster }, 'card-poster') : null);
   const facts = kv([['Rodzaj', info.Kind], ['Biblioteka', info.LibraryName], ['Stan', statePill(info.State) || 'OK'], ['Czas', info.Duration],
@@ -305,7 +319,7 @@ export async function itemCard(id, title, kind, card, back) {
   const v = await dialog(info.Title || title, h('div', { class: 'card', id: 'item-card' },
     art ? h('div', { class: 'card-head' }, art, facts) : facts,
     clip ? [h('h3', null, 'Odtwarzanie'), clip.el] : null,
-    h('h3', null, 'Strumienie'), streams, chapters ? [h('h3', null, 'Rozdziały'), chapters] : null, cmdNote('GetMediaItemInfo', ...(clip ? ['legacy /api/troubleshoot/playback'] : []))),
+    h('h3', null, 'Strumienie'), streams, chapters ? (info.Chapters.length > 12 ? h('details', { class: 'how' }, h('summary', null, `Rozdziały (${info.Chapters.length})`), chapters) : [h('h3', null, 'Rozdziały'), chapters]) : null, cmdNote('GetMediaItemInfo', ...(clip ? ['/api/vod (Jellyfin / plik)', 'legacy /api/troubleshoot/playback'] : []))),
   [...(back ? [['‹ Wróć', 'back']] : []), ['Zamknij', true, 'acc']]);
   clip?.stop();
   if (v === 'back') back();
