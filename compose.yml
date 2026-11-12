@@ -24,6 +24,10 @@ services:
     volumes:
       - ${ETV_CONFIG:-./etv-config}:/config
       - ${MEDIA_DIR:-./media}:/media:ro
+    # segmenty HLS kanałów (ETV_TRANSCODE_FOLDER=/transcode w obrazie legacy) w RAM, nie na dysku –
+    # jak ersatztv w CG Playout; wolny dysk nie spóźnia segmentów, warstwa kontenera nie rośnie
+    tmpfs:
+      - /transcode
 
   proxy:
     # na zewnątrz tylko /iptv/*, /artwork/* (GET) i HDHomeRun; reszta 403 (docker/proxy.Caddyfile)

@@ -18,8 +18,9 @@ RUN dotnet build /src/VizRS.Bridge.csproj -c Release -o /out -p:LegacyDir=/legac
 FROM ${LEGACY_IMAGE}
 COPY --from=build /out/VizRS.Bridge.dll /vizrs-bridge/VizRS.Bridge.dll
 COPY bridge/commands.txt /vizrs-bridge/commands.txt
+# DOTNET_gcServer=0: workstation GC – ok. połowa RAM legacy (DOKUMENTACJA §7). Bez limitu sterty
+# (DOTNET_GCHeapHardLimit) na wszystkich platformach: po przekroczeniu legacy pada razem z emisją;
+# strojenie pod Ampere A1 (limit, W^X) ustawia nakładka docker-compose.ampere.yml VizRS CG Playout.
 ENV DOTNET_STARTUP_HOOKS=/vizrs-bridge/VizRS.Bridge.dll \
     ASPNETCORE_HOSTINGSTARTUPASSEMBLIES=VizRS.Bridge \
-    DOTNET_gcServer=0 \
-    DOTNET_GCHeapHardLimit=0x60000000 \
-    DOTNET_EnableWriteXorExecute=0
+    DOTNET_gcServer=0

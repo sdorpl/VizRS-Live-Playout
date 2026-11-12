@@ -23,7 +23,7 @@ Instrukcja operatora: [INSTRUKCJA.md](INSTRUKCJA.md). Wdrożenie, kopie, aktuali
 | VizRS Bridge | `bridge/` (C#, .NET 10) | most REST w procesie ErsatzTV legacy: ogólny dyspozytor komend z białą listą |
 | vizrs-live | `server/` (Rust, bez zależności) | serwer panelu: UI, logowanie, pośrednik do mostu |
 | UI panelu | `server/web/` (moduły ES, bez bibliotek) | ekrany na wzór web GUI legacy, po polsku; wbudowane w binarkę (`include_str!`), budowa w §3 „UI” |
-| obraz legacy z mostem | `docker/legacy-bridge.Dockerfile` | `FROM ghcr.io/ersatztv/legacy` + `VizRS.Bridge.dll` + `commands.txt` + 2 zmienne środowiskowe |
+| obraz legacy z mostem | `docker/legacy-bridge.Dockerfile` | `FROM ghcr.io/ersatztv/legacy` + `VizRS.Bridge.dll` + `commands.txt` + 3 zmienne środowiskowe (§2) |
 | obraz panelu | `docker/live.Dockerfile` | statyczna binarka musl w `scratch` |
 | proxy dla widzów | `docker/proxy.Caddyfile` (obraz `caddy`, usługa `proxy` w `compose.yml`) | na zewnątrz tylko strumienie, M3U/XMLTV, obrazy i HDHomeRun; web GUI legacy i most – 403 (§8) |
 | wpięcie w stos CG Playout | `compose.cg-playout.yml` | nakładka na `docker-compose.yml` VizRS CG Playout: `ersatztv` → legacy z mostem bez portu, `proxy`, `live` z `http://cg:7700` (RUNBOOK §2a) |
@@ -53,6 +53,7 @@ Zasady zgodności:
 
 - `DOTNET_STARTUP_HOOKS=/vizrs-bridge/VizRS.Bridge.dll` – hak startowy .NET; rejestruje rozwiązywanie zestawu `VizRS.Bridge` (nie ma go w `ErsatzTV.deps.json`).
 - `ASPNETCORE_HOSTINGSTARTUPASSEMBLIES=VizRS.Bridge` – ASP.NET Core ładuje `BridgeHostingStartup`, który dokłada oprogramowanie pośrednie na początek potoku legacy (`IStartupFilter`).
+- `DOTNET_gcServer=0` – workstation GC zamiast server GC z runtimeconfig legacy (ok. połowa RAM, §7). Obraz **nie** ustawia limitu sterty (`DOTNET_GCHeapHardLimit`): po jego przekroczeniu legacy pada, a z nim emisja wszystkich kanałów; limit i `DOTNET_EnableWriteXorExecute=0` daje tylko nakładka Ampere A1 VizRS CG Playout (`docker-compose.ampere.yml`). Segmenty HLS (`/transcode`) – tmpfs w `compose.yml` i w CG Playout.
 - Most kompiluje się tylko przeciw ASP.NET Core i `MediatR.dll` **z obrazu legacy** (wersja zawsze zgodna). Komendy legacy wyszukuje w czasie działania (refleksja po `ErsatzTV.Application`), więc nie wiąże się z ich wersją przy kompilacji.
 
 ### API (`/vizrs-bridge/…`, nagłówek `X-VizRS-Token`)
