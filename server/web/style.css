@@ -488,6 +488,53 @@ dl.kv dd { flex-wrap: wrap; }
 .alarm-item.bad::before { content: '● '; color: #ff6b6b; }
 .asrun-bar select, .asrun-bar input { width: auto; min-width: 10em; }
 
+/* edytor komend reguł grafiki (cmdedit.js): kroki – akcja, strony VizRS, pola z symbolami ramówki */
+.ce { display: grid; gap: 8px; min-width: 0; }
+.ce-top select.ce-mode { width: auto; min-width: 220px; }
+.ce-body { display: grid; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: var(--r); background: var(--panel-h); min-width: 0; }
+.ce-steps { display: grid; gap: 8px; }
+.ce-step { display: grid; gap: 8px; padding: 8px 10px; border: 1px solid var(--line); border-left: 3px solid var(--acc-d); border-radius: var(--r-sm); background: var(--panel); min-width: 0; }
+.ce-step.raw { border-left-color: var(--line-strong); }
+.ce-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; min-width: 0; }
+.ce-row > input { flex: 1 1 220px; }
+.ce-ic { width: 18px; text-align: center; color: var(--acc); flex: none; font-size: 12px; }
+.ce-step.raw .ce-ic { color: var(--dim); }
+.ce-act { width: auto; flex: none; font-weight: 600; }
+.ce-pages { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; flex: 1 1 200px; min-width: 0; }
+.ce-pick { width: auto; min-width: 170px; max-width: 100%; }
+.ce-page { display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px 2px 9px; border-radius: 999px; background: var(--acc-soft); border: 1px solid rgba(245, 165, 36, .45); color: var(--text); white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.ce-page b { font-family: var(--mono); color: var(--link); font-weight: 600; }
+.ce-page.unknown { background: var(--bad-bg); border-color: rgba(239, 68, 68, .5); }
+.ce-page button { padding: 0 6px; border: 0; background: none; color: var(--dim); line-height: 1.2; border-radius: 999px; }
+.ce-page button:hover { color: var(--text); background: rgba(255, 255, 255, .08); }
+.ce-tools { display: inline-flex; gap: 3px; margin-left: auto; flex: none; }
+.ce-tools button { padding: 2px 7px; }
+.ce-fields { display: grid; gap: 6px; padding-left: 26px; }
+.ce-field { display: grid; grid-template-columns: minmax(90px, 170px) auto minmax(160px, 1fr) 64px auto; gap: 6px; align-items: center; }
+.ce-sym { padding-left: 4px; padding-right: 2px; font-family: var(--mono); }
+.ce-addf, .ce-add { border-style: dashed; }
+.ce-foot { min-width: 0; }
+.ce-prev { font: 11px/1.4 var(--mono); color: var(--dim); white-space: pre-wrap; word-break: break-all; max-width: 60%; text-align: right; }
+.ce-text.on { border-color: var(--acc); color: var(--acc); background: var(--acc-soft); }
+.ce-empty { padding: 4px 2px; }
+.ce-sum > div + div { margin-top: 4px; }
+.ce-sum .ce-detail { font-size: 12px; padding-left: 22px; white-space: normal; }
+.rules-stack { display: grid; gap: 16px; min-width: 0; }
+[data-rules] { max-width: 1100px; }
+.rule-cards { display: grid; gap: 8px; margin-bottom: 8px; }
+.rule-cards:empty::before { content: "Brak reguł."; color: var(--dim); padding: 2px 0; }
+.rule-card { border: 1px solid var(--line); border-radius: var(--r); background: var(--panel); overflow: hidden; }
+.rule-card > summary { display: flex; align-items: center; gap: 8px; padding: 7px 10px 7px 12px; cursor: pointer; background: var(--panel-h); list-style: none; }
+.rule-card > summary::-webkit-details-marker { display: none; }
+.rule-card > summary::before { content: "▸"; color: var(--dim); transition: transform var(--t); }
+.rule-card[open] > summary::before { transform: rotate(90deg); }
+.rule-card[open] > summary { border-bottom: 1px solid var(--line); }
+.rule-card .rc-title { font-weight: 600; font-family: var(--mono); }
+.rule-card .form, [data-rules] .form { grid-template-columns: 150px minmax(0, 1fr); }
+[data-rules] h3 { margin: 16px 0 8px; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: var(--acc); }
+[data-rules] .form input[type=number] { width: 11em; }
+@media (max-width: 560px) { .ce-field { grid-template-columns: 1fr auto; } .ce-field > .dim { display: none; } .ce-fields { padding-left: 0; } .ce-prev { max-width: 100%; text-align: left; } }
+
 /* banner alarmów (K17) między paskiem górnym a menu – osobny wiersz siatki, zwinięty, gdy ukryty */
 .app { grid-template-rows: auto auto 1fr; }
 .app > .topbar { grid-row: 1; }
@@ -509,3 +556,5 @@ dl.kv dd { flex-wrap: wrap; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+[data-rules] .form { align-items: start; }
+[data-rules] .form > label { padding-top: 7px; }

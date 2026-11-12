@@ -1374,14 +1374,32 @@ function check(cond, msg) {
   // reguły grafiki (CG Playout GET/PUT /api/live/graphics) – z powrotem na ekranie Grafika kanału
   await page.goto(`${BASE}/#grafika`);
   await page.waitForSelector('[data-rules] #gr-on_clip');
-  check(await page.inputValue('#gr-on_clip') === 'TAKE 4001 headline={title}' && await page.inputValue('input[aria-label="on_end 1"]') === '-', 'reguły grafiki: odczyt z CG Playout („-” = wyłączone)');
-  // M8: streszczenie „Kiedy / Co / Ile” – globalne, reklama wyłączona = OUT, reguła kanału 24 („-”); klik w wiersz → pole edytora
+  // edytor komend jako wybór grafik: TAKE 4001 headline={title} = krok „Wprowadź”, strona 4001 · Pasek z show, pole headline
+  const ed = '[data-cmd-editor="gr-on_clip"]';
+  check(await page.inputValue('#gr-on_clip') === 'cmd' && await page.inputValue(`${ed} .ce-act`) === 'TAKE' && /4001\s*Pasek/.test(await page.textContent(`${ed} .ce-page`))
+    && await page.inputValue(`${ed} .ce-key`) === 'headline' && await page.inputValue(`${ed} .ce-val`) === '{title}' && await page.inputValue('#gr-c0-on_end') === 'off',
+    'reguły grafiki: odczyt z CG Playout jako wybór grafik (strona z show, pole, „wyłączone”)');
+  const rt = await page.evaluate(async () => {
+    const m = await import('/cmdedit.js');
+    return ['TAKE 1406 {"programs":"{next_title}\\n{next2_title}"}', 'OUT 1001,3001', '# komentarz', 'TAKE@2 7', 'UPDATE 1405 next=Teraz|x=a=b']
+      .map((l) => [l, m.lineOf(m.parseLine(l)), m.parseLine(l).act]);
+  });
+  check(rt.every(([a, b]) => a === b) && rt[0][2] === 'TAKE' && rt[1][2] === 'OUT' && rt[2][2] === 'raw' && rt[3][2] === 'raw' && rt[4][2] === 'UPDATE',
+    'edytor komend: odczyt i zapis bez zmian (pola JSON, kilka stron, komentarz, @N jako komenda tekstowa)');
+  // M8: streszczenie „Kiedy / Co / Ile” – po polsku (akcja, strona, pola); klik w wiersz → edytor
   const sum = await page.textContent('[data-rules-summary]');
-  check(/start pozycji/.test(sum) && sum.includes('TAKE 4001 headline={title}') && /OUT – grafika schodzi/.test(sum) && /kanał 24/.test(sum) && /wyłączone/.test(sum),
+  check(/start pozycji/.test(sum) && /Wprowadź 4001 · Pasek/.test(sum) && sum.includes('headline = {title}') && /OUT – grafika schodzi/.test(sum) && /kanał 24/.test(sum) && /wyłączone/.test(sum),
     'reguły grafiki: tabela Kiedy / Co / Ile z regułą globalną, reklamą i regułą kanału');
-  await page.click('[data-rules-summary] tr:has-text("TAKE 4001")');
-  check(await page.evaluate(() => document.activeElement?.id) === 'gr-on_clip', 'reguły grafiki: klik w wiersz streszczenia przenosi do pola edytora');
-  await page.fill('#gr-on_end', 'TAKE 1405 programs={next_title}');
+  await page.click('[data-rules-summary] tr:has-text("Wprowadź 4001")');
+  check(await page.evaluate(() => document.activeElement?.id) === 'gr-on_clip', 'reguły grafiki: klik w wiersz streszczenia przenosi do edytora');
+  // on_end: strona 1001 z listy show, pole programs z symbolem {next_title} z listy symboli
+  const ee = '[data-cmd-editor="gr-on_end"]';
+  await page.selectOption('#gr-on_end', 'cmd');
+  await page.selectOption(`${ee} .ce-pick`, '1001');
+  await page.click(`${ee} .ce-addf`);
+  await page.fill(`${ee} .ce-key`, 'programs');
+  await page.selectOption(`${ee} .ce-sym`, '{next_title}');
+  check(await page.textContent(`${ee} .ce-prev`) === 'TAKE 1001 programs={next_title}', 'reguły grafiki: komenda z wybranej strony i symbolu ramówki');
   await page.fill('#gr-end_seconds', '45');
   await page.click('button:has-text("+ Reguła audycji")');
   await page.fill('input[aria-label="Audycja (regex tytułu) 1"]', '(');
@@ -1389,11 +1407,21 @@ function check(cond, msg) {
   await page.waitForSelector('#toast.bad');
   check(/odrzucił reguły.*regular expression/.test(await page.textContent('#toast')) && CG.graphics.source === 'config', 'reguły grafiki: błąd walidacji CG Playout pokazany, nic nie zapisane');
   await page.fill('input[aria-label="Audycja (regex tytułu) 1"]', '^Wiadomo');
-  await page.fill('input[aria-label="on_clip 1"]', 'TAKE 1001 headline={title}');
+  // reguła audycji: krok bez strony zatrzymuje zapis; tryb „Tekst” ↔ lista grafik
+  const se = '[data-cmd-editor="gr-s0-on_clip"]';
+  await page.selectOption('#gr-s0-on_clip', 'cmd');
+  await page.click('button:has-text("Zapisz reguły grafiki")');
+  await page.waitForFunction(() => /nie ma wybranej strony/.test(document.getElementById('toast').textContent));
+  check(CG.graphics.source === 'config', 'reguły grafiki: krok „Wprowadź” bez strony zatrzymuje zapis');
+  await page.click(`${se} .ce-text`);
+  await page.fill(`${se} textarea`, 'TAKE 1001 headline={title}');
+  await page.click(`${se} .ce-text`);
+  check(/1001\s*Belka tytułowa/.test(await page.textContent(`${se} .ce-page`)), 'reguły grafiki: komendy wpisane w trybie „Tekst” wracają jako lista grafik');
   await rerender(() => page.click('button:has-text("Zapisz reguły grafiki")'));
   const gr = CG.graphics.rules;
-  check(gr.on_end === 'TAKE 1405 programs={next_title}' && gr.end_seconds === 45 && gr.shows.length === 1 && gr.shows[0].show_title === '^Wiadomo' && gr.shows[0].on_clip === 'TAKE 1001 headline={title}' && !('on_end' in gr.shows[0]),
-    'reguły grafiki: zapis globalnych i reguły audycji (puste = dziedzicz)');
+  check(gr.on_clip === 'TAKE 4001 headline={title}' && gr.on_end === 'TAKE 1001 programs={next_title}' && gr.end_seconds === 45 && gr.shows.length === 1 && gr.shows[0].show_title === '^Wiadomo'
+    && gr.shows[0].on_clip === 'TAKE 1001 headline={title}' && !('on_end' in gr.shows[0]),
+    'reguły grafiki: zapis globalnych i reguły audycji (jak globalnie = pole pominięte)');
   check(gr.channels['24'].on_end === '' && gr.channels['24'].shows?.[0]?.on_clip === 'TAKE 9', 'reguły grafiki: reguła kanału zachowana („-”, reguły audycji kanału bez zmian)');
   check(await page.isVisible('[data-rules] >> xpath=.. >> text=z panelu') || /z panelu/.test(await page.textContent('main')), 'reguły grafiki: źródło „z panelu” po zapisie');
   await shot('r9-grafika');

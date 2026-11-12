@@ -2,6 +2,7 @@
 // Dane VizRS CG Playout przez pośrednika serwera /api/cg/… (token CG zostaje w serwerze).
 
 import { VIEWS, S, h, head, panel, pill, btn, table, toast, api, cmd, cmdNote, confirmDlg, dialog, has, route, dateTime, vizrsPreview, onChannel } from '../core.js';
+import { cmdEditor, describe, fieldsUsed } from '../cmdedit.js';
 
 /** Zapytanie do CG Playout przez serwer panelu; zwraca `result` albo rzuca ApiError. */
 export async function cg(path, method = 'GET', body) {
@@ -26,6 +27,7 @@ VIEWS.grafika = async () => {
   ]);
   const rules = graphics && !(graphics instanceof Error) ? graphics.rules || {} : null;
   const channels = live?.channels || [];
+  const pages = rules ? await allPages(channels) : new Map();
 
   const refresh = has('RefreshGraphicsElements') ? btn('Wczytaj pliki elementów', async () => {
     try { await cmd('RefreshGraphicsElements'); toast('Legacy wczytał elementy graficzne z dysku'); route(true); } catch (e) { toast(e.message, 'bad'); }
@@ -64,7 +66,7 @@ VIEWS.grafika = async () => {
   return [
     head('Grafika kanału', 'Kiedy jaka strona VizRS wchodzi na antenę (reguły CG Playout), stan VizRS CG Playout, strony VizRS, podgląd anteny i elementy graficzne legacy.', refresh),
     whenPanel,
-    S.status.cg && !(health instanceof Error) ? rulesPanel(graphics) : null,
+    S.status.cg && !(health instanceof Error) ? rulesPanel(graphics, pages, channels) : null,
     h('div', { class: 'split wide' },
       h('div', { class: 'cols' }, cgPanel,
         panel('Elementy graficzne legacy', null,
@@ -173,12 +175,26 @@ function whenTable(pages, channel, rules, elements, redraw) {
 }
 
 // ---------- Reguły grafiki (CG Playout GET/PUT /api/live/graphics) ----------
-// Puste pole = dziedzicz (wartość globalna), „-” = wyłączone (pusty tekst w CG Playout).
-const toField = (v) => (v == null ? '' : v === '' ? '-' : String(v));
-const fromField = (v) => { const t = v.trim(); return t === '' ? null : t === '-' ? '' : t; };
+// Pole reguły: null = dziedzicz (wartość globalna), '' = wyłączone, tekst = komendy VizRS. W edytorze – wybór grafik
+// (cmdedit.js), w CG Playout – ten sam tekst komend co w config.json.
 const numField = (v) => { const t = String(v).trim(); return t === '' ? null : Number(t); };
 
-const firstLine = (t) => { const l = String(t).split('\n').map((x) => x.trim()).filter(Boolean); return l.length > 1 ? `${l[0]}  (+${l.length - 1})` : l[0] || ''; };
+/** Strony show VizRS ze wszystkich kanałów CG Playout (zwykle jeden show) – nr → {name, fields?}. */
+async function allPages(channels) {
+  const out = new Map();
+  const lists = await Promise.all((channels.length ? channels : [{ number: '' }]).map((c) => cg('pages/' + encodeURIComponent(c.number)).catch(() => null)));
+  for (const r of lists) {
+    for (const p of r?.pages || []) {
+      const n = String(p.number);
+      if (out.has(n)) continue;
+      // pola strony – gdy CG Playout je poda (lista nazw albo mapa nazwa → wartość); inaczej podpowiedzi z bieżących reguł
+      const fields = Array.isArray(p.fields) ? p.fields.map(String) : p.fields && typeof p.fields === 'object' ? Object.keys(p.fields) : [];
+      out.set(n, { name: p.name || 'Strona', fields });
+    }
+  }
+  return out;
+}
+
 /** Wiersze streszczenia „Kiedy / Co / Ile” z reguł CG Playout (stan zapisany). focus = selektor pola w edytorze obok. */
 function ruleRows(r) {
   const rows = [];
@@ -198,32 +214,45 @@ function ruleRows(r) {
     }
   };
   add('wszystkie kanały', r, (k) => `#gr-${k}`, true);
-  (r.shows || []).forEach((x, i) => add(`audycja ~ ${x.show_title}`, x, (k) => `[data-rules-shows] input[aria-label="${k} ${i + 1}"]`));
-  Object.entries(r.channels || {}).filter(([n]) => onChannel(n)).forEach(([n, x], i) => {
-    add(`kanał ${n}`, x, (k) => `[data-rules-channels] input[aria-label="${k} ${i + 1}"]`);
+  (r.shows || []).forEach((x, i) => add(`audycja ~ ${x.show_title}`, x, (k) => `#gr-s${i}-${k}`));
+  Object.entries(r.channels || {}).filter(([n]) => onChannel(n)).forEach(([n, x]) => {
+    const i = Object.keys(r.channels).indexOf(n);
+    add(`kanał ${n}`, x, (k) => `#gr-c${i}-${k}`);
     (x.shows || []).forEach((y) => add(`kanał ${n}, audycja ~ ${y.show_title}`, y, () => null));
   });
   return rows;
 }
 
-function rulesSummary(r) {
+/** Komendy reguły czytelnie: „▶ Wprowadź 4001 · Pasek” + pola; tekst komend w podpowiedzi. */
+function whatCell(x, pages) {
+  if (x.cmd === '-') return x.key === 'on_ad' ? pill('OUT – grafika schodzi') : pill('wyłączone');
+  return h('div', { class: 'ce-sum', title: x.cmd }, describe(x.cmd, pages).map((d) => h('div', null,
+    h('span', { class: 'ce-ic' }, d.icon), ' ', d.raw ? h('span', { class: 'mono' }, d.text) : h('b', null, d.text),
+    d.detail ? h('div', { class: 'dim ce-detail' }, d.detail) : null)));
+}
+
+function rulesSummary(r, pages) {
   const rows = ruleRows(r);
   const go = (row) => {
     const el = row.focus && document.querySelector(row.focus);
     if (!el) return toast('Ta reguła (audycja w regule kanału) jest tylko w config.json CG Playout – panel jej nie edytuje.');
+    const card = el.closest('details');
+    if (card) card.open = true;
     el.scrollIntoView({ block: 'center' }); el.focus();
   };
   return panel(S.channel ? `Reguły · kanał ${S.channel}` : 'Reguły · wszystkie kanały', h('span', { class: 'dim' }, 'kliknij wiersz, by edytować'),
     h('div', { class: 'tw', 'data-rules-summary': '' }, table(rows, [
       [(x) => h('span', null, x.when, h('br'), h('span', { class: 'dim' }, x.scope)), 'Kiedy', { class: 'w' }],
-      [(x) => (x.cmd === '-' ? (x.key === 'on_ad' ? pill('OUT – grafika schodzi') : pill('wyłączone')) : h('span', { class: 'mono', title: x.cmd }, firstLine(x.cmd))), 'Co', { class: 'w' }],
+      [(x) => whatCell(x, pages), 'Co', { class: 'w' }],
       [(x) => (x.cmd === '-' && x.key !== 'on_ad' ? '—' : x.len), 'Ile'],
     ], { onRow: go, empty: 'Brak reguł – grafika nie zmienia się sama.' })),
     h('div', { class: 'hint pad' }, 'Stan zapisany w CG Playout. Reguła audycji (pierwsza pasująca wg tytułu) i reguła kanału zastępują regułę globalną; „wyłączone” – w tym zakresie nic nie wchodzi.'),
     cmdNote('CG Playout GET /api/live/graphics'));
 }
 
-function rulesPanel(doc) {
+const KEYS = [['on_clip', 'Na start pozycji'], ['on_end', 'Przed końcem audycji'], ['on_ad', 'Na przerwę reklamową']];
+
+function rulesPanel(doc, pages, cgChannels) {
   if (doc instanceof Error || !doc) {
     const e = doc || new Error('brak odpowiedzi');
     return panel('Reguły grafiki', null, h('div', { class: 'pad' },
@@ -231,62 +260,93 @@ function rulesPanel(doc) {
       cgError(e)));
   }
   const r = doc.rules || {};
-  const input = (id, label, value, opts = {}) => {
-    const el = opts.area ? h('textarea', { id, rows: 2, class: 'mono', 'aria-label': label, placeholder: opts.placeholder || '' })
-      : h('input', { id, class: opts.num ? 'num' : 'mono', value: value ?? '', 'aria-label': label, placeholder: opts.placeholder || '' });
-    if (opts.area) el.value = value ?? '';
-    return el;
+  // podpowiedzi nazw pól: z komend wszystkich reguł
+  const texts = [];
+  const collect = (x) => KEYS.forEach(([k]) => x?.[k] && texts.push(x[k]));
+  collect(r); (r.shows || []).forEach(collect);
+  Object.values(r.channels || {}).forEach((x) => { collect(x); (x.shows || []).forEach(collect); });
+  const used = fieldsUsed(texts);
+  const editor = (id, label, value, o = {}) => cmdEditor({ id, label, value, pages, used, ...o });
+  const value = (v) => (v === '-' ? '' : v); // „-” ze starszych wersji panelu = wyłączone
+
+  const g = Object.fromEntries(KEYS.map(([k, l]) => [k, editor(`gr-${k}`, l, value(r[k]) ?? '', { ad: k === 'on_ad' })]));
+  const endSec = h('input', { id: 'gr-end_seconds', class: 'num', type: 'number', min: 1, value: r.end_seconds ?? 60, 'aria-label': 'Sekund przed końcem' });
+  const adPath = h('input', { id: 'gr-ad_path', class: 'mono', value: r.ad_match?.path ?? '', placeholder: '/reklamy/', 'aria-label': 'Reklama: ścieżka (regex)' });
+  const adTitle = h('input', { id: 'gr-ad_title', class: 'mono', value: r.ad_match?.title ?? '', placeholder: 'np. ^Reklama', 'aria-label': 'Reklama: tytuł (regex)' });
+
+  // reguły audycji i kanałów – karty (zwijane), każda z trzema edytorami
+  const cards = { shows: [], channels: [] };
+  const knownCh = cgChannels.map((c) => String(c.number));
+  const card = (kind, x, i, open) => {
+    const p = kind === 'shows' ? 's' : 'c';
+    const eds = Object.fromEntries(KEYS.map(([k, l]) => [k, editor(`gr-${p}${i}-${k}`, `${l} (${kind === 'shows' ? 'audycja' : 'kanał'} ${i + 1})`, value(x[k]), { scoped: true, ad: k === 'on_ad' })]));
+    let key;
+    if (kind === 'shows') key = h('input', { class: 'mono', value: x.show_title ?? '', placeholder: 'np. ^Wiadomości', 'aria-label': `Audycja (regex tytułu) ${i + 1}` });
+    else {
+      key = h('select', { 'aria-label': `Kanał ${i + 1}` }, h('option', { value: '' }, 'wybierz kanał…'),
+        [...new Set([...knownCh, ...(x.channel ? [String(x.channel)] : [])])].map((n) => h('option', { value: n }, `kanał ${n}${cgChannels.find((c) => String(c.number) === n)?.name ? ' · ' + cgChannels.find((c) => String(c.number) === n).name : ''}`)));
+      key.value = x.channel ?? '';
+    }
+    const end = h('input', { class: 'num', type: 'number', min: 1, value: x.end_seconds ?? '', placeholder: 'jak globalnie', 'aria-label': `s przed końcem ${kind === 'shows' ? 'audycji' : 'kanału'} ${i + 1}` });
+    const title = h('span', { class: 'rc-title' });
+    const sync = () => { title.textContent = kind === 'shows' ? (key.value ? `audycja ~ ${key.value}` : 'nowa reguła audycji') : key.value ? `kanał ${key.value}` : 'nowa reguła kanału'; };
+    key.addEventListener('input', sync); key.addEventListener('change', sync); sync();
+    const entry = { x, eds, key, end, el: null };
+    const rm = h('button', { type: 'button', class: 'danger', 'aria-label': `Usuń regułę ${kind === 'shows' ? 'audycji' : 'kanału'} ${i + 1}`,
+      onclick: (e) => { e.preventDefault(); entry.removed = true; entry.el.remove(); } }, 'Usuń');
+    entry.el = h('details', { class: 'rule-card', open: open || undefined },
+      h('summary', null, title, h('span', { class: 'grow' }), rm),
+      h('div', { class: 'form' },
+        h('label', null, kind === 'shows' ? 'Tytuł audycji (regex)' : 'Kanał'), key,
+        KEYS.flatMap(([k, l]) => [h('label', { for: `gr-${p}${i}-${k}` }, l), eds[k].el]),
+        h('label', null, 'Sekund przed końcem'), end));
+    cards[kind].push(entry);
+    return entry.el;
   };
-  const g = {
-    on_clip: input('gr-on_clip', 'Na start pozycji (on_clip)', r.on_clip, { area: true, placeholder: 'TAKE 4001 headline={title}|sub=Potem: {next_title} o {next_start}' }),
-    on_end: input('gr-on_end', 'Przed końcem audycji (on_end)', r.on_end, { area: true, placeholder: 'TAKE 1405 next=Za chwilę|programs={next_title}' }),
-    end_seconds: input('gr-end_seconds', 'Sekund przed końcem', r.end_seconds ?? 60, { num: true }),
-    on_ad: input('gr-on_ad', 'Na przerwę reklamową (on_ad)', r.on_ad, { area: true, placeholder: 'puste = grafika schodzi na czas reklam' }),
-    ad_path: input('gr-ad_path', 'Reklama: ścieżka (regex)', r.ad_match?.path, { placeholder: '/reklamy/' }),
-    ad_title: input('gr-ad_title', 'Reklama: tytuł (regex)', r.ad_match?.title),
-  };
-  const shows = (r.shows || []).map((x) => ({ ...x }));
-  const channels = Object.entries(r.channels || {}).map(([channel, x]) => ({ channel, ...x }));
-  const showsBox = h('div', { 'data-rules-shows': '' });
-  const chBox = h('div', { 'data-rules-channels': '' });
-  const row = (list, i, fields, render) => h('div', { class: 'rule-row' },
-    ...fields.map(([key, label, num]) => h('input', {
-      value: num ? (list[i][key] ?? '') : (key === 'show_title' || key === 'channel' ? list[i][key] ?? '' : toField(list[i][key])),
-      class: num ? 'num' : 'mono', placeholder: label, 'aria-label': `${label} ${i + 1}`,
-      oninput: (e) => { list[i][key] = num ? numField(e.target.value) : key === 'show_title' || key === 'channel' ? e.target.value.trim() : fromField(e.target.value); },
-    })),
-    h('button', { type: 'button', class: 'danger', 'aria-label': `Usuń regułę ${i + 1}`, onclick: () => { list.splice(i, 1); render(); } }, '✕'));
-  const SHOW = [['show_title', 'Audycja (regex tytułu)'], ['on_clip', 'on_clip'], ['on_end', 'on_end'], ['end_seconds', 's przed końcem', true], ['on_ad', 'on_ad']];
-  const CH = [['channel', 'Kanał'], ['on_clip', 'on_clip'], ['on_end', 'on_end'], ['end_seconds', 's przed końcem', true], ['on_ad', 'on_ad']];
-  const renderShows = () => showsBox.replaceChildren(...(shows.length ? shows.map((_, i) => row(shows, i, SHOW, renderShows)) : [h('div', { class: 'empty' }, 'Brak reguł audycji.')]),
-    h('div', { class: 'bar' }, btn('+ Reguła audycji', () => { shows.push({ show_title: '' }); renderShows(); })));
-  const renderCh = () => chBox.replaceChildren(...(channels.length ? channels.map((_, i) => row(channels, i, CH, renderCh)) : [h('div', { class: 'empty' }, 'Wszystkie kanały na regułach globalnych.')]),
-    h('div', { class: 'bar' }, btn('+ Reguła kanału', () => { channels.push({ channel: '' }); renderCh(); })));
-  renderShows(); renderCh();
+  const showsBox = h('div', { class: 'rule-cards', 'data-rules-shows': '' }, (r.shows || []).map((x, i) => card('shows', { ...x }, i)));
+  const chBox = h('div', { class: 'rule-cards', 'data-rules-channels': '' },
+    Object.entries(r.channels || {}).map(([channel, x], i) => card('channels', { channel, ...x }, i)));
+  const addCard = (kind, box) => { box.append(card(kind, kind === 'shows' ? { show_title: '' } : { channel: '' }, cards[kind].length, true)); box.lastElementChild.querySelector('input, select')?.focus(); };
 
   const save = async () => {
-    if (shows.some((x) => !x.show_title)) return toast('Reguła audycji wymaga wzorca tytułu.', 'bad');
-    if (channels.some((x) => !x.channel)) return toast('Reguła kanału wymaga numeru kanału.', 'bad');
-    const clean = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v != null && !(typeof v === 'number' && Number.isNaN(v))));
-    const body = {
-      on_clip: g.on_clip.value, on_end: g.on_end.value, on_ad: g.on_ad.value,
-      end_seconds: numField(g.end_seconds.value) ?? 60,
-      ad_match: { path: g.ad_path.value.trim(), title: g.ad_title.value.trim() },
-      shows: shows.map(clean),
-      channels: Object.fromEntries(channels.map(({ channel, ...x }) => [channel, clean(x)])),
-    };
+    let body;
+    try {
+      const live = (kind) => cards[kind].filter((c) => !c.removed);
+      const scoped = (c) => {
+        const o = {};
+        for (const [k] of KEYS) { const v = c.eds[k].read(); if (v != null) o[k] = v; }
+        const e = numField(c.end.value);
+        if (e != null && !Number.isNaN(e)) o.end_seconds = e;
+        if (c.x.shows) o.shows = c.x.shows; // reguły audycji w regule kanału – tylko z config.json, bez zmian
+        return o;
+      };
+      if (live('shows').some((c) => !c.key.value.trim())) throw new Error('Reguła audycji wymaga wzorca tytułu.');
+      if (live('channels').some((c) => !c.key.value)) throw new Error('Reguła kanału wymaga numeru kanału.');
+      body = {
+        on_clip: g.on_clip.read() ?? '', on_end: g.on_end.read() ?? '', on_ad: g.on_ad.read() ?? '',
+        end_seconds: numField(endSec.value) ?? 60,
+        ad_match: { path: adPath.value.trim(), title: adTitle.value.trim() },
+        shows: live('shows').map((c) => ({ show_title: c.key.value.trim(), ...scoped(c) })),
+        channels: Object.fromEntries(live('channels').map((c) => [c.key.value, scoped(c)])),
+      };
+    } catch (e) { return toast(e.message, 'bad'); }
     try { await cg('live/graphics', 'PUT', body); toast('Reguły grafiki zapisane w CG Playout – działają od następnej pozycji'); route(true); } catch (e) { toast('CG Playout odrzucił reguły: ' + e.message, 'bad'); }
   };
-  const lbl = (el, text) => [h('label', { for: el.id }, text), el];
-  return h('div', { class: 'split' }, rulesSummary(r), panel('Edytor reguł', h('span', null, doc.source === 'file' ? pill('z panelu', 'ok') : pill('z config.json')),
+  return h('div', { class: 'rules-stack' }, rulesSummary(r, pages), panel('Edytor reguł', h('span', null, doc.source === 'file' ? pill('z panelu', 'ok') : pill('z config.json')),
     h('div', { class: 'pad', 'data-rules': '' },
-      h('p', { class: 'dim' }, 'Komendy VizRS (TAKE, OUT…) z polami {title}, {next_title}, {next_start}, {show_title}… Kilka komend – w osobnych liniach. ' +
-        'W regułach audycji i kanałów puste pole = jak globalnie, „-” = wyłączone. Zmiana działa od następnej pozycji, bez restartu CG Playout.'),
-      h('div', { class: 'form' }, ...lbl(g.on_clip, 'Na start pozycji'), ...lbl(g.on_end, 'Przed końcem audycji'), ...lbl(g.end_seconds, 'Sekund przed końcem'),
-        ...lbl(g.on_ad, 'Na przerwę reklamową'), ...lbl(g.ad_path, 'Reklama – ścieżka (regex)'), ...lbl(g.ad_title, 'Reklama – tytuł (regex)')),
+      h('p', { class: 'dim' }, 'Wybierz strony VizRS, które wchodzą na antenę: akcja (Wprowadź, Dalej, Zdejmij, Podmień dane), strona z show i pola strony – tekst albo symbol ramówki {…} (tytuł, następny program, godzina). ' +
+        'Kroki idą po kolei. „Tekst” pokazuje te same komendy w składni CG Playout. Zmiana działa od następnej pozycji, bez restartu CG Playout.'),
+      pages.size ? null : h('div', { class: 'note' }, 'CG Playout nie podał stron show VizRS – wybór stron jest pusty; zostaje „Komenda tekstowa” i tryb „Tekst”.'),
+      h('div', { class: 'form' },
+        ...KEYS.flatMap(([k, l]) => [h('label', { for: `gr-${k}` }, l), g[k].el]),
+        h('label', { for: 'gr-end_seconds' }, 'Sekund przed końcem'), endSec,
+        h('label', { for: 'gr-ad_path' }, 'Reklama – ścieżka (regex)'), adPath,
+        h('label', { for: 'gr-ad_title' }, 'Reklama – tytuł (regex)'), adTitle),
       h('h3', null, 'Reguły audycji (pierwsza pasująca)'), showsBox,
+      h('div', { class: 'bar' }, btn('+ Reguła audycji', () => addCard('shows', showsBox))),
       h('h3', null, 'Reguły kanałów'), chBox,
+      h('div', { class: 'bar' }, btn('+ Reguła kanału', () => addCard('channels', chBox))),
       doc.store ? null : h('div', { class: 'note' }, 'CG Playout nie ma etv_config – reguł nie zapisze.'),
-      h('div', { class: 'bar' }, btn('Zapisz reguły grafiki', save, 'acc'))),
+      h('div', { class: 'bar end' }, btn('Zapisz reguły grafiki', save, 'acc'))),
     cmdNote('CG Playout GET/PUT /api/live/graphics')));
 }

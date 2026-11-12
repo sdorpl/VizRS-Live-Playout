@@ -50,6 +50,11 @@ const STATIC: &[(&str, &str, &str)] = &[
         include_str!("../web/when.js"),
     ),
     (
+        "/cmdedit.js",
+        "text/javascript; charset=utf-8",
+        include_str!("../web/cmdedit.js"),
+    ),
+    (
         "/alarms.js",
         "text/javascript; charset=utf-8",
         include_str!("../web/alarms.js"),
