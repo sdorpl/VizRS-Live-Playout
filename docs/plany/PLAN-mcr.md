@@ -4,7 +4,7 @@
 >
 > **Jedyny dokument planów rozwoju VizRS Live** (decyzja użytkownika 2026-11-09): nowe plany i punkty panelu dopisuj tutaj – nowy punkt w tabeli §4 (w miejscu kolejki, które mu odpowiada) i opis w §5, nowe analizy jako kolejne sekcje – zamiast zakładać nowe pliki `PLAN-*.md`. Zakończone plany [PLAN-rozbudowy.md](PLAN-rozbudowy.md) i [PLAN-makieta.md](PLAN-makieta.md) zostają jako archiwum.
 >
-> Treść: §1 skąd wiadomo, §2 czego jeszcze brakuje wobec web GUI legacy, §3 czego uczy Vizrt (tabela A–J), §4 jeden przebieg (luki + plan), §5 punkty, §6 legacy czy Next – decyzja i analiza.
+> Treść: §1 skąd wiadomo, §2 czego jeszcze brakuje wobec web GUI legacy, §3 czego uczy Vizrt (tabela A–J), §4 jeden przebieg (luki + plan), §5 punkty, §6 legacy czy Next – decyzja i analiza, §7 harmonogram w stylu ffplayout – analiza (propozycja K19–K20, do decyzji), §8 przepisanie legacy do Rusta – VizRS Live jako GUI i planista dla Next (analiza, propozycja N0–N7, do decyzji).
 
 ## 1. Źródła i ograniczenia rozpoznania
 
@@ -186,6 +186,144 @@ Analiza, na której oparto decyzję:
 | Ryzyka | most na komendach wewnętrznych: każde wydanie legacy (co tydzień) = test (`commandsMissing`, e2e); .NET na Ampere | Next przed 1.0 (0.2.0 → 0.2.5 w miesiąc), bez API i bez autoryzacji; utrata Plex/Jellyfin/Emby, HDHR; ogromna praca, zanim panel znów zrobi to, co dziś | C1: dwa lineupy (dwa M3U/XMLTV), własny obraz Next do utrzymania; C2: łamie decyzję R2 |
 
 Niezależnie od decyzji: CG Playout może sprawdzić, czy element graficzny legacy z warstwą `canvas` Next zastąpi nakładkę `vizrs-ffmpeg` (PLAN-vizrs-live §4, „Na później”) – praca w repo CG Playout, poza tym planem.
+
+## 7. Harmonogram w stylu ffplayout – analiza (2026-11-11)
+
+**Pytanie użytkownika:** czy sposób układania ramówki z [ffplayout](https://github.com/ffplayout/ffplayout) da się dodać do VizRS Live? **Krótka odpowiedź:** tak, ale tylko jego część „ramówka dnia jako lista plików z wyliczonymi godzinami” i „generator z szablonu”. Da się to zbudować w samym panelu, na komendach z białej listy, bez nowego kodu C#. Nie przeniesiemy tego, co w ffplayout robi silnik: punktów wejścia i wyjścia klipu, cięcia klipu, przeskoku w czasie i edycji tego, co właśnie leci, ze skutkiem od razu. Ani legacy, ani Next tego nie umieją.
+
+**Źródła:** `ffplayout/ffplayout` na `main`, commit `5482009` (2026-11-09): README, `docs/playlist_gen.md`, `docs/folder_mode.md`, `crates/app/src/utils/generator.rs`, `crates/app/src/player/input/playlist.rs`, `frontend/src/views/PlayerView.vue`, `components/player/PlaylistGenerator.vue`, `composables/helper.ts` (`processPlaylist`). Legacy: `ErsatzTV/legacy` `main` (2026-11-11), `ErsatzTV.Core/Domain/{ProgramScheduleItem,ProgramScheduleAlternate,CollectionType}.cs`, `Scheduling/PlayoutTemplate.cs`.
+
+### 7.1 Jak układa ramówkę ffplayout
+
+- **Jedna playlista na dzień i kanał:** plik JSON `playlists/RRRR/MM/RRRR-MM-DD.json`, w nim `program: [{ in, out, duration, source, title?, audio?, ad?, custom_filter?, graphics? }]`. Godzin nie zapisuje się w pliku. Start pozycji = `day_start` (np. 06:00) + suma `out − in` pozycji wcześniejszych. Doba trwa `length` (zwykle 24 h).
+- **Edytor dnia** (strona Player): wybór daty, przeciąganie plików z przeglądarki mediów na listę, zmiana kolejności, okno pozycji (`in`/`out`, osobna ścieżka audio, znacznik reklamy, grafika), podział klipu na N części, „zapętl”, czyli powielanie listy do pełnej doby, pozycje poza dobą na czerwono (`overtime`), kopiowanie dnia na inną datę, usuwanie, import TXT/M3U z kontrolą plików, podgląd klipu. Zapis jest jawny, przyciskiem. Gdy ktoś inny zmienił ten dzień, ffplayout ostrzega o niezapisanych zmianach.
+- **Generator:** prosty (wszystkie albo wybrane foldery, po kolei albo losowo) i zaawansowany, z szablonu bloków `{ start, duration, shuffle, paths[] }`. Każdy blok wypełnia się plikami z folderów, bez powtórzenia klipu tuż po sobie i z limitem powtórzeń, a resztę bloku dopełnia wypełniacz. Generator pisze JSON dla zakresu dat i pomija dni, które już istnieją. Wywołanie z CLI albo przez `POST /api/playlist/{kanał}/generate/{data}`.
+- **Silnik:** wybiera pozycję po zegarze (ta, w której mieści się „teraz”) i przewija ją do bieżącego miejsca. Ostatni klip przycina do końca doby, brakujący czas wypełnia wypełniaczem (plik albo folder w pętli), a gdy nie ma playlisty, gra sam wypełniacz. Pilnuje zgodności z zegarem (`stop_threshold`, wykrywa zmianę czasu letni/zimowy). Operator może przeskoczyć w przód lub w tył (`time_shift` do końca dnia). Inne tryby: `infinit` (jedna playlista w pętli) i tryb folderu (obserwowany katalog, po kolei albo losowo).
+
+### 7.2 Jak to się ma do legacy
+
+| ffplayout | Odpowiednik w legacy (komendy na białej liście) | Ocena |
+|---|---|---|
+| Szablon bloków `start/duration/shuffle/paths` | **harmonogram klasyczny**: pozycja `StartType=Fixed`, `PlayoutMode=Duration`, `PlaybackOrder=Shuffle`/`Chronological`, ogon `TailMode=Filler` (`ReplaceProgramScheduleItems`). Albo **blok** o długości N min z szablonem dnia (`ReplaceBlockItems`, `ReplaceTemplateItems`) | jest, w legacy bogatsze (kolekcje, inteligentne kolekcje, `SearchQuery`, seriale, wypełniacze przed, w trakcie i po). Brakuje tylko prostego kreatora w stylu ffplayout |
+| Generowanie zakresu dat | playout klasyczny lub blokowy buduje się N dni naprzód (`BuildPlayout`), dni różnią się harmonogramami zastępczymi albo kalendarzem szablonów | jest (dynamicznie, bez plików na dzień) |
+| **Konkretna lista plików na konkretny dzień** z godzinami wyliczonymi z długości | brak gotowego ekranu. Da się to złożyć: harmonogram „Dzień RRRR-MM-DD” z pozycjami, z których każda to **jeden element mediów** (`CollectionType` = `OtherVideo`/`Movie`/`Episode`…, `MediaItemId`, `PlayoutMode=One`). Pierwsza pozycja `Fixed` o `day_start`, reszta `Dynamic`, ogon z wypełniacza. Harmonogram dołączony jako **zastępczy na jedną datę** (`ProgramScheduleAlternate`: `LimitToDateRange` + `StartYear/EndYear` = ta sama data; `ReplacePlayoutAlternateScheduleItems`) | **wykonalne** w panelu, bez C# i bez plików na `/config` (R2) – to propozycja **K19** |
+| `in`/`out`, podział klipu | brak (pozycja legacy gra cały plik) | **niewykonalne** bez zmian w legacy |
+| Przeskok w czasie (`time_shift`), „pomiń klip” | brak: Next nie ma sterowania odtwarzaniem | **niewykonalne**; zastępstwo: zmiana ramówki + `BuildPlayout` (Next wczytuje playout po zmianie) |
+| Przycięcie ostatniego klipu do końca doby | legacy nie tnie. O styku z następną stałą godziną decyduje `FixedStartTimeBehavior` (ścisła albo elastyczna) i ogon wypełniacza | częściowo; panel pokaże przekroczenie na czerwono, tak jak `overtime` w ffplayout |
+| Wypełniacz przy braku playlisty | `FallbackFiller`, kanał bez playoutu = plansza Next | jest |
+| Znacznik reklamy `ad`, grafika przy klipie | wypełniacz w trakcie / przerwa reklamowa i reguły grafiki CG Playout. Zdarzenia przy pozycji to K15 | przez CG (K15), nie w ramówce legacy |
+| Import TXT/M3U | K11 (CSV/XML → playlista legacy) | jest; K19 może przyjmować ten sam import jako źródło dnia |
+| Tryb folderu (obserwowany katalog) | biblioteka lokalna ze skanem + kolekcja albo `SearchQuery` + pozycja `Flood` | jest |
+| Dokładne godziny „co do sekundy” z systemu emisyjnego | Scripted Schedule (`wait_until_exact`, `pad_until_exact`) – §6, C2 | tylko po zmianie decyzji R2 |
+
+**Wniosek:** model ffplayout i model legacy różnią się zasadniczo. ffplayout trzyma **gotową listę na każdy dzień**, legacy **opisuje regułę i co dzień buduje z niej listę**. Panel nie powinien podmieniać modelu legacy. Może dać operatorowi **widok i edytor w stylu ffplayout** jako drugi sposób zapisu tej samej ramówki, z zapisem przez komendy legacy.
+
+### 7.3 Propozycja (do decyzji użytkownika – po akceptacji wiersze trafią do §4)
+
+**K19 – Ramówka dnia (edytor listy na datę, wzorzec ffplayout).** Nowy ekran albo karta w Playoutach dla kanału z playoutem **klasycznym**:
+- wybór kanału i daty, lista pozycji z wyliczonymi godzinami (start doby + suma długości z metadanych legacy), pasek zapełnienia doby i pozycje po końcu doby na czerwono;
+- dodawanie z Przeglądarki i wyszukiwarki (jak `contentPicker`), zmiana kolejności, usuwanie, „zapętl do pełnej doby”, „kopiuj dzień na datę…”, źródło z importu K11;
+- zapis: `CreateProgramSchedule` „VizRS dzień RRRR-MM-DD · kanał”, potem `ReplaceProgramScheduleItems` (pierwsza pozycja `Fixed`, ścisła, pozostałe `Dynamic`, każda to jeden element mediów, ogon i zapas z wybranego wypełniacza), potem `ReplacePlayoutAlternateScheduleItems` (dopisany zastępczy na tę datę, istniejące zastępcze bez zmian, kolejność wg `Index`), na końcu `BuildPlayout` (Refresh). Kontrola K9 porównuje wynik z planem;
+- odczyt dnia: `GetProgramScheduleItems` harmonogramu dnia, a dla porównania faktyczne pozycje z EPG;
+- sprzątanie: „usuń dni starsze niż N” (`DeleteProgramSchedule` + zastępcze), ręcznie, z potwierdzeniem.
+- **Do sprawdzenia przed startem, na stosie testowym (automat nie wdraża):** (1) czy dopasowanie zastępczego po `StartYear/EndYear` działa w bieżącym legacy; (2) zachowanie pozycji `Fixed` ścisłej, gdy poprzedni dzień przekroczył dobę (legacy może przesunąć start na następny dzień); (3) czy legacy przyjmuje `ReplaceProgramScheduleItems` z pozycją pojedynczego elementu mediów (`MediaItemId`) – jeśli nie, zapasowo jedna playlista legacy na dzień (`CreatePlaylist` + `ReplacePlaylistItems`, jak w K11) i jedna pozycja harmonogramu z tą playlistą; (4) ile harmonogramów zastępczych znosi playout (wydajność budowania).
+- **Wymaga:** – (wszystkie komendy są już na białej liście). **Koszt:** średni, wyłącznie JS w panelu (`views/dzien.js`, wpis w `STATIC`), e2e w `tests/e2e.cjs`.
+
+**K20 – Kreator szablonu dnia (generator ffplayout „zaawansowany”).** Okno w Harmonogramach: wiersze `start · czas · źródło (kolekcja, inteligentna kolekcja, zapytanie) · losowo/po kolei · wypełniacz` → komplet pozycji `Fixed` + `Duration` + `TailMode=Filler` w nowym albo wybranym harmonogramie (`ReplaceProgramScheduleItems`). Panel sprawdza, czy bloki się nie nakładają i czy dają razem pełną dobę. Wariant dla playoutu blokowego: bloki o tej długości i szablon dnia. **Koszt:** niski (logika jest w `views/harmonogramy.js`, kreator tylko składa pozycje). **Wymaga:** –.
+
+**Odrzucone (z powodem):** `in`/`out` i podział klipu, przeskok w czasie, edycja tego, co właśnie leci, ze skutkiem od razu (legacy i Next tego nie umieją, a zmiana wymagałaby forka – zasada „legacy bez zmian”); własne pliki JSON dnia, czytane przez Next albo przez ExternalJson legacy (zapis na `/config` – R2, a ExternalJson przyjmuje format dizqueTV, nie listę plików z czasami).
+
+## 8. Przepisanie legacy do Rusta – VizRS Live jako GUI i planista dla Next (analiza 2026-11-11)
+
+**Pytanie użytkownika:** jaki jest plan i sens przepisania ErsatzTV legacy do Rusta, tak żeby VizRS Live stało się GUI (i planistą) dla ErsatzTV Next? To wariant **B** z §6, odrzucony 2026-11-09. Ta sekcja nie zmienia tej decyzji – rozpisuje B na etapy, żeby można było podjąć ją świadomie.
+
+**Krótka odpowiedź:** jako **cel długoterminowy ma to sens**. Jako **jednorazowe przepisanie teraz – nie**: to ok. 118 tys. linii logiki C# (8.2), a Next jest przed 1.0 i nie ma API. Proponowana droga to **stopniowe przejmowanie** (wzorzec *strangler*). VizRS Live najpierw samo pisze playouty Next dla wybranych kanałów: ramówka dnia co do sekundy, LIVE, grafika. Legacy zostaje dla pozostałych kanałów i jako biblioteka mediów. Każdy etap daje wartość sam w sobie i kończy się bramką „idziemy dalej / zostajemy”. Pierwsze dwa etapy (N0–N1) dają to, czego wariant A nie da nigdy, bez utraty niczego z legacy.
+
+**Źródła:** `ErsatzTV/legacy` `main` `c41969b` (2026-11-10) – liczby wierszy `*.cs` bez migracji i testów; `ErsatzTV/next` `c5cb065` (v0.2.5, 2026-11-06) – `schema/playout.json`, trasy `crates/ersatztv/src/main.rs` (`/channel/{plik}`, `/channels.m3u`, `/xmltv.xml` – nic więcej).
+
+### 8.1 Sens – co by to dało
+
+| | Dziś (A: legacy + most) | Po przejęciu przez VizRS Live |
+|---|---|---|
+| Ramówka co do sekundy, punkty wejścia i wyjścia, podział klipu | niewykonalne (§7: K19 bez `in/out`, odrzucone) | Next ma `in_point_ms`/`out_point_ms` w źródle `local` i `http`; ramówka dnia w stylu ffplayout (§7.1) wprost jako plik playoutu |
+| Audycje LIVE | CG Playout zakłada Remote Stream + Smart Collection, pozycję harmonogramu operator dodaje ręcznie (LUKI #15) | pozycja `http` z `is_live` albo `dynamic` (rozwiązywana w chwili emisji – przejęcie kanału bez nakładki) |
+| Grafika | reguły CG Playout + nakładka `vizrs-ffmpeg` | warstwa `canvas` / `graphics[]` w samej pozycji playoutu; zdarzenia wtórne (K15) i as-run (K14) z naszych plików, nie z odgadywania |
+| Odporność na wydania | legacy co tydzień; most na wewnętrznych komendach (`commandsMissing`, e2e) i hakach startowych .NET | jeden kontrakt: schematy Next z wersją (`describe` podaje akceptowane wersje) |
+| Zasoby | sterta .NET legacy ok. 1,5 GB na Ampere A1 (2 OCPU) | Rust: dziesiątki MB; ten sam Next do kodowania |
+| Luki G2 | wynikają z tego, że legacy trzyma stan poza MediatR (#5, #8, #9, #12, #27) albo w plikach (#14, #20, #25) | znikają – to nasz kod i nasz magazyn |
+| Zasady repo | C# w moście, biała lista jako granica bezpieczeństwa | jeden język, bez C#; most i `commands.txt` do usunięcia na końcu |
+
+**Koszt sensu:** tracimy darmowe poprawki planisty, skanera i integracji, które legacy wydaje co tydzień. Od tej chwili każdy błąd planowania jest nasz.
+
+### 8.2 Ile tego jest
+
+| Część legacy | Wiersze C# | W VizRS Live |
+|---|---|---|
+| UI Blazor (`ErsatzTV/`) | 11,9 tys. | **już jest** – panel (ok. 10 tys. wierszy Rust + JS) |
+| Stary silnik: `ErsatzTV.FFmpeg`, `Infrastructure/Streaming` | 16,6 tys. | **nie przepisujemy** – robi to Next |
+| Planista: `Core/Scheduling` (klasyczny, blokowy 1,8, YAML 3,8, silnik skryptów 2,2) + `Infrastructure/Scheduling` | 17,2 tys. | **rdzeń** – klasyczny i blokowy; YAML i skrypty pominięte (8.6) |
+| Skaner: `ErsatzTV.Scanner` (metadane 9 tys.: NFO, ffprobe, okładki) | 15,2 tys. | lokalny – tak; Plex/Jellyfin/Emby – osobny etap (N6) |
+| Plex, Jellyfin, Emby (`Infrastructure`, poza skanerem) | 5,8 tys. | opcja (N6) |
+| Dane: EF Core (`Infrastructure/Data`) | 15,2 tys. | własny magazyn (8.3) – znacznie mniej kodu |
+| Wyszukiwarka Lucene (`Infrastructure/Search`) | 3,4 tys. | prosty indeks w pamięci + język zapytań inteligentnych kolekcji |
+| `ErsatzTV.Application` (handlery MediatR) | 36,7 tys. | w większości znika: handler = trasa API panelu |
+| Synchronizacja z Next (`Core/Next`) | 3,4 tys. | **przepisać jako pierwsze** – to styk z Next |
+
+**Szacunek:** 35–55 tys. wierszy Rusta. Przy zasadzie „jeden punkt = jedna sesja” to rząd **40–60 sesji**. Szacunek jest zgrubny – największą niewiadomą jest wierność planisty blokowego i deco.
+
+### 8.3 Twarde przeszkody
+
+1. **Zero zależności w serwerze** (zasada repo) koliduje z:
+   - bazą – własny magazyn: plik JSON na kolekcję encji + dziennik zapisów, zapis atomowy (`rename`), wszystko w pamięci (skala: dziesiątki tysięcy pozycji mediów – mieści się);
+   - **TLS** – Plex (`plex.tv`), Jellyfin/Emby przez https. Do wyboru: `curl` jako proces, Caddy jako pośrednik wychodzący albo wyjątek od zasady. **Decyzja użytkownika**;
+   - NFO (XML) – mały parser; YAML – pomijamy razem z harmonogramami YAML;
+   - miniatury okładek – `ffmpeg` jako proces (jest w obrazie Next).
+2. **Next przed 1.0** – 0.2.0 → 0.2.5 w miesiąc, zmiana `0.B` = niezgodność. Zabezpieczenie: generator playoutu sprawdza `describe` (akceptowane wersje schematów), a w CI test zgodności z najnowszym obrazem `ersatztv/next` co tydzień (jak `legacy-latest.yml`).
+3. **Next bez API i bez autoryzacji** – sterowanie wyłącznie plikami: `lineup.json`, `channel.json`, katalog playoutu `{start}_{finish}.json` (wczytywany ponownie po zmianie) i XMLTV `{tvg_id}.xml`. Panel potrzebuje **wspólnego wolumenu z Next** – to nowy rodzaj zapisu. Nie dotyczy `/config` legacy ani CG, ale wymaga jawnej decyzji (rozszerzenie R2). Widzowie dalej tylko przez Caddy.
+4. **Migracja danych z legacy** – bez czytania bazy legacy (zasada repo, a SQLite i tak wymagałby zależności): **eksport przez most**, czyli te same komendy `Get…/Query…`, które panel już ma na białej liście, do JSON-a, potem import do magazynu. Most przydaje się do samego końca.
+5. **Wierność planisty** – semantyka harmonogramów, bloków, deco, wypełniaczy i inteligentnych kolekcji musi dać tę samą ramówkę. Zabezpieczenie: **testy wzorcowe** – te same dane, playout legacy (`GetFuturePlayoutItemsById` przez most) porównany z naszym, pozycja po pozycji.
+6. **ErsatzTV-ffmpeg** – Next nie działa ze zwykłym ffmpeg. Używamy oficjalnego obrazu `ersatztv/next` (amd64, arm64), nie budujemy własnego.
+
+### 8.4 Architektura docelowa
+
+```
+Przeglądarka ── /api/* ──▶ VizRS Live (Rust, bez zależności)
+                            ├─ magazyn (JSON + dziennik)     ├─ skaner (ffprobe, NFO, okładki przez ffmpeg)
+                            ├─ planista (klasyczny, bloki)   ├─ EPG / M3U / HDHomeRun
+                            ├─ generator Next ──pliki──▶ wolumen: lineup.json, channel/*.json,
+                            │                                    playout/{kanał}/{start}_{finish}.json, xmltv/*.xml
+                            ├─ /next/dynamic/{kanał} ◀── źródło `dynamic` Next (LIVE w chwili emisji)
+                            └─ pośrednik /api/cg/… ──▶ VizRS CG Playout (grafika, sygnały studia)
+ErsatzTV Next (oficjalny obraz) ── /channel/*.m3u8 ──▶ Caddy ──▶ widzowie
+```
+
+Nowe moduły w `server/src/`: `store.rs`, `scan.rs`, `sched/` (klasyczny, blokowy, wypełniacze), `next.rs` (pliki Next ze schematów), `epg.rs`, `hdhr.rs`. Do sprawdzenia w repo CG Playout: czy VizRS może podać warstwę `canvas` (wideo z alfą przez HTTP z nagłówkami `x-etv-offset-ms`), żeby zastąpić nakładkę `vizrs-ffmpeg`.
+
+### 8.5 Etapy (propozycja N0–N7, do decyzji – po akceptacji wiersze trafią do §4)
+
+| Punkt | Zakres | Bramka „idziemy dalej” |
+|---|---|---|
+| **N0** – próba (1–2 sesje) | `next.rs`: playout jednego kanału z danych mostu (`GetFuturePlayoutItemsById` → plik Next) w samodzielnym kontenerze Next na stosie testowym, obok legacy | Next gra nasz plik; przejścia o zadanej sekundzie; `in/out` działa; zmiana pliku w trakcie emisji wchodzi bez restartu |
+| **N1** – kanały VizRS (C1 z §6 w nowej wersji) | drugi lineup Next obok legacy dla kanałów „ramówka dnia”: K19 natywnie (lista plików na datę z `in/out`, kopiuj dzień, zapętl), LIVE jako `http is_live` / `dynamic`, grafika w pozycji. Media czytane z legacy przez most. Własny magazyn tylko dla ramówek dnia. **Jedno M3U i jeden XMLTV** dla widza – panel albo Caddy scala oba lineupy (usuwa główne ryzyko C1) | tydzień na stosie `virtrs` bez dziury i bez fallbacku |
+| **N2** – skaner lokalny + magazyn mediów | ffprobe, NFO, okładki; legacy skanuje równolegle, porównanie liczby i długości pozycji | rozbieżność < 1% pozycji, wyjaśniona |
+| **N3** – planista klasyczny | harmonogramy, kolekcje (4 rodzaje), inteligentne kolekcje (język zapytań), wypełniacze, harmonogramy zastępcze, import starych ramówek przez most | testy wzorcowe zgodne z legacy na danych z `tests/stack.sh seed` i kopii produkcji |
+| **N4** – bloki, szablony, deco, kalendarz | jak w legacy (R6) | testy wzorcowe jak w N3 |
+| **N5** – przeniesienie wszystkich kanałów | EPG, M3U, HDHomeRun, logo, znaki wodne (`watermark` Next); legacy już tylko do eksportu | dwa tygodnie produkcji wyłącznie na planiście VizRS |
+| **N6** – Plex / Jellyfin / Emby | tylko po decyzji o TLS (8.3); inaczej świadome porzucenie | jak N2 dla każdego źródła |
+| **N7** – wyłączenie legacy | usunięcie `bridge/`, `commands.txt`, `legacy-bridge.Dockerfile`; zasady w CLAUDE.md i DOKUMENTACJA przepisane; wydanie 2.0 | – |
+
+Każdą bramkę można zakończyć decyzją „zostajemy”. Po N1 stan jest trwały i użyteczny: legacy plus kanały VizRS w Next.
+
+### 8.6 Co tracimy (świadomie)
+
+Harmonogramy YAML i Scripted Schedule (C2), ExternalJson, Trakt, Plex/Jellyfin/Emby do czasu N6. Do tego darmowe poprawki legacy i jego społeczność. Kanały lustrzane, przesunięcia czasu, preferencje języka ścieżek i selektor strumieni trzeba przepisać (N3–N5), bo inaczej znikną.
+
+### 8.7 Rekomendacja i decyzje do podjęcia
+
+- **Nie zaczynać pełnego przepisania teraz.** Zrobić **N0** (tanie, rozstrzyga technikę) i – jeśli się uda – **N1**. Tak dostajemy ramówkę co do sekundy, `in/out`, LIVE i grafikę w Next bez utraty legacy. Po N1 decyzja §6 zmienia się z „A” na „A + kanały VizRS w Next”.
+- **Warunki przejścia do N2 i dalej** (wystarczy jeden): Next 1.0 albo stabilny schemat playoutu przez ≥ 2 miesiące; legacy przestaje być rozwijane (sygnał z §6); N1 przez miesiąc bez awarii, a koszt utrzymania mostu rośnie.
+- **Decyzje użytkownika potrzebne przed N0:** (1) zgoda na N0/N1 mimo decyzji A z 2026-11-09; (2) panel zapisuje pliki na **własny wolumen Next** (rozszerzenie R2 – nie dotyczy `/config` legacy ani CG); (3) przed N6: TLS a zasada zero zależności; (4) czy Plex/Jellyfin/Emby są w ogóle potrzebne na kanałach VizRS.
+- Zasady „legacy bez zmian” i „żadnych zapisów do bazy legacy” zostają w mocy przez cały czas – przejmowanie odbywa się obok legacy, nie w nim.
 
 ## 9. Zdublowane funkcje w pakiecie VizRS – analiza i porządki (2026-11-11)
 
