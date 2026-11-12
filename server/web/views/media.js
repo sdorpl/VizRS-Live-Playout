@@ -234,8 +234,54 @@ function imageFoldersPanel() {
     cmdNote('GetImageFolders', 'UpdateImageFolderDuration'));
 }
 
-/** Karta pozycji: GetMediaItemInfo (strumienie, rozdziały, czas); przy serialu – skan i napisy (K8). */
-export async function itemCard(id, title, kind) {
+// Serial, sezon i artysta to pozycje zbiorcze bez pliku: GetMediaItemInfo legacy rzuca dla nich wyjątek
+// (MediaItemExtensions.GetHeadVersion – brak wersji pliku). Ich karta pokazuje zawartość z indeksu wyszukiwania.
+const GROUP_KINDS = ['Shows', 'Seasons', 'Artists'];
+const ALL = 1000;
+const epLabel = (e) => `S${String(e.Season ?? 0).padStart(2, '0')}E${String(e.Episode ?? 0).padStart(2, '0')}`;
+const quoted = (s) => `"${String(s).replace(/["\\]/g, ' ')}"`;
+
+/** Karta serialu, sezonu albo artysty – bez GetMediaItemInfo. back – powrót do karty nadrzędnej. */
+async function groupCard(id, title, kind, card, back) {
+  const kv = (rows) => h('dl', { class: 'kv' }, rows.filter((r) => r[1] != null && r[1] !== '').flatMap(([k, v]) => [h('dt', null, k), h('dd', null, String(v))]));
+  const buttons = [...(back ? [['‹ Wróć', 'back']] : []), ['Zamknij', true, 'acc']];
+  const open = async (body) => { if ((await dialog(title, h('div', { class: 'card', id: 'item-card' }, body), buttons)) === 'back') back(); };
+  if (kind === 'Artists') {
+    return open([kv([['Rodzaj', 'artysta'], ['Id', id]]), h('p', { class: 'dim pad' }, 'Artysta grupuje utwory i teledyski – znajdziesz je w zakładkach „Utwory” i „Teledyski” (szukaj po tytule).')]);
+  }
+  const showTitle = kind === 'Shows' ? title : card?.ShowTitle || title;
+  let eps = [], seasons = [];
+  try {
+    const [e, s] = await Promise.all([
+      has('QuerySearchIndexEpisodes') ? cmd('QuerySearchIndexEpisodes', { Query: `type:episode AND show_title:${quoted(showTitle)}`, PageNumber: 1, PageSize: ALL }) : null,
+      kind === 'Shows' && has('QuerySearchIndexSeasons') ? cmd('QuerySearchIndexSeasons', { Query: `type:season AND show_title:${quoted(showTitle)}`, PageNumber: 1, PageSize: ALL }) : null,
+    ]);
+    // ten sam tytuł może mieć kilka seriali – zostają tylko pozycje tego serialu / sezonu
+    eps = (e?.Cards || []).filter((x) => (kind === 'Shows' ? x.ShowId === id : x.SeasonId === id));
+    eps.sort((a, b) => (a.Season ?? 0) - (b.Season ?? 0) || (a.Episode ?? 0) - (b.Episode ?? 0));
+    const showId = kind === 'Shows' ? id : eps[0]?.ShowId;
+    seasons = (s?.Cards || []).filter((x) => eps.some((ep) => ep.SeasonId === x.TelevisionSeasonId) || showId == null);
+    seasons.sort((a, b) => (a.TelevisionSeasonNumber ?? 0) - (b.TelevisionSeasonNumber ?? 0));
+  } catch (err) { toast('Legacy odrzucił wyszukiwanie odcinków: ' + err.message, 'bad'); }
+  const self = () => groupCard(id, title, kind, card, back);
+  const epTable = table(eps, [[(e) => h('span', { class: 'mono' }, epLabel(e)), 'Odcinek'], ['Title', 'Tytuł', { class: 'w' }], [(e) => statePill(e.State), 'Stan'],
+    [(e) => h('span', { class: 'mono dim' }, (e.Path || '').split('/').pop()), 'Plik', { class: 'w' }]],
+  { onRow: (e) => itemCard(e.MediaItemId, `${showTitle} · ${epLabel(e)} ${e.Title || ''}`.trim(), 'Episodes', e, self), empty: 'Brak odcinków w indeksie legacy – zeskanuj bibliotekę.' });
+  const per = (sid) => eps.filter((e) => e.SeasonId === sid).length;
+  const seasonTable = kind === 'Shows' && seasons.length ? [h('h3', null, 'Sezony'), table(seasons, [
+    [(x) => `Sezon ${x.TelevisionSeasonNumber ?? '?'}`, 'Sezon'], [(x) => per(x.TelevisionSeasonId), 'Odcinki', { class: 'num' }], ['TelevisionSeasonId', 'Id', { class: 'num' }]],
+  { onRow: (x) => groupCard(x.TelevisionSeasonId, `${showTitle} · sezon ${x.TelevisionSeasonNumber ?? '?'}`, 'Seasons', x, self) })] : null;
+  return open([
+    kv([['Rodzaj', kind === 'Shows' ? 'serial' : 'sezon'], kind === 'Seasons' ? ['Serial', showTitle] : null, kind === 'Shows' ? ['Sezony', seasons.length] : null,
+      ['Odcinki', eps.length], ['Id', id]].filter(Boolean)),
+    kind === 'Shows' ? showActions(id, title) : null,
+    seasonTable, h('h3', null, 'Odcinki'), epTable,
+    cmdNote('QuerySearchIndexEpisodes', ...(kind === 'Shows' ? ['QuerySearchIndexSeasons'] : []))]);
+}
+
+/** Karta pozycji: GetMediaItemInfo (strumienie, rozdziały, czas); serial, sezon, artysta – groupCard (lista odcinków, skan, napisy – K8). */
+export async function itemCard(id, title, kind, card, back) {
+  if (GROUP_KINDS.includes(kind)) return groupCard(id, title, kind, card, back);
   let info;
   try { info = await cmd('GetMediaItemInfo', { Id: id }); } catch (e) { return toast('Legacy nie zwrócił informacji o pozycji: ' + e.message, 'bad'); }
   const kv = (rows) => h('dl', { class: 'kv' }, rows.filter((r) => r[1] != null && r[1] !== '').flatMap(([k, v]) => [h('dt', null, k), h('dd', null, v instanceof Node ? v : String(v))]));
@@ -247,8 +293,8 @@ export async function itemCard(id, title, kind) {
     kv([['Rodzaj', info.Kind], ['Biblioteka', info.LibraryName], ['Stan', statePill(info.State) || 'OK'], ['Czas', info.Duration],
       ['Obraz', info.Width ? `${info.Width}×${info.Height}, ${info.DisplayAspectRatio || ''} ${info.VideoScanKind === 'Interlaced' ? 'z przeplotem' : ''}`.trim() : null],
       ['Klatki', info.RFrameRate], ['Id', info.Id]]),
-    kind === 'Shows' ? showActions(id, info.Title || title) : null,
-    h('h3', null, 'Strumienie'), streams, chapters ? [h('h3', null, 'Rozdziały'), chapters] : null, cmdNote('GetMediaItemInfo')), [['Zamknij', true, 'acc']]);
+    h('h3', null, 'Strumienie'), streams, chapters ? [h('h3', null, 'Rozdziały'), chapters] : null, cmdNote('GetMediaItemInfo')),
+  [...(back ? [['‹ Wróć', 'back']] : []), ['Zamknij', true, 'acc']]).then((v) => { if (v === 'back') back(); });
 }
 
 async function search(kind, q, page) {
@@ -298,13 +344,13 @@ VIEWS.przegladarka = async () => {
         h('div', { class: 'tx' },
           h('span', { class: 'bar' }, canAdd ? pickCol[0](c) : null, h('b', null, c.Title)),
           h('span', { class: 'dim' }, c.Subtitle || ''), statePill(c.State)));
-      const open = (e) => { if (!e.target.closest('input')) itemCard(c.MediaItemId, c.Title, B.tab); };
+      const open = (e) => { if (!e.target.closest('input')) itemCard(c.MediaItemId, c.Title, B.tab, c); };
       tile.addEventListener('click', open);
       tile.addEventListener('keydown', (e) => { if (e.key === 'Enter') open(e); });
       return tile;
     })) : h('div', { class: 'empty' }, empty))
     : table(rows, [...(canAdd ? [pickCol] : []), ['Title', 'Tytuł', { class: 'w' }], ['Subtitle', 'Opis / plik'], [(c) => statePill(c.State), 'Stan'], ['MediaItemId', 'Id', { class: 'num' }]],
-      { onRow: (c) => itemCard(c.MediaItemId, c.Title, B.tab), empty });
+      { onRow: (c) => itemCard(c.MediaItemId, c.Title, B.tab, c), empty });
   const modeBtn = (m, t) => { const b = btn(t, () => { viewMode(m); route(true); }); b.classList.toggle('on', m === mode); b.setAttribute('aria-pressed', String(m === mode)); return b; };
   const pager = pages > 1 ? h('div', { class: 'bar pad pager' },
     btn('‹ Poprzednia', () => { B.page--; route(true); }, B.page <= 1 ? 'off' : null), h('span', { class: 'dim' }, `strona ${B.page} z ${pages} · ${total} poz.`),

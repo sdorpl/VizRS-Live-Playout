@@ -56,7 +56,7 @@ Każde usunięcie pyta o potwierdzenie i mówi, co jeszcze zniknie (np. usunięc
 
 ### Komunikaty
 
-Czerwony komunikat „legacy odrzucił: …” to odmowa ErsatzTV legacy z jego tekstem po angielsku (np. „Channel number must be unique”) – popraw pole i zapisz jeszcze raz. Nic nie zostało zapisane.
+Czerwony komunikat „legacy odrzucił: …” to odmowa ErsatzTV legacy z jego tekstem po angielsku (np. „Channel number must be unique”) – popraw pole i zapisz jeszcze raz. Nic nie zostało zapisane. Długi wyjątek legacy panel skraca do pierwszego zdania; całość widać po najechaniu na komunikat.
 
 ## 3. Awarie – co zrobić
 

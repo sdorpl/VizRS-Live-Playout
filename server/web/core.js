@@ -90,9 +90,14 @@ export function table(rows, cols, opts = {}) {
 
 // ---------- komunikaty ----------
 let toastTimer;
+/** Komunikat bez stosu wywołań .NET (legacy zwraca wyjątek z „at Przestrzeń.Typ.Metoda(…) in /source/…”). */
+export const shortError = (msg) => String(msg).replace(/\s+at\s+[A-Z][\w`<>]*(\.[\w`<>[\],]+)+[\s(][\s\S]*$/, '').trim() || String(msg);
 export function toast(msg, kind) {
   const t = document.getElementById('toast');
-  t.textContent = msg;
+  const text = shortError(msg);
+  if (text !== String(msg)) console.warn('VizRS Live – pełny komunikat:', msg);
+  t.textContent = text;
+  t.title = text !== String(msg) ? String(msg) : '';
   t.className = 'toast' + (kind ? ' ' + kind : '');
   t.hidden = false;
   clearTimeout(toastTimer);

@@ -1386,6 +1386,12 @@ function check(cond, msg) {
   });
   check(rt.every(([a, b]) => a === b) && rt[0][2] === 'TAKE' && rt[1][2] === 'OUT' && rt[2][2] === 'raw' && rt[3][2] === 'raw' && rt[4][2] === 'UPDATE',
     'edytor komend: odczyt i zapis bez zmian (pola JSON, kilka stron, komentarz, @N jako komenda tekstowa)');
+  const se1 = await page.evaluate(async () => {
+    const { shortError } = await import('/core.js');
+    return [shortError("Legacy: System.ArgumentOutOfRangeException: out of range. (Parameter 'mediaItem') at ErsatzTV.Core.Extensions.MediaItemExtensions.GetHeadVersion(MediaItem mediaItem) in /source/x.cs:line 94"),
+      shortError('need at least 5 items')];
+  });
+  check(se1[0] === "Legacy: System.ArgumentOutOfRangeException: out of range. (Parameter 'mediaItem')" && se1[1] === 'need at least 5 items', 'komunikaty: stos wywołań .NET legacy obcięty, zwykły tekst bez zmian');
   // M8: streszczenie „Kiedy / Co / Ile” – po polsku (akcja, strona, pola); klik w wiersz → edytor
   const sum = await page.textContent('[data-rules-summary]');
   check(/start pozycji/.test(sum) && /Wprowadź 4001 · Pasek/.test(sum) && sum.includes('headline = {title}') && /OUT – grafika schodzi/.test(sum) && /kanał 24/.test(sum) && /wyłączone/.test(sum),
