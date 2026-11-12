@@ -2,6 +2,8 @@
 
 ## Niewydane
 
+- **Przeglądarka – karta pozycji na telefonie:** okno karty nie przewija się już w bok (szeroka tabela strumieni rozpychała całe okno – teraz przewija się sama tabela); na wąskim ekranie okno na całą szerokość, węższa kolumna opisów, mniejsza okładka nad danymi. Odcinki w karcie serialu i sezonu w dwóch kolumnach: numer ze stanem pod spodem, tytuł z nazwą pliku pod spodem – plik tylko, gdy różni się od tytułu. Odcinki bez numeru w nazwie pliku (legacy: E00) przygaszone z podpowiedzią i ułożone naturalnie po tytule (#2 przed #10). Czas pozycji bez ułamków sekund.
+
 - **Profile kodowania bez akceleracji sprzętowej:** na maszynie, na której żadna akceleracja nie koduje (sonda silnika Next), nowy profil startuje programowo, niedostępne akceleracje są oznaczone „brak na tej maszynie”, a lista profili ostrzega przy profilu, który i tak pójdzie programowo. Panel kodera pokazuje, że obowiązuje libx264 (profil domyślny „x264: high”, podpowiedź presetu dla procesora), a ustawienia NVENC/QSV/klatek B zwija. Poprawka: zapis kodera nie kasuje już ustawień sprzętowych, gdy ich pól nie widać. Atrapa mostu: `MOCK_NO_HW=1`.
 
 - **Aplikacja VizRS Live na Tauri 2** (`desktop/`, `vizrs-live-desktop`): panel lokalny (program uruchamia `vizrs-live` na `127.0.0.1` i zamyka go przy wyjściu) albo klient panelu zdalnego przez pośrednika w programie – token zostaje w programie, strona go nie dostaje. Okno „Połącz z panelem” z listą zapisanych, menu, jedna instancja, tytuł okna z ekranem i alarmem (okno w tle prosi o uwagę), paczki z bundlera Tauri z `vizrs-live` obok programu. Panel w przeglądarce bez zmian (nowy moduł `desktop.js` działa tylko w aplikacji). DOKUMENTACJA §3 „Aplikacja VizRS Live”.

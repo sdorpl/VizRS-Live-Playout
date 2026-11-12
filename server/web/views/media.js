@@ -261,14 +261,24 @@ async function groupCard(id, title, kind, card, back) {
     ]);
     // ten sam tytuł może mieć kilka seriali – zostają tylko pozycje tego serialu / sezonu
     eps = (e?.Cards || []).filter((x) => (kind === 'Shows' ? x.ShowId === id : x.SeasonId === id));
-    eps.sort((a, b) => (a.Season ?? 0) - (b.Season ?? 0) || (a.Episode ?? 0) - (b.Episode ?? 0));
+    // bez numerów w nazwie pliku legacy daje E00 – wtedy kolejność naturalna po tytule (#2 przed #10)
+    eps.sort((a, b) => (a.Season ?? 0) - (b.Season ?? 0) || (a.Episode ?? 0) - (b.Episode ?? 0)
+      || String(a.Title || '').localeCompare(String(b.Title || ''), 'pl', { numeric: true }));
     const showId = kind === 'Shows' ? id : eps[0]?.ShowId;
     seasons = (s?.Cards || []).filter((x) => eps.some((ep) => ep.SeasonId === x.TelevisionSeasonId) || showId == null);
     seasons.sort((a, b) => (a.TelevisionSeasonNumber ?? 0) - (b.TelevisionSeasonNumber ?? 0));
   } catch (err) { toast('Legacy odrzucił wyszukiwanie odcinków: ' + err.message, 'bad'); }
   const self = () => groupCard(id, title, kind, card, back);
-  const epTable = table(eps, [[(e) => h('span', { class: 'mono' }, epLabel(e)), 'Odcinek'], ['Title', 'Tytuł', { class: 'w' }], [(e) => statePill(e.State), 'Stan'],
-    [(e) => h('span', { class: 'mono dim' }, (e.Path || '').split('/').pop()), 'Plik', { class: 'w' }]],
+  // dwie kolumny (czytelne też na telefonie): numer ze stanem pod spodem, tytuł z plikiem pod spodem –
+  // plik tylko, gdy coś wnosi (nazwa bez rozszerzenia ≠ tytuł)
+  const epNo = (e) => h('div', { class: 'ep-no' },
+    h('span', { class: 'mono' + (e.Episode ? '' : ' dim'), title: e.Episode ? null : 'Legacy nie odczytał numeru odcinka z nazwy pliku (wzór: S01E01).' }, epLabel(e)), statePill(e.State));
+  const epTitle = (e) => {
+    const file = (e.Path || '').split('/').pop();
+    const same = file.replace(/\.[^.]+$/, '').trim() === String(e.Title || '').trim();
+    return h('div', { class: 'ep-title' }, h('span', null, e.Title || file || '—'), file && !same ? h('span', { class: 'mono dim' }, file) : null);
+  };
+  const epTable = table(eps, [[epNo, 'Odcinek'], [epTitle, 'Tytuł / plik', { class: 'w' }]],
   { onRow: (e) => itemCard(e.MediaItemId, `${showTitle} · ${epLabel(e)} ${e.Title || ''}`.trim(), 'Episodes', { ...e, ShowPoster: card?.Poster || card?.ShowPoster }, self), empty: 'Brak odcinków w indeksie legacy – zeskanuj bibliotekę.' });
   const per = (sid) => eps.filter((e) => e.SeasonId === sid).length;
   const seasonTable = kind === 'Shows' && seasons.length ? [h('h3', null, 'Sezony'), table(seasons, [
@@ -313,7 +323,7 @@ export async function itemCard(id, title, kind, card, back) {
     clip = playSection(id, seconds(info.Duration), profiles, direct, info.Streams);
   }
   const art = poster(kind, card, 'card-poster') || (card?.ShowPoster ? poster('Shows', { Poster: card.ShowPoster }, 'card-poster') : null);
-  const facts = kv([['Rodzaj', info.Kind], ['Biblioteka', info.LibraryName], ['Stan', statePill(info.State) || 'OK'], ['Czas', info.Duration],
+  const facts = kv([['Rodzaj', info.Kind], ['Biblioteka', info.LibraryName], ['Stan', statePill(info.State) || 'OK'], ['Czas', String(info.Duration || '').replace(/\.\d+$/, '') || null],
     ['Obraz', info.Width ? `${info.Width}×${info.Height}, ${info.DisplayAspectRatio || ''} ${info.VideoScanKind === 'Interlaced' ? 'z przeplotem' : ''}`.trim() : null],
     ['Klatki', info.RFrameRate], ['Id', info.Id]]);
   const v = await dialog(info.Title || title, h('div', { class: 'card', id: 'item-card' },
