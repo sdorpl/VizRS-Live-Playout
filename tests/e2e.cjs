@@ -1340,7 +1340,9 @@ function check(cond, msg) {
   check(/wchodzi 60 s przed końcem audycji \(EPG\), schodzi 5 s przed końcem/.test(await when('1001')), 'grafika: czas strony z Trio (⏱ kanał) w tabeli „kiedy strona wchodzi”');
   check(/start pozycji · wszystkie kanały/.test(await when('4001')) && /reguła CG/.test(await when('4001')), 'grafika: reguła CG Playout z TAKE 4001 przy stronie 4001');
   check(/nie wchodzi sama/.test(await when('3001')), 'grafika: strona bez reguły i elementu – „nie wchodzi sama”');
-  await rerender(() => page.click('[data-cg-when] button:has-text("Sprawdź przypisania")'));
+  // przycisk odświeża tylko tabelę stron (nie cały widok) – czekamy na jej nową wersję
+  await page.click('[data-cg-when] button:has-text("Sprawdź przypisania")');
+  await page.waitForSelector('[data-cg-when] button:has-text("Sprawdź przypisania ponownie")', { timeout: 30000 }).catch(() => {});
   check(await page.isVisible('[data-cg-when] button:has-text("Sprawdź przypisania ponownie")'), 'grafika: przypisania elementów w ramówce sprawdzone (harmonogramy, bloki, deco)');
   // kolekcja audycji LIVE (nazwa z CG /api/live/shows) – prowadzi ją CG Playout, panel nie pozwala jej zmienić
   const liveSc = (await api('CreateSmartCollection', { Name: 'LIVE · Poranek na żywo', Query: 'type:remote_stream' })).result;
