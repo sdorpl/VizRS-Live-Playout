@@ -96,14 +96,12 @@ function check(cond, msg) {
         return send(200, { listeners: CG.inputs || [{ channel: '24', url: 'rtmp://0.0.0.0:1936/live/studio-klucz' }], from: CG.inputs ? 'panel' : 'env', store: true, ingest: true, ports: { rtmp: [1936, 1943], srt: [9000, 9007] } });
       }
       if (u === '/api/live/inputs' && q.method === 'PUT') { CG.inputs = body.listeners; return send(200, { listeners: CG.inputs, from: 'panel' }); }
-      // koder nakładki (CG Playout GET/PUT /api/live/encoder): .env sidecara = veryfast, bez opcji x264
+      // koder nakładki (CG Playout GET/PUT /api/live/encoder): encoder.json wypełniony z .env = veryfast
       if (u === '/api/live/encoder') {
-        if (q.method === 'PUT') CG.encoder = { preset: body.preset || '', x264_params: body.x264_params || '' };
-        const set = CG.encoder || { preset: '', x264_params: '' }, env = { preset: 'veryfast', x264_params: '' };
-        const pick = (k) => set[k] || env[k];
-        const from = (k) => (set[k] ? 'panel' : env[k] ? 'env' : 'default');
-        return send(200, { set, env, used: { preset: pick('preset'), x264_params: pick('x264_params') }, from: { preset: from('preset'), x264_params: from('x264_params') },
-          store: true, presets: ['ultrafast', 'superfast', 'veryfast', 'faster', 'fast', 'medium', 'slow', 'slower', 'veryslow', 'placebo'], x264_keys: ['bframes', 'subme'] });
+        const keys = ['preset', 'profile', 'x264_params', 'nvenc_preset', 'qsv_preset', 'bframes'];
+        if (q.method === 'PUT') CG.encoder = Object.fromEntries(keys.map((k) => [k, String(body[k] ?? '')]));
+        return send(200, { used: CG.encoder || { preset: 'veryfast', profile: '', x264_params: '', nvenc_preset: '', qsv_preset: '', bframes: '0' }, from: 'panel', store: true, nvenc_presets: ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7'], qsv_presets: ['veryfast', 'faster', 'fast', 'medium', 'slow', 'slower', 'veryslow'], max_bframes: 4,
+          presets: ['ultrafast', 'superfast', 'veryfast', 'faster', 'fast', 'medium', 'slow', 'slower', 'veryslow', 'placebo'], profiles: ['baseline', 'main', 'high'], x264_keys: ['bframes', 'subme'] });
       }
       if ((u === '/api/live/graphics/off' || u === '/api/live/graphics/on') && q.method === 'POST') {
         CG.graphicsOff = u.endsWith('/off');
@@ -579,13 +577,18 @@ function check(cond, msg) {
   const profName = 'E2E 720p ' + tag;
   await page.goto(`${BASE}/#profile`);
   await page.waitForSelector('main[data-view="profile"]');
-  // koder nakładki CG: stan z .env, zapis presetu i zmierzonych opcji x264 przez pośrednika
-  check(/veryfast \(z \.env\)/.test(await page.textContent('main')), 'koder CG: preset w użyciu z .env');
-  await page.selectOption('#enc-preset', 'superfast');
+  // koder nakładki CG: preset, profil H.264 i zmierzone opcje x264 przez pośrednika
+  check(await page.inputValue('#enc-preset') === 'veryfast' && await page.inputValue('#enc-profile') === '' && await page.inputValue('#enc-bframes') === '0', 'koder CG: wartości w użyciu w polach (też klatki B z .env)');
+  await page.selectOption('#enc-nvenc', 'p6');
+  await page.selectOption('#enc-qsv', 'slow');
+  await page.selectOption('#enc-preset', 'ultrafast');
+  await page.selectOption('#enc-profile', 'main');
   await page.selectOption('#enc-x264', 'bframes=0:subme=0');
+  check(!(await page.isVisible('#enc-x264-custom')), 'koder CG: pole własnych opcji ukryte przy wariancie z listy');
   await rerender(() => page.click('button:has-text("Zapisz koder")'));
-  check(CG.encoder && CG.encoder.preset === 'superfast' && CG.encoder.x264_params === 'bframes=0:subme=0', `koder CG: PUT /api/live/encoder (${JSON.stringify(CG.encoder)})`);
-  check(/superfast \(ustawione w panelu\)/.test(await page.textContent('main')) && /bframes=0:subme=0 \(ustawione w panelu\)/.test(await page.textContent('main')), 'koder CG: po zapisie wartości z panelu');
+  check(CG.encoder && CG.encoder.preset === 'ultrafast' && CG.encoder.profile === 'main' && CG.encoder.x264_params === 'bframes=0:subme=0'
+    && CG.encoder.nvenc_preset === 'p6' && CG.encoder.qsv_preset === 'slow' && CG.encoder.bframes === '0', `koder CG: PUT /api/live/encoder (${JSON.stringify(CG.encoder)})`);
+  check(await page.inputValue('#enc-profile') === 'main' && await page.inputValue('#enc-x264') === 'bframes=0:subme=0', 'koder CG: po zapisie wartości z panelu');
   await page.selectOption('#enc-x264', 'custom');
   check(await page.isVisible('#enc-x264-custom'), 'koder CG: pole własnych opcji po wyborze „własne…”');
   await rerender(() => page.click('text=+ Nowy profil'));

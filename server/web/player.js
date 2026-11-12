@@ -1,13 +1,20 @@
 // Podgląd strumienia kanału: okno w rogu ekranu, które zostaje przy zmianie widoków.
 // Źródło: HLS legacy przez serwer panelu (/api/stream/…) – ta sama sesja segmentera, co u widzów,
 // więc podgląd niczego nie koduje drugi raz. Segmenty MPEG-TS przepakowuje mux.js (MSE), a obraz
-// jest równany do zegara anteny (PROGRAM-DATE-TIME), czyli pokazuje to, co właśnie idzie w ramówce.
+// jest równany do zegara anteny (PROGRAM-DATE-TIME) ze stałym opóźnieniem: kanał z nakładką grafiki
+// powstaje w tempie zegara (CG Playout wyprzedza go o LEAD_SECONDS), więc najnowszy segment kończy się
+// ok. „teraz” – podgląd grający dokładnie „teraz” stawałby co segment. Opóźnienie to najgorsze z ostatniej
+// minuty spóźnienie końca najnowszego segmentu względem zegara plus zapas (zwykle 3–5 s).
 
 import { h, btn, cmd } from './core.js';
 import { Transmuxer } from './mux.js';
 
-const AHEAD = 8;       // s bufora przed bieżącym obrazem (legacy Next ma segmenty ok. 10 s naprzód)
+const AHEAD = 8;       // s bufora przed bieżącym obrazem (pobieramy najwyżej tyle naprzód)
 const KEEP = 20;       // s bufora za bieżącym obrazem; starsze dane MSE usuwamy
+const MARGIN = 2;      // s zapasu bufora ponad najgorsze spóźnienie najnowszego segmentu
+const MIN_DELAY = 1;   // s – najmniejsze opóźnienie podglądu za anteną
+const MAX_DELAY = 30;  // s – największe (playlista wyraźnie za zegarem: i tak „opóźnienie” w stanie)
+const LAG_WINDOW = 60000; // ms pomiarów spóźnienia segmentów, z których liczymy opóźnienie
 const RETRIES = 5;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -30,6 +37,9 @@ export function parsePlaylist(text, base) {
     else if (l.startsWith('#EXT-X-PROGRAM-DATE-TIME:')) { const t = Date.parse(l.slice(25)); pdt = isNaN(t) ? null : t; }
     else if (l === '#EXT-X-DISCONTINUITY') disc = true;
     else if (!l.startsWith('#') && !res.master) {
+      // segment bez własnego PROGRAM-DATE-TIME: czas poprzedniego + jego długość (HLS), chyba że po nieciągłości
+      const prev = res.segments[res.segments.length - 1];
+      if (pdt == null && !disc && prev?.pdt != null) pdt = prev.pdt + prev.dur * 1000;
       res.segments.push({ seq: seq++, uri: new URL(l, base).href, dur, pdt, disc });
       pdt = null; disc = false;
     }
@@ -46,6 +56,8 @@ export class Preview {
     this.report = report;
     this.run = 0;
     this.skew = 0;  // zegar serwera − zegar przeglądarki (ms), z nagłówka X-VizRS-Now
+    this.delay = MIN_DELAY; // s, o ile podgląd idzie za zegarem anteny (measure)
+    this.lags = [];
   }
 
   stop() {
@@ -64,6 +76,8 @@ export class Preview {
     if (this.url) URL.revokeObjectURL(this.url);
     this.url = null;
     this.epoch = null;
+    this.delay = MIN_DELAY;
+    this.lags = [];
   }
 
   async start(ch, attempt = 0) {
@@ -121,8 +135,19 @@ export class Preview {
     return r.text();
   }
 
-  /** Czas anteny (s na osi odtwarzacza) albo null, gdy playlista nie ma PROGRAM-DATE-TIME. */
-  target() { return this.epoch == null ? null : (Date.now() + this.skew - this.epoch) / 1000; }
+  /** Pokazywany czas anteny (s na osi odtwarzacza: zegar − opóźnienie) albo null bez PROGRAM-DATE-TIME. */
+  target() { return this.epoch == null ? null : (Date.now() + this.skew - this.delay * 1000 - this.epoch) / 1000; }
+
+  /** Opóźnienie za anteną: najgorsze z ostatniej minuty spóźnienie końca najnowszego segmentu + MARGIN. */
+  measure(segs) {
+    const last = segs[segs.length - 1];
+    if (last?.pdt == null) return;
+    const now = Date.now() + this.skew;
+    this.lags = this.lags.filter((s) => now - s.at < LAG_WINDOW);
+    this.lags.push({ at: now, lag: (now - (last.pdt + last.dur * 1000)) / 1000 });
+    const worst = Math.max(...this.lags.map((s) => s.lag));
+    this.delay = Math.min(MAX_DELAY, Math.max(MIN_DELAY, worst + MARGIN));
+  }
 
   ahead() {
     const v = this.video, b = v.buffered;
@@ -144,6 +169,7 @@ export class Preview {
       const pl = parsePlaylist(await this.text(variant), variant);
       td = pl.target;
       const segs = pl.segments;
+      this.measure(segs);
       if (!segs.length) { await sleep(1000); continue; }
       if (next == null || next < segs[0].seq || next > segs[segs.length - 1].seq + 1) next = this.pickStart(segs);
       for (const seg of segs) {
@@ -182,9 +208,9 @@ export class Preview {
     }
   }
 
-  /** Pierwszy segment: ten, w którym wypada czas anteny; bez PROGRAM-DATE-TIME – ostatni (krawędź na żywo). */
+  /** Pierwszy segment: ten, w którym wypada pokazywany czas anteny; bez PROGRAM-DATE-TIME – ostatni (krawędź na żywo). */
   pickStart(segs) {
-    const now = Date.now() + this.skew;
+    const now = Date.now() + this.skew - this.delay * 1000;
     if (segs[0].pdt == null) return segs[segs.length - 1].seq;
     let pick = segs[0];
     for (const s of segs) if (s.pdt != null && s.pdt <= now) pick = s;
@@ -230,7 +256,8 @@ export class Preview {
     }
     v.playbackRate = lag > 0.15 ? 1.06 : lag < -0.15 ? 0.94 : 1;
     if (v.paused) v.play().catch(() => {});
-    this.report((Math.abs(lag) < 0.3 ? 'zgodnie z zegarem anteny' : `${lag > 0 ? 'opóźnienie' : 'wyprzedzenie'} ${Math.abs(lag).toFixed(1)} s`) + (this.info ? ' · ' + this.info : ''), Math.abs(lag) < 1 ? 'on' : 'warn');
+    const behind = `${this.delay.toFixed(1).replace('.', ',')} s za anteną`;
+    this.report((Math.abs(lag) < 0.3 ? `równo z zegarem anteny, ${behind}` : `${lag > 0 ? 'opóźnienie' : 'wyprzedzenie'} ${Math.abs(lag).toFixed(1)} s ponad stałe ${behind}`) + (this.info ? ' · ' + this.info : ''), Math.abs(lag) < 1 ? 'on' : 'warn');
   }
 }
 

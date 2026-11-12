@@ -283,6 +283,7 @@ if (process.env.MOCK_CG === '1') {
   const CGT = 'test-cg-token-0123456789';
   const layers = { 24: [{ layer: 10, page: '101', name: 'belka 101', scene: 'belka', since: now - 300e3 }, { layer: 20, page: '4001', name: 'zegar', scene: 'zegar', since: now - 3600e3 }], 25: [{ layer: 10, page: '201', name: 'teraz gramy', since: now - 120e3 }], 26: [] };
   const asrun = [];
+  let encoder = { preset: 'veryfast', profile: '', x264_params: '', nvenc_preset: '', qsv_preset: '', bframes: '0' }; // koder nakładki (GET/PUT /api/live/encoder)
   const log = (e) => asrun.push({ t: Date.now(), operator: 'VizRS Live · atrapa', ...e });
   for (let i = 0; i < 8; i++) { const it = items(1, 8)[i]; asrun.push({ t: +new Date(it.Start), kind: 'item_start', title: it.Title }); if (i % 3 === 0) asrun.push({ t: +new Date(it.Start) + 10e3, kind: 'take', page: '101', layer: 10, title: it.Title, operator: 'reguła: on_clip' }); }
   asrun.push({ t: now - 1800e3, kind: 'hold', operator: 'VizRS Live · MCR 1' }, { t: now - 1700e3, kind: 'release', operator: 'VizRS Live · MCR 1' });
@@ -294,11 +295,16 @@ if (process.env.MOCK_CG === '1') {
       if (q.headers.authorization !== 'Bearer ' + CGT) return reply(r, 401, { error: 'zły token panelu' });
       if (u.pathname === '/health') return reply(r, 200, { sessions: 3, overlay: ['24'], ingest: { channels: ['24'] }, captures: [] });
       if (u.pathname === '/api/live/state') return reply(r, 200, {
-        ingest: true, now: Date.now(), version: 'atrapa', features: ['layers', 'take', 'asrun', 'webhook'], settings: { graphics_off: false },
+        ingest: true, now: Date.now(), version: 'atrapa', features: ['layers', 'take', 'asrun', 'encoder', 'webhook'], settings: { graphics_off: false },
         channels: DB.channels.slice(0, 3).map((c) => ({ number: c.Number, name: c.Name, source: { live: c.Number === '24' }, on_air: false, hold: false, anytime: false, layers: layers[c.Number] || [],
           next_live: c.Number === '25' ? { start: Date.now() + 3 * 60e3, title: 'Koncert w studiu' } : null })),
         events: [], guide: {},
       });
+      if (u.pathname === '/api/live/encoder') {
+        if (q.method === 'PUT') { const v = JSON.parse(b || '{}'); encoder = Object.fromEntries(Object.keys(encoder).map((k) => [k, String(v[k] ?? '')])); }
+        return reply(r, 200, { used: encoder, from: 'panel', store: true, presets: ['ultrafast', 'superfast', 'veryfast', 'faster', 'fast', 'medium', 'slow', 'slower', 'veryslow', 'placebo'],
+          profiles: ['baseline', 'main', 'high'], x264_keys: ['bframes', 'subme', 'ref', 'me', 'trellis'], nvenc_presets: ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7'], qsv_presets: ['veryfast', 'faster', 'fast', 'medium', 'slow', 'slower', 'veryslow'], max_bframes: 4 });
+      }
       if (u.pathname === '/api/live/inputs') return reply(r, 200, { listeners: [{ channel: '24', url: 'rtmp://0.0.0.0:1936/live/x' }] });
       if (u.pathname === '/etv/pages') return reply(r, 200, { pages: [{ number: '101', name: 'belka tytułowa' }, { number: '102', name: 'za chwilę' }, { number: '4001', name: 'zegar' }] });
       if (u.pathname === '/api/live/asrun') return reply(r, 200, { entries: asrun });

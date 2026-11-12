@@ -43,6 +43,14 @@ const copyBtn = (label, text) => btn('Kopiuj', async () => {
 
 // odsłonięte pola i rozwinięte „Jak nadawać” przetrwają odświeżanie stanu (do przeładowania strony)
 const revealed = new Set();
+// „Studio także poza audycjami” kliknięte, a jeszcze niepotwierdzone w stanie CG: kanał → {value, until}.
+// Odczyt stanu co 1 s, wysłany przed zapisem, cofałby pole do starej wartości (operator klikał wtedy znowu).
+const anytimeSent = new Map();
+const anytimeShown = (c) => {
+  const p = anytimeSent.get(c.number);
+  if (p && (p.value === c.anytime || Date.now() > p.until)) anytimeSent.delete(c.number);
+  return anytimeSent.has(c.number) ? anytimeSent.get(c.number).value : c.anytime;
+};
 const opened = new Set();
 
 function secretField(label, value, aria) {
@@ -201,9 +209,13 @@ function channelCard(c, receivedAt) {
       armed = null;
       act(c, 'hold', `Kanał ${c.number}: studio zdjęte`);
     }, 'big off' + (isArmed ? ' arm' : ''));
-  const anytime = h('input', { type: 'checkbox', checked: c.anytime, 'aria-label': `Studio poza audycjami ${c.number}` });
+  const anytimeNow = anytimeShown(c);
+  const anytime = h('input', { type: 'checkbox', checked: anytimeNow, 'aria-label': `Studio poza audycjami ${c.number}` });
   anytime.addEventListener('change', async () => {
-    try { await cg(`live/channels/${encodeURIComponent(c.number)}`, 'PUT', { anytime: anytime.checked }); toast('Zapisane w CG Playout'); } catch (e) { toast(e.message, 'bad'); }
+    const value = anytime.checked;
+    anytimeSent.set(c.number, { value, until: Date.now() + 10000 });
+    anytime.disabled = true;
+    try { await cg(`live/channels/${encodeURIComponent(c.number)}`, 'PUT', { anytime: value }); toast('Zapisane w CG Playout'); } catch (e) { anytimeSent.delete(c.number); toast(e.message, 'bad'); }
     route(true);
   });
   const how = h('details', { class: 'how' }, h('summary', null, 'Jak nadawać na ten kanał'), inputsBox(c));
@@ -214,7 +226,7 @@ function channelCard(c, receivedAt) {
     thumb,
     h('dl', { class: 'kv' },
       h('dt', null, 'Sygnał studia'), h('dd', null, src ? `${src.video || '?'}${src.audio ? ' + dźwięk' : ' bez dźwięku'}` : 'brak'),
-      h('dt', null, 'Studio'), h('dd', null, (c.anytime ? 'także poza audycjami' : 'tylko w audycjach LIVE') + (c.anytime_own == null ? ' (konfiguracja CG)' : ' (panel)')),
+      h('dt', null, 'Studio'), h('dd', null, (anytimeNow ? 'także poza audycjami' : 'tylko w audycjach LIVE') + (c.anytime_own == null ? ' (konfiguracja CG)' : ' (panel)')),
       h('dt', null, 'Najbliższa LIVE'), h('dd', null, c.next_live ? `${c.next_live.title} · ${day(c.next_live.start)} ${at(c.next_live.start)}` : '—')),
     h('div', { class: 'now' + (warn ? ' warn' : '') }, left, right),
     h('div', { class: 'bar ctl' }, main,

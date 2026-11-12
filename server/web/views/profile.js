@@ -1,6 +1,6 @@
 // Profile kodowania (R5): jak silnik Next koduje kanał. Odpowiednik FFmpeg Profiles + FFmpeg Editor legacy.
 
-import { VIEWS, h, api, cmd, pl, pill, btn, panel, table, toast, confirmDlg, route, has, cmdNote, enumValues } from '../core.js';
+import { VIEWS, S, h, api, cmd, pl, pill, btn, panel, table, toast, confirmDlg, route, has, cmdNote, enumValues } from '../core.js';
 import { form } from '../form.js';
 import { crudView } from '../parts.js';
 
@@ -168,6 +168,117 @@ function resolutionsPanel(resolutions, profiles) {
     cmdNote('GetAllResolutions', 'CreateCustomResolution', 'DeleteCustomResolution'));
 }
 
+// ---------- koder programowy nakładki VizRS CG Playout (/api/cg/live/encoder) ----------
+/** Uwagi do presetów x264 (pomiary A1, CG Playout docs/plany/PLAN-ampere.md). */
+const PRESET_NOTES = {
+  ultrafast: 'najszybszy; na A1 odrzucony: −3,4…−5 dB SSIM',
+  superfast: 'kilka kanałów, materiały 1080p50/60, ciągły pasek',
+  veryfast: 'domyślny na Ampere A1',
+  medium: 'domyślny x264 – za wolny na A1',
+};
+/** Zmierzone, a dotąd niewdrożone opcje libx264 (A1, 900p25, Gothic: CPU / SSIM względem samego presetu). */
+export const X264_VARIANTS = [
+  ['subme=0', 'subme=0 – CPU −8%, SSIM −0,39 dB'],
+  ['bframes=0', 'bframes=0 – CPU −15%, SSIM −0,77 dB'],
+  ['bframes=0:subme=0', 'bframes=0:subme=0 – CPU −20%, SSIM −1,44 dB'],
+];
+/** Profile H.264 libx264 (8-bit 4:2:0). */
+const PROFILE_NOTES = {
+  baseline: 'bez klatek B i CABAC – najsłabsza kompresja, bardzo stare odbiorniki',
+  main: 'zgodność ze starszymi dekoderami i telewizorami – domyślny NVENC',
+  high: 'najlepsza kompresja – domyślny x264',
+};
+/** Presety NVENC (SDK 10+). */
+const NVENC_NOTES = { p1: 'najszybszy, najniższa jakość', p2: 'szybszy', p3: 'szybki', p4: 'średni – domyślny NVENC', p5: 'wolny, dobra jakość', p6: 'wolniejszy, lepsza jakość', p7: 'najwolniejszy, najlepsza jakość' };
+/** Klatki B koderów sprzętowych: pamięć karty kodera NVENC 1080p50 (pomiar Quadro P400, CG Playout PLAN-p400). */
+const BFRAME_NOTES = { 0: 'najmniej pamięci karty (NVENC 1080p50: 79 MiB zamiast 139)', 1: 'NVENC 1080p50: 99 MiB' };
+const FROM = {
+  panel: 'ustawione w panelu',
+  env: 'z .env serwera – zapisz, by przenieść do panelu',
+  default: 'domyślne',
+};
+
+/** Treść pola „w użyciu”: wartość albo opis domyślnej. */
+export function encoderUsed(value, empty) {
+  return value || empty;
+}
+
+/** Panel kodera nakładki: co obowiązuje i skąd; profil H.264, preset i opcje x264, presety NVENC i QSV, klatki B sprzętowe (od następnego ffmpeg, wszystkie kanały). */
+function encoderPanel(enc) {
+  const title = 'Koder (nakładka VizRS CG)';
+  if (enc == null) return null;
+  if (enc instanceof Error) {
+    return panel(title, null, h('div', { class: 'note' },
+      'VizRS CG Playout nie udostępnia ustawień kodera (starsza wersja albo brak połączenia): ', enc.message,
+      '. Preset ustawia wtedy tylko .env stosu (VIZRS_FFMPEG_PRESET).'));
+  }
+  const used = enc.used || {};
+  const preset = h('select', { id: 'enc-preset', 'aria-label': 'Preset x264' },
+    h('option', { value: '' }, 'domyślny ErsatzTV (medium)'),
+    (enc.presets || []).map((p) => h('option', { value: p }, PRESET_NOTES[p] ? `${p} – ${PRESET_NOTES[p]}` : p)));
+  preset.value = used.preset || '';
+  const profile = h('select', { id: 'enc-profile', 'aria-label': 'Profil H.264' },
+    h('option', { value: '' }, 'domyślny kodera (x264: high, NVENC: main)'),
+    (enc.profiles || []).map((p) => h('option', { value: p }, PROFILE_NOTES[p] ? `${p} – ${PROFILE_NOTES[p]}` : p)));
+  profile.value = used.profile || '';
+  const known = X264_VARIANTS.map(([v]) => v);
+  const variant = h('select', { id: 'enc-x264', 'aria-label': 'Opcje x264' },
+    h('option', { value: '' }, 'bez opcji'),
+    X264_VARIANTS.map(([v, label]) => h('option', { value: v }, label)),
+    h('option', { value: 'custom' }, 'własne…'));
+  const custom = h('input', { id: 'enc-x264-custom', type: 'text', placeholder: 'np. bframes=0:subme=1', 'aria-label': 'Własne opcje x264', size: 28 });
+  const opts = used.x264_params || '';
+  variant.value = !opts ? '' : known.includes(opts) ? opts : 'custom';
+  custom.value = variant.value === 'custom' ? opts : '';
+  const syncCustom = () => { custom.hidden = variant.value !== 'custom'; };
+  variant.addEventListener('change', syncCustom);
+  syncCustom();
+  const choice = (id, label, def, values, notes, value) => {
+    const el = h('select', { id, 'aria-label': label }, h('option', { value: '' }, def),
+      values.map((v) => h('option', { value: String(v) }, notes[v] ? `${v} – ${notes[v]}` : String(v))));
+    el.value = value || '';
+    return el;
+  };
+  const nvenc = choice('enc-nvenc', 'Preset NVENC', 'domyślny NVENC (p4)', enc.nvenc_presets || [], NVENC_NOTES, used.nvenc_preset);
+  const qsv = choice('enc-qsv', 'Preset QSV', 'domyślny sterownika', enc.qsv_presets || [], {}, used.qsv_preset);
+  const counts = Array.from({ length: (enc.max_bframes ?? 4) + 1 }, (_, i) => i);
+  const bframes = choice('enc-bframes', 'Klatki B koderów sprzętowych', 'domyślne kodera', counts, BFRAME_NOTES, used.bframes);
+  const hardware = Boolean(enc.nvenc_presets);
+  const save = async () => {
+    const x264 = variant.value === 'custom' ? custom.value.trim() : variant.value;
+    const body = { preset: preset.value, profile: profile.value, x264_params: x264 };
+    if (hardware) Object.assign(body, { nvenc_preset: nvenc.value, qsv_preset: qsv.value, bframes: bframes.value });
+    try {
+      await api('/api/cg/live/encoder', { method: 'PUT', body: JSON.stringify(body) });
+      toast('Koder zapisany – działa od następnego startu ffmpeg (następna pozycja ramówki)', 'ok');
+      route(true);
+    } catch (e) { toast('VizRS CG Playout odrzucił ustawienia kodera: ' + e.message, 'bad'); }
+  };
+  const field = (label, control) => [h('dt', null, label), h('dd', null, control)];
+  const editable = enc.store !== false;
+  const sub = (text) => [h('dt', { class: 'dim' }, text), h('dd', null)];
+  return panel(title, h('span', { class: 'dim' }, `wszystkie kanały · ${FROM[enc.from] || enc.from}`),
+    h('dl', { class: 'kv' },
+      ...field('Profil H.264', editable ? profile : encoderUsed(used.profile, 'domyślny kodera')),
+      ...sub('Programowo (libx264)'),
+      ...field('Preset x264', editable ? preset : encoderUsed(used.preset, 'domyślny ErsatzTV (medium)')),
+      ...field('Opcje x264', editable ? h('span', { class: 'bar' }, variant, custom) : encoderUsed(used.x264_params, 'bez opcji')),
+      ...(hardware ? [
+        ...sub('Sprzętowo (NVENC, QSV, VAAPI)'),
+        ...field('Preset NVENC', editable ? nvenc : encoderUsed(used.nvenc_preset, 'domyślny NVENC (p4)')),
+        ...field('Preset QSV', editable ? qsv : encoderUsed(used.qsv_preset, 'domyślny sterownika')),
+        ...field('Klatki B', editable ? bframes : encoderUsed(used.bframes, 'domyślne kodera')),
+      ] : [])),
+    editable
+      ? h('div', { class: 'bar pad end' }, btn('Zapisz koder', save, 'acc'))
+      : h('div', { class: 'note pad' }, 'CG Playout nie ma etv_config – ustawień nie ma gdzie zapisać; obowiązuje .env serwera.'),
+    h('div', { class: 'hint pad dim' },
+      'Silnik Next pomija preset i profil H.264 z profilu kodowania – także dla akceleracji sprzętowej – więc dokłada je nakładka vizrs-ffmpeg; ',
+      'który zestaw działa, wynika z akceleracji w profilu kanału. Profil H.264 dotyczy wszystkich koderów H.264 (HEVC bez zmian; NVENC bez ustawienia koduje w main). ',
+      'VAAPI nie ma presetu – dostaje profil i klatki B. Ustawienia stąd zastępują .env serwera (.env wypełnia je tylko przy pierwszym starcie). ',
+      'Opcje x264 to wymiana jakości na procesor: włącz, gdy kanał nie trzyma tempa 1×. Dozwolone klucze własnych opcji: ', (enc.x264_keys || []).join(', '), '.'));
+}
+
 VIEWS.profile = crudView({
   title: 'Profile kodowania',
   desc: 'Jak silnik Next koduje kanał: rozdzielczość, obraz, dźwięk, akceleracja sprzętowa. Odpowiednik FFmpeg Profiles w legacy. Zmiana działa od następnego startu strumienia kanału.',
@@ -181,9 +292,11 @@ VIEWS.profile = crudView({
       cmd('GetAllChannels', { ShowDisabled: true }),
       // K5: stan sprzętu wg Next – starsze legacy bez komendy = brak (podpowiedź z ffmpeg jak dotąd)
       has('GetNextProbe') ? cmd('GetNextProbe').catch(() => null) : null]);
+    // koder nakładki CG – bez CG Playout null (panel ukryty), starszy CG albo błąd = Error (komunikat)
+    const enc = S.status?.cg ? await api('/api/cg/live/encoder').then((r) => r.result).catch((e) => e) : null;
     // klatkaż profili w moście – starszy most bez /framerates = null (zostaje przełącznik legacy)
     const fr = await api('/api/framerates').then((r) => r.result).catch(() => null);
-    return { rows, resolutions, supported, fresh, channels, fr, probe: has('GetNextProbe') ? (probe ?? false) : undefined };
+    return { rows, resolutions, supported, fresh, channels, fr, enc, probe: has('GetNextProbe') ? (probe ?? false) : undefined };
   },
   id: (p) => p.Id,
   cols: ({ channels, fr }) => [
@@ -241,9 +354,9 @@ VIEWS.profile = crudView({
     if (d.NormalizeAudio && d.NormalizeLoudnessMode === 'LoudNorm' && d.TargetLoudness == null) throw new Error('Pole „Poziom docelowy”: podaj poziom w LUFS (TV w Polsce: −23).');
   },
   footer: (p, { fresh }) => h('div', { class: 'hint pad dim' },
-    'Ustawienia tylko dla starego silnika legacy (wątki, preset, profil H.264, B-klatki, wyświetlacz VAAPI) panel zostawia bez zmian',
+    'Ustawienia tylko dla starego silnika legacy (wątki, preset, profil H.264, B-klatki, wyświetlacz VAAPI) panel zostawia bez zmian; preset i profil H.264 (programowo i sprzętowo) oraz opcje x264 ustawia panel „Koder” niżej',
     p ? '.' : ` (nowy profil: wartości domyślne legacy, np. profil ${fresh.VideoProfile || '—'}).`),
-  below: (cur, { resolutions, rows }) => resolutionsPanel(resolutions, rows),
+  below: (cur, { resolutions, rows, enc }) => [encoderPanel(enc), resolutionsPanel(resolutions, rows)],
   afterSave: async (id, { fr }, d) => {
     if (!fr?.active || d.FrameRateChoice === undefined) return;
     const want = rateToBridge(d.FrameRateChoice);
