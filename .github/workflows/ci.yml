@@ -21,6 +21,19 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+      # wspólny rdzeń wyglądu (vizrs-ui.css) = kopia z VizRS CG System w wersji z server/web/CG_SYSTEM
+      - name: Wersja CG System dla vizrs-ui.css
+        id: cg
+        run: echo "ref=$(cat server/web/CG_SYSTEM)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          repository: sdorpl/VizRS-CG-System
+          ref: ${{ steps.cg.outputs.ref }}
+          path: cg
+          sparse-checkout: source/web/vizrs-ui.css
+          sparse-checkout-cone-mode: false
+      - name: vizrs-ui.css zgodny z CG System
+        run: scripts/sync-ui.sh --check cg
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy

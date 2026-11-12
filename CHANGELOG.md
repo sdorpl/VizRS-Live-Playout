@@ -2,6 +2,8 @@
 
 ## Niewydane
 
+- **Wspólny rdzeń wyglądu rodziny VizRS (`vizrs-ui.css`):** tokeny i kontrolki panelu (przyciski, pola, pigułki, pasek górny, menu z szufladą, tabele, formularze, okna, karty) wydzielone ze `style.css` do pliku wspólnego z VizRS CG System i VizRS CG Artist (źródło w CG System; `scripts/sync-ui.sh`, kontrola zgodności w CI i `tests/deploy.sh`). Wygląd panelu bez zmian.
+
 - Diagnostyka → Stan: wiersz „strefy grafiki” podaje też liczbę granic stron z VizRS (`bounds` w `/health` CG Playout, PLAN-strefy S6; starszy CG Playout – bez tej liczby).
 
 ## 26.11.1 – wydanie (2026-11-12)

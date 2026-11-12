@@ -2,7 +2,8 @@
 # Szybkie wdrożenie panelu na lokalny stos (VizRS Live w stosie VizRS CG Playout, nakładka compose.cg-playout.yml)
 # zamiast lokalnego stosu testowego. Pełna bramka z e2e (tests/gate.sh) działa w CI po pushu.
 #
-#   0. scripts/check-cg-overlay.sh – Caddyfile, usługa live i VAAPI takie same jak w nakładce CG Playout
+#   0. scripts/check-cg-overlay.sh – Caddyfile, usługa live i VAAPI takie same jak w nakładce CG Playout;
+#      scripts/sync-ui.sh --check – vizrs-ui.css taki sam jak w VizRS CG System (gdy jest obok)
 #   1. szybkie testy: cargo fmt --check, clippy, cargo test (m.in. importy modułów UI), node --check plików JS
 #   2. obraz panelu z drzewa roboczego (poprzedni zostaje jako vizrs-live:poprzedni)
 #   3. podmiana tylko usługi `live` (legacy, CG Playout, VizRS i proxy działają dalej), czekanie na healthy
@@ -25,6 +26,7 @@ PREV="${IMAGE%:*}:poprzedni"
 
 step "zgodność wdrożenia z CG Playout (Caddyfile, usługa live, VAAPI)"
 scripts/check-cg-overlay.sh "$CG_DIR"
+if [ -d "../VizRS CG System" ]; then scripts/sync-ui.sh --check; else echo "deploy: brak ../VizRS CG System – pomijam kontrolę vizrs-ui.css"; fi
 
 step "szybkie testy: cargo fmt, clippy, test; składnia JS"
 (cd server && cargo fmt --check && cargo clippy --all-targets -q -- -D warnings && cargo test -q)
