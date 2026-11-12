@@ -460,7 +460,7 @@ VIEWS.diagnostyka = async () => {
       : (() => {
         const runs = cgHealth.zones.runs || [];
         const txt = runs.length ? runs.map((r) => `kanał ${r.channel}: ${r.zones ? `${r.zones} (${r.share_percent}% ekranu)` : 'cały ekran'}${r.outside ? ` · grafika poza strefami: ${r.outside}` : ''}`).join('; ') : 'brak przebiegów nakładki';
-        return [runs.some((r) => r.outside) ? 'UWAGA' : 'INFO', `auto (ślady stron: ${cgHealth.zones.pages}) · ${txt}`];
+        return [runs.some((r) => r.outside) ? 'UWAGA' : 'INFO', `auto (ślady stron: ${cgHealth.zones.pages}${cgHealth.zones.bounds != null ? `, granice z VizRS: ${cgHealth.zones.bounds}` : ''}) · ${txt}`];
       })()],
     ['VizRS', S.status.vizrsUrl ? ['INFO', `${S.status.vizrsUrl} – łączność widać w podglądzie /output (Grafika kanału)`] : ['—', 'nie ustawiony (VIZRS_LIVE_VIZRS_URL)']],
   ].filter(([, v]) => v);
