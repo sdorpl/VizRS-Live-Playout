@@ -14,7 +14,8 @@ import { h, param, pl, pad2 } from './core.js';
  *   { label, group: [pola] }                            – kilka kontrolek w jednym wierszu (np. pola tak/nie)
  *   { key, label, render(wartość, wartości) -> {el, read()} } – kontrolka własna (np. wybór treści)
  * kind: text | number | check | enum | time | datetime | pick | multi (domyślnie z typu parametru komendy)
- * options: [[wartość, etykieta]] dla pick/multi/enum (enum domyślnie z mostu, etykiety z PL).
+ * options: [[wartość, etykieta]] dla pick/multi/enum (enum domyślnie z mostu, etykiety z PL);
+ *   w multi opcjonalnie trzeci element – miniatura: { src } (obraz) albo { badge } (krótki napis zamiast obrazu).
  */
 export function form(cmdName, fields, values = {}, opts = {}) {
   const prefix = opts.idPrefix ?? 'f-';
@@ -134,10 +135,11 @@ function control(kind, id, value, o) {
       return { el, read, peek: () => conv(el.value) };
     }
     case 'multi': {
+      if ((o.options || []).length > MULTI_PLAIN_MAX) return multiSearch(id, value, o);
       const set = new Set(value || []);
-      const boxes = (o.options || []).map(([v, t]) => {
+      const boxes = (o.options || []).map(([v, t, th]) => {
         const c = h('input', { type: 'checkbox', value: String(v), checked: set.has(v) });
-        return [v, c, h('label', { class: 'chk' }, c, t)];
+        return [v, c, h('label', { class: 'chk' }, c, miniature(th), t)];
       });
       const el = h('div', { class: 'multi', id, role: 'group', 'aria-label': o.label },
         boxes.length ? boxes.map((b) => b[2]) : h('span', { class: 'dim' }, o.empty || 'brak pozycji do wyboru'));
@@ -171,6 +173,98 @@ function control(kind, id, value, o) {
       return { el, read, peek: () => el.value };
     }
   }
+}
+
+/** Do tylu pozycji wybór wielokrotny to zwykłe pola tak/nie; dłuższa lista – wyszukiwarka z etykietami. */
+const MULTI_PLAIN_MAX = 6;
+/** Miniatura pozycji wyboru: { src } – obraz, { badge } – napis; null – nic. */
+function miniature(th, cls = '') {
+  if (th?.src) {
+    const img = h('img', { class: 'mini' + cls, src: th.src, alt: '', loading: 'lazy' });
+    img.addEventListener('error', () => img.replaceWith(h('span', { class: 'mini badge' + cls }, '?')), { once: true });
+    return img;
+  }
+  return th?.badge ? h('span', { class: 'mini badge' + cls }, th.badge) : null;
+}
+const fold = (s) => String(s ?? '').toLocaleLowerCase('pl').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/ł/g, 'l');
+
+/**
+ * Wybór wielokrotny z długiej listy: wybrane pozycje jako etykiety z „×” nad polem wyszukiwania,
+ * lista podpowiedzi zawężana w trakcie pisania (bez polskich znaków też trafia).
+ * Klawiatura: ↑/↓ – podświetlenie, Enter – dodaj/usuń podświetloną, Esc – zamknij, Backspace w pustym polu – usuń ostatnią.
+ * Zmiana wyboru wysyła zdarzenie „change” (odświeża pola warunkowe formularza).
+ */
+function multiSearch(id, value, o) {
+  const opts = o.options.map(([v, t, th]) => ({ v, t: String(t ?? v), th, key: fold(t) + ' ' + fold(v) + ' ' + fold(th?.badge) }));
+  const known = new Set(opts.map((x) => x.v));
+  const extra = (value || []).filter((v) => !known.has(v)).map((v) => ({ v, t: `${v} (spoza listy)`, key: fold(v) }));
+  const all = [...opts, ...extra];
+  const sel = new Set(value || []);
+  let shown = [];
+  let hi = -1;
+
+  const chips = h('div', { class: 'msel-chips' });
+  const input = h('input', { type: 'search', class: 'msel-q', id, autocomplete: 'off', spellcheck: 'false', 'aria-label': `${o.label} – szukaj`,
+    'aria-expanded': 'false', 'aria-controls': id + '-list', role: 'combobox', placeholder: `Szukaj i dodaj… (${opts.length} do wyboru)` });
+  const list = h('div', { class: 'msel-list', id: id + '-list', role: 'listbox', 'aria-multiselectable': 'true', hidden: true });
+  const el = h('div', { class: 'msel', role: 'group', 'aria-label': o.label }, chips, input, list);
+
+  const changed = () => { drawChips(); drawList(); el.dispatchEvent(new Event('change', { bubbles: true })); };
+  const toggle = (x) => { if (sel.has(x.v)) sel.delete(x.v); else sel.add(x.v); changed(); };
+
+  function drawChips() {
+    const picked = all.filter((x) => sel.has(x.v));
+    chips.replaceChildren(...(picked.length
+      ? picked.map((x) => h('span', { class: 'pill msel-chip', title: x.t }, miniature(x.th, ' sm'), h('span', null, x.t),
+        h('button', { type: 'button', class: 'msel-x', 'aria-label': `Usuń: ${x.t}`, title: 'Usuń', onclick: () => { toggle(x); input.focus(); } }, '×')))
+      : [h('span', { class: 'dim' }, 'nic nie wybrano')]),
+      ...(picked.length > 1 ? [h('button', { type: 'button', class: 'msel-clear', onclick: () => { sel.clear(); changed(); input.focus(); } }, 'wyczyść')] : []));
+  }
+
+  function drawList() {
+    if (list.hidden) return;
+    const q = fold(input.value.trim());
+    const words = q ? q.split(/\s+/) : [];
+    shown = all.filter((x) => words.every((w) => x.key.includes(w)));
+    hi = Math.min(Math.max(hi, words.length && shown.length ? 0 : -1), shown.length - 1);
+    list.replaceChildren(...(shown.length
+      ? shown.map((x, i) => h('div', { class: 'msel-opt' + (sel.has(x.v) ? ' on' : '') + (i === hi ? ' hi' : ''), id: `${id}-o${i}`, role: 'option',
+        'aria-selected': sel.has(x.v) ? 'true' : 'false', onmousedown: (e) => { e.preventDefault(); hi = i; toggle(x); } },
+        h('span', { class: 'msel-mark' }, sel.has(x.v) ? '✓' : ''), miniature(x.th) || h('span', { class: 'mini' }), h('span', { class: 'msel-t' }, x.t)))
+      : [h('div', { class: 'dim msel-none' }, 'nic nie pasuje')]));
+    if (hi >= 0) { input.setAttribute('aria-activedescendant', `${id}-o${hi}`); list.children[hi]?.scrollIntoView({ block: 'nearest' }); }
+    else input.removeAttribute('aria-activedescendant');
+  }
+
+  const open = (yes) => { list.hidden = !yes; input.setAttribute('aria-expanded', String(yes)); if (yes) drawList(); else hi = -1; };
+  input.addEventListener('focus', () => open(true));
+  input.addEventListener('click', () => open(true));
+  input.addEventListener('blur', () => open(false));
+  input.addEventListener('input', () => { hi = -1; open(true); });
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (list.hidden) open(true);
+      if (shown.length) hi = (hi + (e.key === 'ArrowDown' ? 1 : shown.length - 1) + (hi < 0 && e.key === 'ArrowUp' ? 1 : 0)) % shown.length;
+      drawList();
+    } else if (e.key === 'Enter') {
+      e.preventDefault();  // nie zatwierdzaj okna/formularza
+      const x = shown[hi >= 0 ? hi : 0];
+      if (x && !list.hidden) toggle(x);
+    } else if (e.key === 'Escape' && !list.hidden) {
+      e.preventDefault(); e.stopPropagation();  // pierwsze Esc zamyka listę, nie okno
+      if (input.value) { input.value = ''; hi = -1; drawList(); } else open(false);
+    } else if (e.key === 'Backspace' && !input.value) {
+      const last = all.filter((x) => sel.has(x.v)).pop();
+      if (last) toggle(last);
+    }
+  });
+  // „change” samego pola wyszukiwania nie jest zmianą wartości
+  input.addEventListener('change', (e) => e.stopPropagation());
+
+  drawChips();
+  const read = () => all.filter((x) => sel.has(x.v)).map((x) => x.v);
+  return { el, read, peek: read };
 }
 
 /** „6:00” → „06:00:00”, „1.02:00:00” zostaje; null, gdy to nie jest czas. */

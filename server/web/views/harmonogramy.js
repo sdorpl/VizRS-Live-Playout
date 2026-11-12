@@ -6,6 +6,8 @@
 
 import { VIEWS, h, panel, cmd, pl, pill, cmdNote } from '../core.js';
 import { form } from '../form.js';
+import { watermarkChoices } from './znaki.js';
+import { graphicsChoices } from './grafika.js';
 import { crudView, itemsEditor, contentPicker, emptyContent, dayBar, minutesOf, hhmm } from '../parts.js';
 
 // ---------- etykiety pól pozycji ----------
@@ -198,8 +200,8 @@ function itemEditor(item, ctx, shuffle) {
     { key: 'TailFillerId', label: 'Ogon', options: fillers('Tail'), none: 'brak', hint: 'Tylko w trybie „przez określony czas” z resztą czasu = wypełniacz.' },
     { key: 'FallbackFillerId', label: 'Zapasowy', options: fillers('Fallback'), none: 'brak' },
     { sec: 'Znaki wodne i grafika' },
-    { key: 'WatermarkIds', label: 'Znaki wodne', kind: 'multi', options: ctx.watermarks.map((w) => [w.Id, w.Name]), empty: 'brak znaków wodnych w legacy' },
-    { key: 'GraphicsElementIds', label: 'Elementy graficzne', kind: 'multi', options: ctx.graphics.map((g) => [g.Id, g.Name]), empty: 'brak elementów graficznych w legacy' },
+    { key: 'WatermarkIds', label: 'Znaki wodne', kind: 'multi', options: watermarkChoices(ctx.watermarks), empty: 'brak znaków wodnych w legacy' },
+    { key: 'GraphicsElementIds', label: 'Elementy graficzne', kind: 'multi', options: graphicsChoices(ctx.graphics), empty: 'brak elementów graficznych w legacy' },
     { sec: 'Audio i napisy' },
     { key: 'PreferredAudioLanguageCode', label: 'Język audio', options: langs, none: 'jak w kanale' },
     { key: 'PreferredAudioTitle', label: 'Tytuł ścieżki audio' },

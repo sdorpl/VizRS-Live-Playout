@@ -363,3 +363,28 @@ td:has(> .row-poster) { padding-top: 4px; padding-bottom: 4px; width: 1%; }
 }
 [data-rules] .form { align-items: start; }
 [data-rules] .form > label { padding-top: 7px; }
+
+/* wybór wielokrotny z długiej listy (form.js multiSearch): etykiety wybranych + wyszukiwarka z listą podpowiedzi */
+.msel { position: relative; display: grid; gap: 6px; }
+.msel-chips { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; min-height: 22px; }
+.msel-chip { color: var(--text); padding-right: 2px; max-width: 100%; }
+.msel-chip > span:not(.mini) { overflow: hidden; text-overflow: ellipsis; }
+.msel-x { background: none; border: 0; padding: 0 5px; line-height: 14px; color: var(--dim); border-radius: 999px; }
+.msel-x:hover { color: var(--text); background: var(--hover); }
+.msel-clear { background: none; border: 0; padding: 0 4px; font-size: 11px; color: var(--link); }
+.msel-list { position: absolute; z-index: 30; top: 100%; left: 0; right: 0; margin-top: 2px; max-height: 260px; overflow: auto;
+  background: var(--input); border: 1px solid var(--line); border-radius: var(--r-sm); padding: 3px; box-shadow: 0 8px 24px rgba(0, 0, 0, .45); }
+.msel-opt { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: var(--r-xs); cursor: pointer; border: 1px solid transparent; }
+.msel-opt:hover, .msel-opt.hi { background: var(--hover); }
+.msel-opt.on { background: var(--sel); }
+.msel-opt.hi { border-color: var(--sel-line); }
+.msel-mark { width: 1em; flex: none; color: var(--acc); font-weight: 700; text-align: center; }
+.msel-t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.msel-none { padding: 6px; }
+/* miniatury pozycji wyboru: obraz znaku wodnego albo napis (logo, rodzaj elementu, strona VizRS) */
+.mini { flex: none; width: 48px; height: 27px; object-fit: contain; border: 1px solid var(--line); border-radius: var(--r-xs);
+  background: var(--checker) 0 0 / 8px 8px; vertical-align: middle; }
+.mini.badge { display: inline-flex; align-items: center; justify-content: center; background: var(--panel2); color: var(--dim);
+  font-size: 9.5px; font-weight: 600; letter-spacing: .02em; text-transform: uppercase; white-space: nowrap; overflow: hidden; }
+.mini.sm { width: 24px; height: 14px; font-size: 7px; }
+.chk .mini { margin: 0 2px; }

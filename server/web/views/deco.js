@@ -6,6 +6,8 @@
 
 import { VIEWS, h, panel, cmd, pl, route, cmdNote } from '../core.js';
 import { form, parseTimeSpan } from '../form.js';
+import { watermarkChoices } from './znaki.js';
+import { graphicsChoices } from './grafika.js';
 import { crudView, itemsEditor, contentPicker, emptyContent, groupActions, dayBar, minutesOf, hhmm, span } from '../parts.js';
 
 const TAB = { i: 0 };
@@ -77,11 +79,11 @@ function decoEditor(d, ctx) {
     { key: 'Name', label: 'Nazwa', required: true },
     { sec: 'Znak wodny' },
     { key: 'WatermarkMode', label: 'Tryb', optional: false, options: MODES4, hint: MODE_HINT },
-    { key: 'WatermarkIds', label: 'Znaki wodne', kind: 'multi', options: ctx.watermarks.map((w) => [w.Id, w.Name]), show: merges('WatermarkMode'), empty: 'brak znaków wodnych – załóż je w Znakach wodnych' },
+    { key: 'WatermarkIds', label: 'Znaki wodne', kind: 'multi', options: watermarkChoices(ctx.watermarks), show: merges('WatermarkMode'), empty: 'brak znaków wodnych – załóż je w Znakach wodnych' },
     { key: 'UseWatermarkDuringFiller', label: 'W wypełniaczu', kind: 'check', text: 'pokazuj znak także w wypełniaczu', show: (x) => x.WatermarkMode === 'Override' },
     { sec: 'Grafika' },
     { key: 'GraphicsElementsMode', label: 'Tryb', optional: false, options: MODES4 },
-    { key: 'GraphicsElementIds', label: 'Elementy', kind: 'multi', options: ctx.graphics.map((g) => [g.Id, g.Name]), show: merges('GraphicsElementsMode'), empty: 'brak elementów graficznych' },
+    { key: 'GraphicsElementIds', label: 'Elementy', kind: 'multi', options: graphicsChoices(ctx.graphics), show: merges('GraphicsElementsMode'), empty: 'brak elementów graficznych' },
     { key: 'UseGraphicsElementsDuringFiller', label: 'W wypełniaczu', kind: 'check', text: 'pokazuj grafikę także w wypełniaczu', show: (x) => x.GraphicsElementsMode === 'Override' },
     { sec: 'Przerwy' },
     { key: 'BreakContentMode', label: 'Tryb', optional: false, options: MODES3 },

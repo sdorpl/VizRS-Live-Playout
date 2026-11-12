@@ -336,6 +336,32 @@ function check(cond, msg) {
   rows = await itemRows();
   check(/kilka \(2\)/.test(rows[0] || ''), 'harmonogram: odrzucone pozycje nie zmieniły harmonogramu');
 
+  // wybór wielokrotny z długiej listy (form.js): wyszukiwarka bez polskich znaków, Enter, etykieta z „×”, miniatury;
+  // kontrolka budowana wprost w panelu – nie zależy od liczby znaków wodnych i elementów w stosie testowym
+  const msel = await page.evaluate(async () => {
+    const { form } = await import('/form.js');
+    const opts = Array.from({ length: 12 }, (_, i) => [i + 1, (i === 4 ? 'Znak Łódź ' : 'Pasek ') + (i + 1), i % 2 ? { badge: 'VizRS ' + (100 + i) } : null]);
+    const f = form('X', [{ key: 'G', label: 'Elementy', kind: 'multi', options: opts }, { key: 'S', label: 'Krótka', kind: 'multi', options: opts.slice(0, 3) }], { G: [2, 99] });
+    f.el.id = 'msel-test';
+    document.body.append(f.el);
+    let changes = 0;
+    f.el.addEventListener('change', () => changes++);
+    const q = f.el.querySelector('.msel-q');
+    q.focus();
+    q.value = 'lodz';
+    q.dispatchEvent(new Event('input', { bubbles: true }));
+    const shown = [...f.el.querySelectorAll('.msel-opt')].map((o) => o.textContent);
+    q.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    const chips = [...f.el.querySelectorAll('.msel-chip')].map((c) => c.textContent);
+    f.el.querySelector('.msel-chip .msel-x').click();  // usuwa pierwszą: Pasek 2
+    const out = { shown, chips, read: f.read(), changes, plain: f.el.querySelectorAll('.multi input[type=checkbox]').length, badges: f.el.querySelectorAll('.multi .mini.badge').length };
+    f.el.remove();
+    return out;
+  });
+  check(msel.shown.length === 1 && /Znak Łódź 5/.test(msel.shown[0]) && msel.chips.length === 3 && msel.chips.some((c) => /99 \(spoza listy\)/.test(c))
+    && JSON.stringify(msel.read) === JSON.stringify({ G: [5, 99], S: [] }) && msel.changes === 2 && msel.plain === 3 && msel.badges === 1,
+    `wybór wielokrotny: szukanie „lodz”, Enter, „×”, wartość spoza listy zostaje, krótka lista jako pola z miniaturą (${JSON.stringify(msel)})`);
+
   await rerender(() => page.click('main .panel header button:has-text("Kopiuj")').then(() => page.click('#dlg-buttons button:has-text("Kopiuj")')));
   await page.waitForSelector(`main .panel header h2:has-text("${sched} (kopia)")`);
   check((await itemRows()).length === 2, 'harmonogram: kopia z pozycjami');

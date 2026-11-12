@@ -6,6 +6,8 @@
 
 import { VIEWS, h, btn, panel, cmd, pl, table, toast, route, cmdNote } from '../core.js';
 import { form, parseTimeSpan } from '../form.js';
+import { watermarkChoices } from './znaki.js';
+import { graphicsChoices } from './grafika.js';
 import { crudView, itemsEditor, contentPicker, emptyContent, groupActions, dayBar, minutesOf, hhmm, span } from '../parts.js';
 
 const TAB = { i: 0 };
@@ -47,8 +49,8 @@ function blockItemEdit(it, ctx) {
       { key: 'PlaybackOrder', label: 'Kolejność', optional: false, options: orders(v.CollectionType).map((o) => [o, pl(o)]) },
       { key: 'IncludeInProgramGuide', label: 'Przewodnik', kind: 'check', text: 'pokazuj w EPG' },
       { key: 'DisableWatermarks', label: 'Znaki wodne', kind: 'check', text: 'bez znaków wodnych w tej pozycji' },
-      { key: 'WatermarkIds', label: 'Własne znaki wodne', kind: 'multi', options: ctx.watermarks.map((w) => [w.Id, w.Name]), show: (x) => !x.DisableWatermarks, empty: 'brak znaków wodnych' },
-      { key: 'GraphicsElementIds', label: 'Grafika', kind: 'multi', options: ctx.graphics.map((g) => [g.Id, g.Name]), empty: 'brak elementów graficznych' },
+      { key: 'WatermarkIds', label: 'Własne znaki wodne', kind: 'multi', options: watermarkChoices(ctx.watermarks), show: (x) => !x.DisableWatermarks, empty: 'brak znaków wodnych' },
+      { key: 'GraphicsElementIds', label: 'Grafika', kind: 'multi', options: graphicsChoices(ctx.graphics), empty: 'brak elementów graficznych' },
     ], v, { idPrefix: 'bi-' });
     box.replaceChildren(f.el);
   };

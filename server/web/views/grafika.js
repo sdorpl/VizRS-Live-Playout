@@ -350,3 +350,13 @@ function rulesPanel(doc, pages, cgChannels) {
       h('div', { class: 'bar end' }, btn('Zapisz reguły grafiki', save, 'acc'))),
     cmdNote('CG Playout GET/PUT /api/live/graphics')));
 }
+
+// Rodzaj elementu legacy z katalogu pliku (graphics-elements/<rodzaj>/…) – legacy nie podaje obrazu elementu.
+const GE_KINDS = { image: 'obraz', text: 'tekst', motion: 'ruch', script: 'skrypt', subtitle: 'napisy', subtitles: 'napisy' };
+
+/** Opcje wyboru elementów graficznych z oznaczeniem (form.js, kind 'multi'): „VizRS n” dla stron CG, inaczej rodzaj z katalogu. */
+export const graphicsChoices = (list) => (list || []).map((g) => {
+  const page = elementPage(g);
+  const dir = /(?:^|\/)(image|text|motion|script|subtitles?)\//i.exec(g.FileName || '')?.[1]?.toLowerCase();
+  return [g.Id, g.Name, { badge: page ? 'VizRS ' + page : GE_KINDS[dir] || 'YAML' }];
+});

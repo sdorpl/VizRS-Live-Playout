@@ -176,3 +176,9 @@ VIEWS.znaki = crudView({
   copy: (w, name) => ({ WatermarkId: w.Id, Name: name }),
   copiedId: (r) => r?.Id,
 });
+
+/** Opcje wyboru znaków wodnych z miniaturą (form.js, kind 'multi'): obraz własny albo napis „logo” (logo kanału). */
+export const watermarkChoices = (list) => (list || []).map((w) => {
+  const src = w.ImageSource === 'Custom' ? watermarkSrc(w.Image) : null;
+  return [w.Id, w.Name, src ? { src } : { badge: w.ImageSource === 'ChannelLogo' ? 'logo' : 'znak' }];
+});
