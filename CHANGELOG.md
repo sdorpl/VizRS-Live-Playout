@@ -2,6 +2,8 @@
 
 ## Niewydane
 
+- **Aplikacja VizRS Live na Tauri 2** (`desktop/`, `vizrs-live-desktop`): panel lokalny (program uruchamia `vizrs-live` na `127.0.0.1` i zamyka go przy wyjściu) albo klient panelu zdalnego przez pośrednika w programie – token zostaje w programie, strona go nie dostaje. Okno „Połącz z panelem” z listą zapisanych, menu, jedna instancja, tytuł okna z ekranem i alarmem (okno w tle prosi o uwagę), paczki z bundlera Tauri z `vizrs-live` obok programu. Panel w przeglądarce bez zmian (nowy moduł `desktop.js` działa tylko w aplikacji). DOKUMENTACJA §3 „Aplikacja VizRS Live”.
+
 - **Wspólny rdzeń wyglądu rodziny VizRS (`vizrs-ui.css`):** tokeny i kontrolki panelu (przyciski, pola, pigułki, pasek górny, menu z szufladą, tabele, formularze, okna, karty) wydzielone ze `style.css` do pliku wspólnego z VizRS CG System i VizRS CG Artist (źródło w CG System; `scripts/sync-ui.sh`, kontrola zgodności w CI i `tests/deploy.sh`). Wygląd panelu bez zmian.
 
 - Diagnostyka → Stan: wiersz „strefy grafiki” podaje też liczbę granic stron z VizRS (`bounds` w `/health` CG Playout, PLAN-strefy S6; starszy CG Playout – bez tej liczby).

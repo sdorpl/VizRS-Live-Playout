@@ -182,6 +182,11 @@ const STATIC: &[(&str, &str, &str)] = &[
         include_str!("../web/views/system.js"),
     ),
     (
+        "/desktop.js",
+        "text/javascript; charset=utf-8",
+        include_str!("../web/desktop.js"),
+    ),
+    (
         "/vizrs-ui.css",
         "text/css; charset=utf-8",
         include_str!("../web/vizrs-ui.css"),

@@ -6,5 +6,6 @@
 /media/
 .env
 *.png
+!desktop/icons/*.png
 tests/local.env
 /.plan-logs/

@@ -86,3 +86,32 @@ jobs:
         run: |
           docker logs vizrs-live-test-legacy 2>&1 | tail -200 || true
           cat "${VIZRS_LIVE_TEST_DIR:-$HOME/.cache/vizrs-live-test}/panel.log" || true
+
+  # aplikacja VizRS Live na Tauri 2 (desktop/, osobny workspace z zależnościami; serwer panelu bez zmian)
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: biblioteki okna (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libxdo-dev xvfb
+      - name: cargo fmt / clippy / test / build
+        working-directory: desktop
+        shell: bash
+        run: |
+          cargo fmt --check
+          cargo clippy --locked --all-targets -- -D warnings
+          cargo test --locked
+          cargo build --release --locked
+      - name: test aplikacji w działaniu (panel lokalny, zdalny przez pośrednika, okno połączenia)
+        if: runner.os == 'Linux'
+        run: |
+          (cd server && cargo build --release --locked)
+          xvfb-run -a node desktop/tests/okno.cjs

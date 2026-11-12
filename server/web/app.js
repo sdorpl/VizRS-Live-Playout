@@ -7,6 +7,7 @@
 import { S, main, h, btn, head, api, cmd, ApiError, route, hms, dialog, operatorName, has } from './core.js';
 import { openMonitor } from './player.js';
 import { startAlarms } from './alarms.js';
+import { desktopBridge } from './desktop.js';
 import './views/antena.js';
 import './views/kanaly.js';
 import './views/profile.js';
@@ -219,3 +220,4 @@ async function start() {
 }
 
 start();
+desktopBridge();
