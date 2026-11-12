@@ -26,6 +26,10 @@
 | R11 | wydanie 1.0: instrukcja operatora, runbook, obrazy ghcr, przegląd bezpieczeństwa | `docs/INSTRUKCJA.md`, `docs/RUNBOOK.md`, `release.yml` |
 | R12 | Sloty na żywo (MCR), Audycje LIVE, operator i studio w pasku górnym | `views/live.js`, `app.js` |
 
+## Wydanie 26.11.1 (2026-11-12, gałąź `main`)
+
+Pierwsze wydanie w numeracji rok.miesiąc.rewizja: zawartość 1.3.0-test.1 i późniejszych zmian z `next-v`; poprzednia `main` → `main-oldstable`.
+
 ## PLAN-mcr – wydanie testowe 1.3.0-test.1 (2026-11-10, gałąź `next-v`)
 
 Zrobione w panelu: K1–K11, K18 (sesje, CSP, numeracja kanałów, rozdzielczości, silnik Next, wyniki zadań w tle, historia bloków, biblioteki, kontrola ramówki, mozaika, import ramówki, HEVC/AC-3). K12–K14 i K17 – strona panelu gotowa, włącza się po `features` z VizRS CG Playout; K15–K16 – kontrakt API (DOKUMENTACJA §3). Zrzuty bez legacy: atrapa mostu `tests/mock-bridge.cjs` (`MOCK_CG=1 MOCK_HLS=1`). e2e nowych punktów – do sprawdzenia w CI (bramka `release.yml` przed publikacją obrazów).
