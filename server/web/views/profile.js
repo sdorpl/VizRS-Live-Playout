@@ -109,6 +109,20 @@ export function nextCheck(v, probe) {
   return { status, entry, working, fmt, depth };
 }
 
+/**
+ * Akceleracje, które na tej maszynie kodują (nazwy `HardwareAcceleration`: Nvenc, Qsv, Vaapi…).
+ * Z silnika Next: wpisy dostępne i z co najmniej jednym koderem; bez komendy GetNextProbe (starsze legacy) – lista
+ * zgłoszona przez ffmpeg legacy. `null` = nie wiadomo (Next jeszcze nie sprawdził sprzętu).
+ */
+export function workingAccels(probe, supported) {
+  if (probe === undefined) return (supported || []).filter((k) => k && k !== 'None');
+  if (!probe) return null;
+  const list = accels(probe);
+  return Object.keys(ACCEL).filter((k) => list.some((a) => nv(a, 'accel', 'Accel') === ACCEL[k] && available(a) && (nv(a, 'encode', 'Encode') || []).length));
+}
+/** Czy profil chce akceleracji, której maszyna nie ma (pójdzie programowo). */
+export const hwMissing = (p, working) => Array.isArray(working) && p.HardwareAcceleration && p.HardwareAcceleration !== 'None' && !working.includes(p.HardwareAcceleration);
+
 /** Opis wyniku `nextCheck` po polsku – jak komunikaty edytora profilu legacy. */
 export function nextCheckText(v, c) {
   const k = pl(v.HardwareAcceleration);
@@ -198,13 +212,16 @@ const FROM = {
   default: 'domyślne',
 };
 
+/** Wiadomo, że maszyna nie koduje sprzętowo (pusta lista działających akceleracji). */
+const noHw = (working) => Array.isArray(working) && !working.length;
+
 /** Treść pola „w użyciu”: wartość albo opis domyślnej. */
 export function encoderUsed(value, empty) {
   return value || empty;
 }
 
 /** Panel kodera nakładki: co obowiązuje i skąd; profil H.264, preset i opcje x264, presety NVENC i QSV, klatki B sprzętowe (od następnego ffmpeg, wszystkie kanały). */
-function encoderPanel(enc) {
+function encoderPanel(enc, working) {
   const title = 'Koder (nakładka VizRS CG)';
   if (enc == null) return null;
   if (enc instanceof Error) {
@@ -218,7 +235,7 @@ function encoderPanel(enc) {
     (enc.presets || []).map((p) => h('option', { value: p }, PRESET_NOTES[p] ? `${p} – ${PRESET_NOTES[p]}` : p)));
   preset.value = used.preset || '';
   const profile = h('select', { id: 'enc-profile', 'aria-label': 'Profil H.264' },
-    h('option', { value: '' }, 'domyślny kodera (x264: high, NVENC: main)'),
+    h('option', { value: '' }, noHw(working) ? 'domyślny kodera (x264: high)' : 'domyślny kodera (x264: high, NVENC: main)'),
     (enc.profiles || []).map((p) => h('option', { value: p }, PROFILE_NOTES[p] ? `${p} – ${PROFILE_NOTES[p]}` : p)));
   profile.value = used.profile || '';
   const known = X264_VARIANTS.map(([v]) => v);
@@ -244,10 +261,13 @@ function encoderPanel(enc) {
   const counts = Array.from({ length: (enc.max_bframes ?? 4) + 1 }, (_, i) => i);
   const bframes = choice('enc-bframes', 'Klatki B koderów sprzętowych', 'domyślne kodera', counts, BFRAME_NOTES, used.bframes);
   const hardware = Boolean(enc.nvenc_presets);
+  const softwareOnly = noHw(working);
   const save = async () => {
     const x264 = variant.value === 'custom' ? custom.value.trim() : variant.value;
-    const body = { preset: preset.value, profile: profile.value, x264_params: x264 };
-    if (hardware) Object.assign(body, { nvenc_preset: nvenc.value, qsv_preset: qsv.value, bframes: bframes.value });
+    // PUT zastępuje wszystkie pola – ustawienia sprzętowe idą zawsze (z pól albo bez zmian z „w użyciu”)
+    const body = { preset: preset.value, profile: profile.value, x264_params: x264,
+      nvenc_preset: hardware ? nvenc.value : used.nvenc_preset || '', qsv_preset: hardware ? qsv.value : used.qsv_preset || '',
+      bframes: hardware ? bframes.value : used.bframes ?? '' };
     try {
       await api('/api/cg/live/encoder', { method: 'PUT', body: JSON.stringify(body) });
       toast('Koder zapisany – działa od następnego startu ffmpeg (następna pozycja ramówki)', 'ok');
@@ -257,18 +277,28 @@ function encoderPanel(enc) {
   const field = (label, control) => [h('dt', null, label), h('dd', null, control)];
   const editable = enc.store !== false;
   const sub = (text) => [h('dt', { class: 'dim' }, text), h('dd', null)];
+  const hwFields = () => [
+    ...sub('Sprzętowo (NVENC, QSV, VAAPI)'),
+    ...field('Preset NVENC', editable ? nvenc : encoderUsed(used.nvenc_preset, 'domyślny NVENC (p4)')),
+    ...field('Preset QSV', editable ? qsv : encoderUsed(used.qsv_preset, 'domyślny sterownika')),
+    ...field('Klatki B', editable ? bframes : encoderUsed(used.bframes, 'domyślne kodera')),
+  ];
   return panel(title, h('span', { class: 'dim' }, `wszystkie kanały · ${FROM[enc.from] || enc.from}`),
+    softwareOnly
+      ? h('div', { class: 'note pad', 'data-enc-software': '' },
+        'Ta maszyna nie ma akceleracji sprzętowej – wszystkie kanały kodują programowo (libx264), więc obowiązują profil H.264, preset i opcje x264 poniżej. ',
+        'O obciążeniu procesora decyduje preset: domyślny ErsatzTV (medium) jest ciężki, na Ampere A1 zalecany veryfast, przy wielu kanałach albo 1080p50 – superfast.')
+      : null,
     h('dl', { class: 'kv' },
       ...field('Profil H.264', editable ? profile : encoderUsed(used.profile, 'domyślny kodera')),
       ...sub('Programowo (libx264)'),
       ...field('Preset x264', editable ? preset : encoderUsed(used.preset, 'domyślny ErsatzTV (medium)')),
       ...field('Opcje x264', editable ? h('span', { class: 'bar' }, variant, custom) : encoderUsed(used.x264_params, 'bez opcji')),
-      ...(hardware ? [
-        ...sub('Sprzętowo (NVENC, QSV, VAAPI)'),
-        ...field('Preset NVENC', editable ? nvenc : encoderUsed(used.nvenc_preset, 'domyślny NVENC (p4)')),
-        ...field('Preset QSV', editable ? qsv : encoderUsed(used.qsv_preset, 'domyślny sterownika')),
-        ...field('Klatki B', editable ? bframes : encoderUsed(used.bframes, 'domyślne kodera')),
-      ] : [])),
+      ...(hardware && !softwareOnly ? hwFields() : [])),
+    hardware && softwareOnly
+      ? h('details', { class: 'pad', 'data-enc-hw': '' }, h('summary', { class: 'dim' }, 'Ustawienia koderów sprzętowych (NVENC, QSV, VAAPI) – nieużywane na tej maszynie'),
+        h('dl', { class: 'kv' }, ...hwFields()))
+      : null,
     editable
       ? h('div', { class: 'bar pad end' }, btn('Zapisz koder', save, 'acc'))
       : h('div', { class: 'note pad' }, 'CG Playout nie ma etv_config – ustawień nie ma gdzie zapisać; obowiązuje .env serwera.'),
@@ -296,26 +326,32 @@ VIEWS.profile = crudView({
     const enc = S.status?.cg ? await api('/api/cg/live/encoder').then((r) => r.result).catch((e) => e) : null;
     // klatkaż profili w moście – starszy most bez /framerates = null (zostaje przełącznik legacy)
     const fr = await api('/api/framerates').then((r) => r.result).catch(() => null);
-    return { rows, resolutions, supported, fresh, channels, fr, enc, probe: has('GetNextProbe') ? (probe ?? false) : undefined };
+    const pr = has('GetNextProbe') ? (probe ?? false) : undefined;
+    return { rows, resolutions, supported, fresh, channels, fr, enc, probe: pr, working: workingAccels(pr, supported) };
   },
   id: (p) => p.Id,
-  cols: ({ channels, fr }) => [
+  cols: ({ channels, fr, working }) => [
     ['Name', 'Nazwa'], ['Resolution.Name', 'Rozdzielczość'],
     [(p) => `${pl(p.VideoFormat)} · ${pl(p.BitDepth)}`, 'Obraz'], [(p) => (p.VideoBitrate ? p.VideoBitrate + ' kb/s' : '—'), 'Bitrate', { class: 'num' }],
     [(p) => `${pl(p.AudioFormat)} ${p.AudioBitrate ? p.AudioBitrate + ' kb/s' : ''}`, 'Dźwięk'],
-    [(p) => (p.HardwareAcceleration === 'None' ? 'programowo' : pl(p.HardwareAcceleration)), 'Akceleracja'],
+    [(p) => (p.HardwareAcceleration === 'None' ? 'programowo'
+      : hwMissing(p, working) ? pill(`${pl(p.HardwareAcceleration)} – brak, programowo`, 'warn') : pl(p.HardwareAcceleration)), 'Akceleracja'],
     [(p) => (p.NormalizeLoudnessMode === 'LoudNorm' ? `${p.TargetLoudness ?? '?'} LUFS` : '—'), 'Głośność'],
     [(p) => { const c = rateChoice(p, fr?.active ? fr.rates : null); return c === 'source' ? '—' : c === 'auto' ? 'auto' : fmtRate(c); }, 'Klatki', { class: 'num' }],
     [(p) => { const n = channels.filter((c) => c.FFmpegProfileId === p.Id).length; return n ? pill(String(n), 'info') : '—'; }, 'Kanały'],
   ],
-  editor: (p, { resolutions, supported, fresh, probe, fr }) => {
+  editor: (p, { resolutions, supported, fresh, probe, fr, working }) => {
     const base = { ...fresh, ...(p || {}), ResolutionId: (p || fresh).Resolution?.Id ?? resolutions[0]?.Id };
     if (!p) base.Name = '';
+    // nowy profil na maszynie bez tej akceleracji (domyślna legacy) – od razu programowo
+    if (!p && hwMissing(base, working)) base.HardwareAcceleration = 'None';
     const rates = fr?.active;
     if (rates) base.FrameRateChoice = rateChoice(p || fresh, fr.rates);
     const hw = enumValues('CreateFFmpegProfile', 'HardwareAcceleration')
       .filter((k) => k !== 'V4l2m2m')
-      .map((k) => [k, k === 'None' ? 'brak (programowo)' : supported.includes(k) ? pl(k) : `${pl(k)} – sprzęt nie zgłasza`]);
+      .map((k) => [k, k === 'None' ? 'brak (programowo)'
+        : Array.isArray(working) ? (working.includes(k) ? pl(k) : `${pl(k)} – brak na tej maszynie (programowo)`)
+          : supported.includes(k) ? pl(k) : `${pl(k)} – sprzęt nie zgłasza`]);
     return form(p ? 'UpdateFFmpegProfile' : 'CreateFFmpegProfile', [
       { sec: 'Ogólne' },
       { key: 'Name', label: 'Nazwa', required: true, placeholder: 'np. 720p H.264' },
@@ -356,7 +392,7 @@ VIEWS.profile = crudView({
   footer: (p, { fresh }) => h('div', { class: 'hint pad dim' },
     'Ustawienia tylko dla starego silnika legacy (wątki, preset, profil H.264, B-klatki, wyświetlacz VAAPI) panel zostawia bez zmian; preset i profil H.264 (programowo i sprzętowo) oraz opcje x264 ustawia panel „Koder” niżej',
     p ? '.' : ` (nowy profil: wartości domyślne legacy, np. profil ${fresh.VideoProfile || '—'}).`),
-  below: (cur, { resolutions, rows, enc }) => [encoderPanel(enc), resolutionsPanel(resolutions, rows)],
+  below: (cur, { resolutions, rows, enc, working }) => [encoderPanel(enc, working), resolutionsPanel(resolutions, rows)],
   afterSave: async (id, { fr }, d) => {
     if (!fr?.active || d.FrameRateChoice === undefined) return;
     const want = rateToBridge(d.FrameRateChoice);

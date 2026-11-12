@@ -6,6 +6,7 @@
 //   bez niego – same nazwy z bridge/commands.txt (formularze bez list wyboru).
 //   MOCK_CG=1 – atrapa VizRS CG Playout na porcie+1 (token test-cg-token-0123456789): stan z warstwami, TAKE/CONTINUE/OUT, dziennik emisji (K12–K17).
 //   MOCK_HLS=1 – strumienie testowe kanałów 24–26 (ffmpeg: plansza testowa + ton, HLS) dla podglądu i mozaiki.
+//   MOCK_NO_HW=1 – maszyna bez akceleracji sprzętowej (sonda Next: żadna akceleracja nie koduje) – ekran Profile kodowania bez karty.
 // Panel: server/target/…/vizrs-live --bridge http://127.0.0.1:18409 --bridge-token <token> --web server/web
 'use strict';
 const http = require('http');
@@ -143,6 +144,7 @@ const probe = {
   },
   Json: '{}', FFmpegPath: '/usr/local/bin/ffmpeg', ProbedAt: iso(now - 3600e3),
 };
+if (process.env.MOCK_NO_HW) for (const a of probe.Capability.accels) Object.assign(a, { status: a.configured ? 'ProbeFailed' : 'Skipped', error: a.configured ? 'no device' : null, decode: [], encode: [] });
 const VIDEOS = ['Serwis 06:00', 'Serwis 12:00', 'Pogoda', 'Pogoda', 'Rozmowa dnia', 'Magazyn regionalny', 'Gość VizRS'].map((Title, i) => ({ MediaItemId: 200 + i, Title, Subtitle: `/media/info24/${Title.toLowerCase().replace(/\W+/g, '-')}${i === 3 ? '-weekend' : ''}.mp4`, SortTitle: Title, Poster: '', State: 'Normal' }));
 const PLAYLISTS = [{ Id: 1, PlaylistGroupId: 1, Name: 'Poranek INFO24', IsSystem: false }];
 const PL_ITEMS = {};

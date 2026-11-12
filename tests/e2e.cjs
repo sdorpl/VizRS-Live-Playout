@@ -584,6 +584,13 @@ function check(cond, msg) {
   await page.waitForSelector('main[data-view="profile"]');
   // koder nakładki CG: preset, profil H.264 i zmierzone opcje x264 przez pośrednika
   check(await page.inputValue('#enc-preset') === 'veryfast' && await page.inputValue('#enc-profile') === '' && await page.inputValue('#enc-bframes') === '0', 'koder CG: wartości w użyciu w polach (też klatki B z .env)');
+  // bez akceleracji sprzętowej (stos testowy: brak karty) – informacja o libx264, ustawienia sprzętowe zwinięte, ale do zmiany
+  const softwareOnly = await page.isVisible('[data-enc-software]');
+  if (softwareOnly) {
+    check(!(await page.isVisible('#enc-nvenc')) && /x264: high\)$/.test(await page.textContent('#enc-profile option[value=""]')),
+      'koder CG bez karty: presety NVENC/QSV zwinięte, profil domyślny opisany jako x264');
+    await page.click('[data-enc-hw] summary');
+  }
   await page.selectOption('#enc-nvenc', 'p6');
   await page.selectOption('#enc-qsv', 'slow');
   await page.selectOption('#enc-preset', 'ultrafast');
@@ -597,6 +604,11 @@ function check(cond, msg) {
   await page.selectOption('#enc-x264', 'custom');
   check(await page.isVisible('#enc-x264-custom'), 'koder CG: pole własnych opcji po wyborze „własne…”');
   await rerender(() => page.click('text=+ Nowy profil'));
+  if (softwareOnly) {
+    const vaapi = await page.textContent('#f-HardwareAcceleration option[value="Vaapi"]');
+    check(await page.inputValue('#f-HardwareAcceleration') === 'None' && /brak na tej maszynie/.test(vaapi || ''),
+      `profil bez karty: nowy profil programowo, akceleracje oznaczone jako brak (${vaapi})`);
+  }
   await page.fill('#f-Name', profName);
   await page.selectOption('#f-ResolutionId', { label: '1280x720' });
   await page.selectOption('#f-NormalizeLoudnessMode', 'LoudNorm');
