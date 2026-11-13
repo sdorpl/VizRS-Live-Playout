@@ -325,12 +325,17 @@ export async function route(keepScroll) {
   document.querySelectorAll('.side a').forEach((a) => a.classList.toggle('on', a.getAttribute('href') === '#' + name));
   const top = main.scrollTop;
   delete main.dataset.view;
+  // każde przejście ma numer: wolny ekran (np. odświeżenie listy playoutów po usunięciu), który skończy się
+  // już po przejściu dalej, nie nadpisuje nowego widoku
+  const gen = (S.routeGen = (S.routeGen || 0) + 1);
+  let nodes;
   try {
-    const nodes = await VIEWS[name]();
-    main.replaceChildren(...nodes.filter(Boolean));
+    nodes = (await VIEWS[name]()).filter(Boolean);
   } catch (e) {
-    main.replaceChildren(head('Błąd'), h('div', { class: 'note err' }, e.message), btn('Spróbuj ponownie', () => route()));
+    nodes = [head('Błąd'), h('div', { class: 'note err' }, e.message), btn('Spróbuj ponownie', () => route())];
   }
+  if (gen !== S.routeGen) return;
+  main.replaceChildren(...nodes);
   main.dataset.view = name; // gotowy widok (testy e2e czekają na main[data-view])
   main.dataset.render = String((+main.dataset.render || 0) + 1);
   if (keepScroll === true) main.scrollTop = top;

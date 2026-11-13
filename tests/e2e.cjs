@@ -409,6 +409,19 @@ function check(cond, msg) {
     SmartCollectionId: sc, PlaybackOrder: 'Chronological', MultipleCount: '1', SearchTitle: '', SearchQuery: '', CustomTitle: '', WatermarkIds: [], GraphicsElementIds: [] }] });
   check(chId > 0 && psId > 0, `playout: kanał ${chNum} i harmonogram przygotowane przez API`);
 
+  // router: wolny ekran skończony już po przejściu dalej nie nadpisuje nowego widoku (dawniej e2e sprzątania deco)
+  const raced = await page.evaluate(async () => {
+    const { VIEWS, h } = await import('/core.js');
+    VIEWS.e2eslow = async () => { await new Promise((r) => setTimeout(r, 800)); return [h('div', { id: 'e2e-slow' }, 'stary ekran')]; };
+    location.hash = '#e2eslow';
+    await new Promise((r) => setTimeout(r, 50));
+    location.hash = '#harmonogramy';
+    await new Promise((r) => setTimeout(r, 1500));
+    delete VIEWS.e2eslow;
+    return { view: document.querySelector('main').dataset.view, slow: !!document.getElementById('e2e-slow') };
+  });
+  check(raced.view === 'harmonogramy' && !raced.slow, `router: spóźniony wolny ekran nie nadpisuje nowego (${JSON.stringify(raced)})`);
+
   await page.goto(`${BASE}/#playouty`);
   await page.waitForSelector('main[data-view="playouty"]');
   await rerender(() => page.click('text=+ Nowy playout'));
