@@ -15,7 +15,7 @@ import { h, param, pl, pad2 } from './core.js';
  *   { key, label, render(wartość, wartości) -> {el, read()} } – kontrolka własna (np. wybór treści)
  * kind: text | number | check | enum | time | datetime | pick | multi (domyślnie z typu parametru komendy)
  * options: [[wartość, etykieta]] dla pick/multi/enum (enum domyślnie z mostu, etykiety z PL);
- *   w multi opcjonalnie trzeci element – miniatura: { src } (obraz) albo { badge } (krótki napis zamiast obrazu).
+ *   w multi opcjonalnie trzeci element – miniatura: { src } (obraz; z { badge } – napis, gdy obrazu nie ma) albo { badge }.
  */
 export function form(cmdName, fields, values = {}, opts = {}) {
   const prefix = opts.idPrefix ?? 'f-';
@@ -177,11 +177,12 @@ function control(kind, id, value, o) {
 
 /** Do tylu pozycji wybór wielokrotny to zwykłe pola tak/nie; dłuższa lista – wyszukiwarka z etykietami. */
 const MULTI_PLAIN_MAX = 6;
-/** Miniatura pozycji wyboru: { src } – obraz, { badge } – napis; null – nic. */
+/** Miniatura pozycji wyboru: { src } – obraz (z { badge } jako zapasem), { badge } – napis; null – nic. */
 function miniature(th, cls = '') {
   if (th?.src) {
     const img = h('img', { class: 'mini' + cls, src: th.src, alt: '', loading: 'lazy' });
-    img.addEventListener('error', () => img.replaceWith(h('span', { class: 'mini badge' + cls }, '?')), { once: true });
+    // brak obrazu (np. CG Playout bez miniatury) – napis zapasowy pozycji
+    img.addEventListener('error', () => img.replaceWith(h('span', { class: 'mini badge' + cls }, th.badge || '?')), { once: true });
     return img;
   }
   return th?.badge ? h('span', { class: 'mini badge' + cls }, th.badge) : null;

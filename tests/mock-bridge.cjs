@@ -297,7 +297,7 @@ if (process.env.MOCK_CG === '1') {
       if (q.headers.authorization !== 'Bearer ' + CGT) return reply(r, 401, { error: 'zły token panelu' });
       if (u.pathname === '/health') return reply(r, 200, { sessions: 3, overlay: ['24'], ingest: { channels: ['24'] }, captures: [] });
       if (u.pathname === '/api/live/state') return reply(r, 200, {
-        ingest: true, now: Date.now(), version: 'atrapa', features: ['layers', 'take', 'asrun', 'encoder', 'webhook'], settings: { graphics_off: false },
+        ingest: true, now: Date.now(), version: 'atrapa', features: ['layers', 'take', 'asrun', 'encoder', 'thumbs', 'webhook'], settings: { graphics_off: false },
         channels: DB.channels.slice(0, 3).map((c) => ({ number: c.Number, name: c.Name, source: { live: c.Number === '24' }, on_air: false, hold: false, anytime: false, layers: layers[c.Number] || [],
           next_live: c.Number === '25' ? { start: Date.now() + 3 * 60e3, title: 'Koncert w studiu' } : null })),
         events: [], guide: {},

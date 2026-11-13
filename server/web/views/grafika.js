@@ -354,9 +354,13 @@ function rulesPanel(doc, pages, cgChannels) {
 // Rodzaj elementu legacy z katalogu pliku (graphics-elements/<rodzaj>/…) – legacy nie podaje obrazu elementu.
 const GE_KINDS = { image: 'obraz', text: 'tekst', motion: 'ruch', script: 'skrypt', subtitle: 'napisy', subtitles: 'napisy' };
 
-/** Opcje wyboru elementów graficznych z oznaczeniem (form.js, kind 'multi'): „VizRS n” dla stron CG, inaczej rodzaj z katalogu. */
+/**
+ * Opcje wyboru elementów graficznych z miniaturą (form.js, kind 'multi'): strona VizRS – obraz strony z CG Playout
+ * (`/api/cg/live/thumbs/<nr>.png`, renderer natywny; bez CG albo miniatury – napis „VizRS n”), inny element – rodzaj z katalogu.
+ */
 export const graphicsChoices = (list) => (list || []).map((g) => {
   const page = elementPage(g);
+  if (page) return [g.Id, g.Name, { badge: 'VizRS ' + page, src: S.status?.cg ? `/api/cg/live/thumbs/${page}.png` : null }];
   const dir = /(?:^|\/)(image|text|motion|script|subtitles?)\//i.exec(g.FileName || '')?.[1]?.toLowerCase();
-  return [g.Id, g.Name, { badge: page ? 'VizRS ' + page : GE_KINDS[dir] || 'YAML' }];
+  return [g.Id, g.Name, { badge: GE_KINDS[dir] || 'YAML' }];
 });

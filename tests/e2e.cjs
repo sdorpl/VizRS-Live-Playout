@@ -59,6 +59,12 @@ function check(cond, msg) {
       const body = raw ? JSON.parse(raw) : {};
       const now = Date.now();
       const u = q.url;
+      // miniatura strony VizRS (CG Playout GET /api/live/thumbs/<nr>.png): PNG 1×1 dla strony 1001, inne – 404
+      if (u === '/api/live/thumbs/1001.png') {
+        r.writeHead(200, { 'Content-Type': 'image/png' });
+        return r.end(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYGBgAAAABQABDQottAAAAABJRU5ErkJggg==', 'base64'));
+      }
+      if (u.startsWith('/api/live/thumbs/')) return send(404, { error: 'brak miniatury tej strony' });
       if (u === '/health') return send(200, { sessions: 1, overlay: ['24'], ingest: { channels: ['24'] }, captures: [{ channel: '24', size: '1280x720', fps: 25, mode: 'frames', drawn_by: 'native', status: 'capturing' }] });
       if (u === '/etv/pages?channel=24') return send(200, { pages: [{ number: 1001, name: 'Belka tytułowa', playout: { at: -60, out: 5, ref: 'programme' } }, { number: 3001, name: 'Wracamy po reklamie' }, { number: 4001, name: 'Pasek' }] });
       if (u === '/api/live/state') return send(200, {
@@ -358,6 +364,16 @@ function check(cond, msg) {
     f.el.remove();
     return out;
   });
+  // miniatury stron VizRS przez pośrednika panelu (obraz wprost, nie koperta JSON) i w opcjach wyboru elementów graficznych
+  const thumbs = await page.evaluate(async () => {
+    const get = async (n) => { const r = await fetch(`/api/cg/live/thumbs/${n}`); return [r.status, r.headers.get('content-type')]; };
+    const { graphicsChoices } = await import('/views/grafika.js');
+    return { ok: await get('1001.png'), none: await get('9.png'), bad: await get('x.png'),
+      choices: graphicsChoices([{ Id: 1, Name: 'Belka (1001)', FileName: '/config/graphics-elements/script/page-1001.yml' }, { Id: 2, Name: 'Logo', FileName: '/config/graphics-elements/image/logo.yml' }]) };
+  });
+  check(thumbs.ok[0] === 200 && /^image\/png/.test(thumbs.ok[1]) && thumbs.none[0] === 404 && thumbs.bad[0] === 404
+    && thumbs.choices[0][2].src === '/api/cg/live/thumbs/1001.png' && thumbs.choices[0][2].badge === 'VizRS 1001' && thumbs.choices[1][2].badge === 'obraz',
+    `miniatury stron VizRS: pośrednik CG i opcje wyboru grafiki (${JSON.stringify(thumbs)})`);
   check(msel.shown.length === 1 && /Znak Łódź 5/.test(msel.shown[0]) && msel.chips.length === 3 && msel.chips.some((c) => /99 \(spoza listy\)/.test(c))
     && JSON.stringify(msel.read) === JSON.stringify({ G: [5, 99], S: [] }) && msel.changes === 2 && msel.plain === 3 && msel.badges === 1,
     `wybór wielokrotny: szukanie „lodz”, Enter, „×”, wartość spoza listy zostaje, krótka lista jako pola z miniaturą (${JSON.stringify(msel)})`);

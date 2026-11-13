@@ -752,6 +752,9 @@ fn route(app: &App, req: &Request) -> Response {
         _ if !authorized(app, req) => Response::error(401, "zaloguj się tokenem panelu"),
         ("GET", "/api/status") => status(app),
         ("GET", "/api/exposure") => exposure(app),
+        ("GET", p) if p.starts_with("/api/cg/live/thumbs/") => {
+            cg_thumb(app, &p["/api/cg/live/thumbs/".len()..])
+        }
         (m, p) if p.starts_with("/api/cg/") => cg_proxy(
             app,
             m,
@@ -1326,6 +1329,39 @@ fn cg_proxy(app: &App, method: &str, rest: &str, body: &[u8], operator: &str) ->
     }
 }
 
+/// Numer strony z `<numer>.png` (miniatura strony VizRS); tylko cyfry, jak numery stron VizRS.
+pub fn thumb_page(file: &str) -> Option<&str> {
+    let n = file.strip_suffix(".png")?;
+    (!n.is_empty() && n.len() <= 12 && n.bytes().all(|b| b.is_ascii_digit())).then_some(n)
+}
+
+/// `GET /api/cg/live/thumbs/<numer>.png` → miniatura strony VizRS z CG Playout (`/api/live/thumbs`),
+/// obraz wprost (nie koperta JSON); 404 – CG Playout nie ma miniatury (panel pokazuje wtedy napis).
+fn cg_thumb(app: &App, file: &str) -> Response {
+    let Some(cg) = &app.cg else {
+        return Response::error(409, "VizRS CG Playout nie jest podłączony");
+    };
+    let Some(n) = thumb_page(file) else {
+        return Response::error(404, "nieznana miniatura");
+    };
+    match cg.send_as(
+        "GET",
+        &format!("/api/live/thumbs/{n}.png"),
+        &[],
+        "VizRS Live",
+    ) {
+        Ok(r) if r.status == 200 && r.body.starts_with(b"\x89PNG\r\n\x1a\n") => {
+            Response::new(200, "image/png", r.body)
+        }
+        Ok(r) if r.status == 404 => Response::error(404, "brak miniatury tej strony"),
+        Ok(r) => Response::error(
+            502,
+            &format!("CG Playout: odpowiedź {} dla miniatury", r.status),
+        ),
+        Err(e) => Response::error(502, &e.replace("most", "CG Playout")),
+    }
+}
+
 /// Komunikat z `{"error":"…"}` CG Playout (bez parsera JSON: pierwszy napis po kluczu).
 pub fn cg_error(body: &str) -> Option<String> {
     let i = body.find("\"error\"")? + 7;
@@ -1836,6 +1872,10 @@ mod tests {
             Some("/api/live/graphics/off")
         );
         assert_eq!(cg_path("POST", "live/graphics/x"), None);
+        assert_eq!(thumb_page("1001.png"), Some("1001"));
+        assert_eq!(thumb_page("1001"), None);
+        assert_eq!(thumb_page("..%2F1.png"), None);
+        assert_eq!(thumb_page(".png"), None);
         assert_eq!(
             cg_path("PUT", "live/settings").as_deref(),
             Some("/api/live/settings")
