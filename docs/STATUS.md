@@ -26,6 +26,10 @@
 | R11 | wydanie 1.0: instrukcja operatora, runbook, obrazy ghcr, przegląd bezpieczeństwa | `docs/INSTRUKCJA.md`, `docs/RUNBOOK.md`, `release.yml` |
 | R12 | Sloty na żywo (MCR), Audycje LIVE, operator i studio w pasku górnym | `views/live.js`, `app.js` |
 
+## Wydanie 26.11.2 (2026-11-13, gałąź `main`)
+
+Aplikacja na Tauri 2 (`desktop/`), wspólny rdzeń wyglądu `vizrs-ui.css`, profile kodowania bez akceleracji, karta pozycji na telefonie, wybór znaków wodnych i elementów graficznych z wyszukiwarką i miniaturami (strony VizRS – z CG Playout 26.11.4). Szczegóły: CHANGELOG.
+
 ## Wydanie 26.11.1 (2026-11-12, gałąź `main`)
 
 Pierwsze wydanie w numeracji rok.miesiąc.rewizja: zawartość 1.3.0-test.1 i późniejszych zmian z `next-v`; poprzednia `main` → `main-oldstable`.
