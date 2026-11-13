@@ -2,9 +2,9 @@
 
 ## Niewydane
 
-## 26.11.2 – wydanie (2026-11-13)
+## 26.11.3 – wydanie (2026-11-13)
 
-Razem z VizRS CG System 26.11.3, VizRS CG Artist 26.11.3 i VizRS CG Playout 26.11.4 (miniatury stron VizRS wymagają CG Playout ≥ 26.11.4).
+Zawartość 26.11.2 i poprawka routera niżej (26.11.2 nie zostało opublikowane – bramka wydania wykryła ten błąd). Razem z VizRS CG System 26.11.3, VizRS CG Artist 26.11.3 i VizRS CG Playout 26.11.4 (miniatury stron VizRS wymagają CG Playout ≥ 26.11.4).
 
 - **Ekrany nie nadpisują się nawzajem:** wolny ekran (np. odświeżenie listy playoutów po usunięciu), który skończył się wczytywać już po przejściu na inny, nie zastępuje nowego widoku – wcześniej po szybkim przejściu można było zobaczyć poprzedni ekran.
 
