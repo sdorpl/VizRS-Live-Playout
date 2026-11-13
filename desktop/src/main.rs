@@ -15,6 +15,7 @@
 
 mod bridge;
 mod connect;
+mod gpu;
 mod paths;
 mod proxy;
 
@@ -909,6 +910,11 @@ type Zooms = Mutex<HashMap<String, f64>>;
 // ------------------------------------------------------------------ start
 
 fn main() {
+    // akceleracja WebKitGTK: zmienne środowiska przed startem GTK i przed powstaniem wątków (gpu.rs)
+    let gpu_note = gpu::prepare(None);
+    if !gpu_note.is_empty() {
+        eprintln!("GPU: {gpu_note}");
+    }
     let argv: Vec<String> = std::env::args().skip(1).collect();
     let args = match parse_args(&argv) {
         Ok(a) => a,

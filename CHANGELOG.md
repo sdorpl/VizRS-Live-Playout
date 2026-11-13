@@ -2,6 +2,8 @@
 
 ## Niewydane
 
+- **Aplikacja VizRS Live (`desktop/`) – akceleracja sprzętowa na Linuksie z kartą NVIDIA** (sterownik własnościowy): okno wymusza renderer DMA-BUF WebKitGTK (`WEBKIT_FORCE_DMABUF_RENDERER=1`, `__NV_DISABLE_EXPLICIT_SYNC=1`) – dotąd WebKitGTK sam wyłączał akcelerację i panel rysował się na CPU (animacja 37 → 61 kl./s w oknie połączenia). Zmienna `VIZRS_GPU` (`auto`, `on`, `off`, `x11`, `system`); zmienne `WEBKIT_*` użytkownika mają pierwszeństwo. Moduł `desktop/src/gpu.rs` – ten sam w VizRS CG Artist i oknie Trio (VizRS CG System). DOKUMENTACJA „Aplikacja VizRS Live”.
+
 ## 26.11.5 – wydanie (2026-11-13)
 
 Wydania 26.11.3 i 26.11.4 nie zostały opublikowane: bramka liczyła zamierzony 404 brakującej miniatury strony VizRS jako błąd JS, test powiększenia miniatury zależał od tego, co zasłania stronę, a `desktop/Cargo.lock` nie znał nowej wersji (poprawione). Zawiera zmiany 26.11.3 i poniższe.
