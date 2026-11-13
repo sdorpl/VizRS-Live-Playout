@@ -389,3 +389,9 @@ td:has(> .row-poster) { padding-top: 4px; padding-bottom: 4px; width: 1%; }
 .mini.sm { width: 24px; height: 14px; font-size: 7px; }
 .chk .mini { margin: 0 2px; }
 .msel-opt .mini { width: 72px; height: 40px; }
+img.mini { cursor: zoom-in; }
+/* powiększenie miniatury pod kursorem (form.js) */
+.mini-pop { position: fixed; z-index: 1000; pointer-events: none; padding: 4px; background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--r-sm); box-shadow: 0 8px 28px rgba(0, 0, 0, .45); }
+.mini-pop[hidden] { display: none; }
+.mini-pop img { display: block; width: min(384px, 80vw); aspect-ratio: 16 / 9; object-fit: contain; background: var(--checker) 0 0 / 12px 12px; }

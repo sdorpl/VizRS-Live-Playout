@@ -23,8 +23,10 @@ function check(cond, msg) {
   const errors = [];
   let expectFail = false; // testy negatywne API z poziomu strony: zamierzone 4xx nie są błędami
   page.on('pageerror', (e) => errors.push(e.message));
-  page.on('console', (m) => m.type() === 'error' && !(expectFail && /Failed to load resource/.test(m.text())) && errors.push(m.text()));
-  page.on('response', (r) => r.status() >= 400 && !expectFail && errors.push(`${r.status()} ${r.request().method()} ${r.url()}`));
+  // 404 miniatury strony VizRS jest zamierzony: CG Playout nie ma jej jeszcze, panel pokazuje napis „VizRS n”
+  const thumb404 = (status, url) => status === 404 && /\/api\/cg\/live\/thumbs\//.test(url || '');
+  page.on('console', (m) => m.type() === 'error' && !((expectFail || thumb404(404, m.location()?.url)) && /Failed to load resource/.test(m.text())) && errors.push(m.text()));
+  page.on('response', (r) => r.status() >= 400 && !expectFail && !thumb404(r.status(), r.url()) && errors.push(`${r.status()} ${r.request().method()} ${r.url()}`));
 
 
   // ---------- R9: atrapa VizRS CG Playout (127.0.0.1:18700, panel uruchomiony z --cg-url przez tests/stack.sh) ----------
@@ -374,6 +376,17 @@ function check(cond, msg) {
   check(thumbs.ok[0] === 200 && /^image\/png/.test(thumbs.ok[1]) && thumbs.none[0] === 404 && thumbs.bad[0] === 404
     && thumbs.choices[0][2].src === '/api/cg/live/thumbs/1001.png' && thumbs.choices[0][2].badge === 'VizRS 1001' && thumbs.choices[1][2].badge === 'obraz',
     `miniatury stron VizRS: pośrednik CG i opcje wyboru grafiki (${JSON.stringify(thumbs)})`);
+  // powiększenie miniatury po najechaniu (form.js): okienko z tym samym obrazem, znika po zjechaniu
+  await page.evaluate(() => new Promise((res) => {
+    const img = Object.assign(document.createElement('img'), { className: 'mini', id: 'e2e-mini', src: '/api/cg/live/thumbs/1001.png' });
+    img.onload = res; document.querySelector('main').prepend(img);
+  }));
+  await page.hover('#e2e-mini');
+  const popOn = await page.evaluate(() => { const p = document.querySelector('.mini-pop'); return !!p && !p.hidden && p.offsetWidth > 100 && p.querySelector('img').src.endsWith('/api/cg/live/thumbs/1001.png'); });
+  await page.mouse.move(0, 0);
+  const popOff = await page.evaluate(() => document.querySelector('.mini-pop')?.hidden === true);
+  await page.evaluate(() => document.getElementById('e2e-mini').remove());
+  check(popOn && popOff, `miniatura: powiększenie po najechaniu i ukrycie po zjechaniu (${popOn}/${popOff})`);
   check(msel.shown.length === 1 && /Znak Łódź 5/.test(msel.shown[0]) && msel.chips.length === 3 && msel.chips.some((c) => /99 \(spoza listy\)/.test(c))
     && JSON.stringify(msel.read) === JSON.stringify({ G: [5, 99], S: [] }) && msel.changes === 2 && msel.plain === 3 && msel.badges === 1,
     `wybór wielokrotny: szukanie „lodz”, Enter, „×”, wartość spoza listy zostaje, krótka lista jako pola z miniaturą (${JSON.stringify(msel)})`);

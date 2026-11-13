@@ -187,6 +187,31 @@ function miniature(th, cls = '') {
   }
   return th?.badge ? h('span', { class: 'mini badge' + cls }, th.badge) : null;
 }
+
+/**
+ * Powiększenie miniatury pod kursorem (lista wyboru, etykiety, pola tak/nie): jedno pływające okienko
+ * dla całego panelu, bez przechwytywania kliknięć. Tylko urządzenia ze wskaźnikiem (na dotyku nie ma najechania).
+ */
+let miniPop = null;
+function showMiniPop(img) {
+  if (!img.complete || !img.naturalWidth) return;  // obraz jeszcze się nie wczytał albo go nie ma
+  miniPop ||= document.body.appendChild(h('div', { class: 'mini-pop', 'aria-hidden': 'true' }, h('img', { alt: '' })));
+  miniPop.firstChild.src = img.currentSrc || img.src;
+  miniPop.hidden = false;
+  const r = img.getBoundingClientRect();
+  const w = miniPop.offsetWidth, ht = miniPop.offsetHeight, gap = 8;
+  const left = Math.min(Math.max(gap, r.left + r.width / 2 - w / 2), innerWidth - w - gap);
+  const top = r.top - ht - gap >= gap ? r.top - ht - gap : Math.min(r.bottom + gap, innerHeight - ht - gap);
+  miniPop.style.left = left + 'px';
+  miniPop.style.top = top + 'px';
+}
+const hideMiniPop = () => { if (miniPop) miniPop.hidden = true; };
+if (typeof document !== 'undefined' && matchMedia?.('(hover: hover)').matches) {
+  document.addEventListener('mouseover', (e) => { const t = e.target; if (t instanceof HTMLImageElement && t.classList.contains('mini')) showMiniPop(t); });
+  document.addEventListener('mouseout', (e) => { if (e.target instanceof HTMLImageElement && e.target.classList.contains('mini')) hideMiniPop(); });
+  addEventListener('scroll', hideMiniPop, true);
+  document.addEventListener('mousedown', hideMiniPop, true);
+}
 const fold = (s) => String(s ?? '').toLocaleLowerCase('pl').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/ł/g, 'l');
 
 /**

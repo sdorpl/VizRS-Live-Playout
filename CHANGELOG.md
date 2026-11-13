@@ -2,7 +2,13 @@
 
 ## Niewydane
 
-## 26.11.3 – wydanie (2026-11-13)
+## 26.11.4 – wydanie (2026-11-13)
+
+Wydanie 26.11.3 nie zostało opublikowane – bramka wydania liczyła zamierzony 404 brakującej miniatury strony VizRS jako błąd JS (poprawiony test). Zawiera zmiany 26.11.3 i poniższe.
+
+- **Powiększenie miniatury po najechaniu:** w wyborze elementów graficznych i znaków wodnych (lista podpowiedzi, wybrane etykiety, pola tak/nie) najechanie myszą na miniaturę pokazuje jej większą wersję – łatwiej odróżnić podobne grafiki VizRS. Na ekranach dotykowych bez zmian.
+
+## 26.11.3 – nieopublikowane (2026-11-13)
 
 Zawartość 26.11.2 i poprawka routera niżej (26.11.2 nie zostało opublikowane – bramka wydania wykryła ten błąd). Razem z VizRS CG System 26.11.3, VizRS CG Artist 26.11.3 i VizRS CG Playout 26.11.4 (miniatury stron VizRS wymagają CG Playout ≥ 26.11.4).
 
