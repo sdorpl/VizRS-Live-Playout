@@ -2,9 +2,9 @@
 
 ## Niewydane
 
-## 26.11.4 – wydanie (2026-11-13)
+## 26.11.5 – wydanie (2026-11-13)
 
-Wydanie 26.11.3 nie zostało opublikowane – bramka wydania liczyła zamierzony 404 brakującej miniatury strony VizRS jako błąd JS (poprawiony test). Zawiera zmiany 26.11.3 i poniższe.
+Wydania 26.11.3 i 26.11.4 nie zostały opublikowane: bramka liczyła zamierzony 404 brakującej miniatury strony VizRS jako błąd JS, test powiększenia miniatury zależał od tego, co zasłania stronę, a `desktop/Cargo.lock` nie znał nowej wersji (poprawione). Zawiera zmiany 26.11.3 i poniższe.
 
 - **Powiększenie miniatury po najechaniu:** w wyborze elementów graficznych i znaków wodnych (lista podpowiedzi, wybrane etykiety, pola tak/nie) najechanie myszą na miniaturę pokazuje jej większą wersję – łatwiej odróżnić podobne grafiki VizRS. Na ekranach dotykowych bez zmian.
 

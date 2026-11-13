@@ -381,9 +381,12 @@ function check(cond, msg) {
     const img = Object.assign(document.createElement('img'), { className: 'mini', id: 'e2e-mini', src: '/api/cg/live/thumbs/1001.png' });
     img.onload = res; document.querySelector('main').prepend(img);
   }));
-  await page.hover('#e2e-mini');
-  const popOn = await page.evaluate(() => { const p = document.querySelector('.mini-pop'); return !!p && !p.hidden && p.offsetWidth > 100 && p.querySelector('img').src.endsWith('/api/cg/live/thumbs/1001.png'); });
-  await page.mouse.move(0, 0);
+  // zdarzenia wprost na miniaturze: fizyczny kursor trafiałby w to, co akurat ją zasłania (okno, toast) – test bywał chwiejny
+  const mini = (type) => page.evaluate((t) => document.getElementById('e2e-mini').dispatchEvent(new MouseEvent(t, { bubbles: true })), type);
+  await mini('mouseover');
+  const popOn = await page.evaluate(() => { const p = document.querySelector('.mini-pop'); const r = p?.getBoundingClientRect();
+    return !!p && !p.hidden && r.width > 100 && r.left >= 0 && r.right <= innerWidth && p.querySelector('img').src.endsWith('/api/cg/live/thumbs/1001.png'); });
+  await mini('mouseout');
   const popOff = await page.evaluate(() => document.querySelector('.mini-pop')?.hidden === true);
   await page.evaluate(() => document.getElementById('e2e-mini').remove());
   check(popOn && popOff, `miniatura: powiększenie po najechaniu i ukrycie po zjechaniu (${popOn}/${popOff})`);
