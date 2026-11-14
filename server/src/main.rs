@@ -1228,6 +1228,12 @@ pub fn cg_path(method: &str, rest: &str) -> Option<String> {
         ("POST", ["live", "channels", ch, a @ ("take" | "continue" | "out")]) => {
             format!("/api/live/channels/{ch}/{a}")
         }
+        // logi emisji kanału z jednego dnia obok dziennika: sidecar CG, odbiorniki live ingest, przejęcia kanału
+        ("GET", ["live", "logs", src @ ("cg" | "ingest" | "takeover"), ch, day])
+            if valid_day(day) =>
+        {
+            format!("/api/live/logs?source={src}&channel={ch}&day={day}")
+        }
         // K14: dziennik emisji kanału z jednego dnia (RRRR-MM-DD)
         ("GET", ["live", "asrun", ch, day]) if valid_day(day) => {
             format!("/api/live/asrun?channel={ch}&day={day}")
@@ -1841,6 +1847,13 @@ mod tests {
         );
         assert!(cg_path("GET", "live/asrun/24/2026-11-9").is_none());
         assert!(cg_path("GET", "live/asrun/24/x&y=1").is_none());
+        assert_eq!(
+            cg_path("GET", "live/logs/ingest/24/2026-11-14").as_deref(),
+            Some("/api/live/logs?source=ingest&channel=24&day=2026-11-14")
+        );
+        assert!(cg_path("GET", "live/logs/etc/24/2026-11-14").is_none());
+        assert!(cg_path("GET", "live/logs/cg/24/2026-11-1").is_none());
+        assert!(cg_path("POST", "live/logs/cg/24/2026-11-14").is_none());
     }
 
     #[test]

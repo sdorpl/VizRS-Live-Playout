@@ -70,7 +70,7 @@ function check(cond, msg) {
       if (u === '/health') return send(200, { sessions: 1, overlay: ['24'], ingest: { channels: ['24'] }, captures: [{ channel: '24', size: '1280x720', fps: 25, mode: 'frames', drawn_by: 'native', status: 'capturing' }] });
       if (u === '/etv/pages?channel=24') return send(200, { pages: [{ number: 1001, name: 'Belka tytułowa', playout: { at: -60, out: 5, ref: 'programme' } }, { number: 3001, name: 'Wracamy po reklamie' }, { number: 4001, name: 'Pasek' }] });
       if (u === '/api/live/state') return send(200, {
-        ingest: true, now, features: ['layers', 'take', 'asrun'],
+        ingest: true, now, features: ['layers', 'take', 'asrun', 'logs'],
         channels: [{ number: '24', name: 'INFO24', source: { live: true, audio: true, video: 'h264', seconds: 75 }, on_air: !CG.hold && CG.anytime, hold: CG.hold, anytime: CG.anytime, layers: CG.layers,
           now: { title: 'Wiadomosci', start: T0 - 60000, stop: T0 + 60000, live: false }, next_live: { title: 'Poranek na żywo', start: T0 + 3600000, stop: T0 + 7200000, live: true },
           inputs: [{ kind: 'rtmp', host: 'tv.example.pl', port: 1936, app: '/live', key: 'studio-klucz', passphrase: '', streamid: '' },
@@ -100,6 +100,14 @@ function check(cond, msg) {
         return send(200, { ok: true });
       }
       if (/^\/api\/live\/asrun\?channel=24&day=\d{4}-\d{2}-\d{2}$/.test(u)) return send(200, { entries: CG.asrun });
+      {
+        const lg = /^\/api\/live\/logs\?source=(cg|ingest|takeover)&channel=24&day=\d{4}-\d{2}-\d{2}$/.exec(u);
+        if (lg) return send(200, { tz: 'UTC', truncated: false, entries: {
+          ingest: [{ t: T0 - 50000, level: 'info', text: 'channel 24: publisher on rtmp://0.0.0.0:1936/live/***' }, { t: T0 - 20000, level: 'warn', text: 'channel 24: publisher gone; listening on rtmp://0.0.0.0:1936/live/***' }],
+          takeover: [{ t: T0 - 40000, level: 'warn', text: "channel 24: live leaves the channel's timeline 12.0 s behind the clock; the schedule makes it up" }],
+          cg: [{ t: T0 - 45000, level: 'info', text: 'ingest: channel 24: live (h264, with audio)' }],
+        }[lg[1]] });
+      }
       if (u === '/api/live/channels/24' && q.method === 'PUT') { CG.anytime = body.anytime; return send(200, { ok: true }); }
       if (u === '/api/live/inputs' && q.method === 'GET') {
         return send(200, { listeners: CG.inputs || [{ channel: '24', url: 'rtmp://0.0.0.0:1936/live/studio-klucz' }], from: CG.inputs ? 'panel' : 'env', store: true, ingest: true, ports: { rtmp: [1936, 1943], srt: [9000, 9007] } });
@@ -1492,6 +1500,19 @@ function check(cond, msg) {
   await page.waitForSelector('[data-asrun] table');
   const asr = await page.textContent('[data-asrun]');
   check(/start pozycji/.test(asr) && /TAKE strony/.test(asr) && /OUT strony/.test(asr), 'K14: dziennik emisji z CG Playout');
+  // logi emisji obok dziennika: live ingest osobno, potem wszystko na jednej osi czasu z kolumną Źródło
+  await page.selectOption('#asrun-src', 'ingest');
+  await page.waitForFunction(() => /publisher gone/.test(document.querySelector('[data-asrun]')?.textContent || ''), null, { timeout: 15000 }).catch(() => {});
+  const ing = await page.textContent('[data-asrun]');
+  check(/publisher gone/.test(ing) && /uwaga/.test(ing) && !/start pozycji/.test(ing), 'dziennik emisji: logi odbiorników live ingest');
+  await page.selectOption('#asrun-level', 'warn');
+  check(!/publisher on/.test(await page.textContent('[data-asrun]')), 'dziennik emisji: próg poziomu');
+  await page.selectOption('#asrun-level', 'info');
+  await page.selectOption('#asrun-src', 'all');
+  await page.waitForFunction(() => /behind the clock/.test(document.querySelector('[data-asrun]')?.textContent || ''), null, { timeout: 15000 }).catch(() => {});
+  const all = await page.textContent('[data-asrun]');
+  check(/Źródło/.test(all) && /live ingest/.test(all) && /przejęcia/.test(all) && /VizRS CG/.test(all) && /antena/.test(all), 'dziennik emisji: wszystkie źródła na jednej osi czasu');
+  await page.selectOption('#asrun-src', 'asrun');
   // K17: reguły alarmów (czysta funkcja w przeglądarce)
   const al = await page.evaluate(async () => {
     const { computeAlarms } = await import('/alarms.js');

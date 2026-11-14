@@ -297,7 +297,7 @@ if (process.env.MOCK_CG === '1') {
       if (q.headers.authorization !== 'Bearer ' + CGT) return reply(r, 401, { error: 'zły token panelu' });
       if (u.pathname === '/health') return reply(r, 200, { sessions: 3, overlay: ['24'], ingest: { channels: ['24'] }, captures: [] });
       if (u.pathname === '/api/live/state') return reply(r, 200, {
-        ingest: true, now: Date.now(), version: 'atrapa', features: ['layers', 'take', 'asrun', 'encoder', 'thumbs', 'webhook'], settings: { graphics_off: false },
+        ingest: true, now: Date.now(), version: 'atrapa', features: ['layers', 'take', 'asrun', 'encoder', 'thumbs', 'webhook', 'logs'], settings: { graphics_off: false },
         channels: DB.channels.slice(0, 3).map((c) => ({ number: c.Number, name: c.Name, source: { live: c.Number === '24' }, on_air: false, hold: false, anytime: false, layers: layers[c.Number] || [],
           next_live: c.Number === '25' ? { start: Date.now() + 3 * 60e3, title: 'Koncert w studiu' } : null })),
         events: [], guide: {},
@@ -310,6 +310,13 @@ if (process.env.MOCK_CG === '1') {
       if (u.pathname === '/api/live/inputs') return reply(r, 200, { listeners: [{ channel: '24', url: 'rtmp://0.0.0.0:1936/live/x' }] });
       if (u.pathname === '/etv/pages') return reply(r, 200, { pages: [{ number: '101', name: 'belka tytułowa' }, { number: '102', name: 'za chwilę' }, { number: '4001', name: 'zegar' }] });
       if (u.pathname === '/api/live/asrun') return reply(r, 200, { entries: asrun });
+      if (u.pathname === '/api/live/logs') {
+        const n = Date.now(), src = u.searchParams.get('source');
+        const lines = { ingest: [[n - 900e3, 'info', 'channel 24: publisher on rtmp://0.0.0.0:1936/live/***'], [n - 600e3, 'warn', 'channel 24: publisher gone; listening on rtmp://0.0.0.0:1936/live/***']],
+          takeover: [[n - 880e3, 'info', 'channel 24: live run ended after 44.0 s in 43.6 s (1.01x, exit 0) | seq 120, listed 11'], [n - 590e3, 'warn', "channel 24: live leaves the channel's timeline 11.2 s behind the clock; the schedule makes it up"]],
+          cg: [[n - 899e3, 'info', 'ingest: channel 24: live (h264, with audio)'], [n - 500e3, 'warn', 'graphics stream: the air time is +4.2 s off the end of the run before; going on from its end']] }[src] || [];
+        return reply(r, 200, { tz: 'UTC', truncated: false, entries: lines.map(([t, level, text]) => ({ t, level, text })) });
+      }
       if (u.pathname === '/api/live/graphics') return reply(r, 200, { rules: { on_clip: 'TAKE 101 headline={title}', on_ad: '', ad_match: { path: '/reklamy/', title: '' }, on_end: 'TAKE 102 next={next_title}', end_seconds: 30, shows: [], channels: {} }, source: 'config', store: true });
       if (u.pathname === '/api/live/shows') return reply(r, 200, { shows: [{ id: '25-koncert', channel: '25', title: 'Koncert w studiu', duration: '01:00:00', plot: '', collection: true, collection_name: 'LIVE · Koncert w studiu', next: null, file_ok: true, airings: 2 }], error: null,
         channels: DB.channels.slice(0, 3).map((c) => ({ number: c.Number, name: c.Name })), guide_known: true, max: 50, etv: { configured: true, ok: true, error: null }, settings: { library: null, store: true } });
