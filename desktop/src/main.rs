@@ -18,6 +18,7 @@ mod connect;
 mod gpu;
 mod paths;
 mod proxy;
+mod scale;
 mod screen;
 
 use std::collections::{HashMap, HashSet};
