@@ -26,9 +26,9 @@
 | R11 | wydanie 1.0: instrukcja operatora, runbook, obrazy ghcr, przegląd bezpieczeństwa | `docs/INSTRUKCJA.md`, `docs/RUNBOOK.md`, `release.yml` |
 | R12 | Sloty na żywo (MCR), Audycje LIVE, operator i studio w pasku górnym | `views/live.js`, `app.js` |
 
-## Wydanie 26.11.7 (2026-11-14, gałąź `main`)
+## Wydanie 26.11.8 (2026-11-14, gałąź `main`)
 
-Grafika na przejęcie kanału przez live ingest: w regule kanału logo (`on_live`, np. strona 7510 – NA ŻYWO na BTB), grafika ramówki wstrzymana na czas przejęcia; wiersz „Grafika” w Slotach na żywo, nowe zdarzenia w Dzienniku emisji – z CG Playout 26.11.10.
+26.11.7 nieopublikowane (bramka wydania: test e2e wybierał pole w zwiniętej karcie reguły kanału). Grafika na przejęcie kanału przez live ingest: w regule kanału logo (`on_live`, np. strona 7510 – NA ŻYWO na BTB), grafika ramówki wstrzymana na czas przejęcia; wiersz „Grafika” w Slotach na żywo, nowe zdarzenia w Dzienniku emisji – z CG Playout 26.11.10.
 
 Wcześniej – 26.11.6 (2026-11-14): Dziennik emisji jako centralne miejsce logów (live ingest, przejęcia, sidecar CG – z CG Playout 26.11.9), aplikacja `desktop/`: akceleracja WebKitGTK na NVIDIA i rozmiar okna przy skalowaniu ułamkowym, nakładka CG Playout z `MEDIA_MOUNT`.
 
