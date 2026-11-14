@@ -70,8 +70,8 @@ function check(cond, msg) {
       if (u === '/health') return send(200, { sessions: 1, overlay: ['24'], ingest: { channels: ['24'] }, captures: [{ channel: '24', size: '1280x720', fps: 25, mode: 'frames', drawn_by: 'native', status: 'capturing' }] });
       if (u === '/etv/pages?channel=24') return send(200, { pages: [{ number: 1001, name: 'Belka tytułowa', playout: { at: -60, out: 5, ref: 'programme' } }, { number: 3001, name: 'Wracamy po reklamie' }, { number: 4001, name: 'Pasek' }] });
       if (u === '/api/live/state') return send(200, {
-        ingest: true, now, features: ['layers', 'take', 'asrun', 'logs'],
-        channels: [{ number: '24', name: 'INFO24', source: { live: true, audio: true, video: 'h264', seconds: 75 }, on_air: !CG.hold && CG.anytime, hold: CG.hold, anytime: CG.anytime, layers: CG.layers,
+        ingest: true, now, features: ['layers', 'take', 'asrun', 'logs', 'on_live'],
+        channels: [{ number: '24', name: 'INFO24', source: { live: true, audio: true, video: 'h264', seconds: 75 }, on_air: !CG.hold && CG.anytime, hold: CG.hold, takeover: !CG.hold && CG.anytime, anytime: CG.anytime, layers: CG.layers,
           now: { title: 'Wiadomosci', start: T0 - 60000, stop: T0 + 60000, live: false }, next_live: { title: 'Poranek na żywo', start: T0 + 3600000, stop: T0 + 7200000, live: true },
           inputs: [{ kind: 'rtmp', host: 'tv.example.pl', port: 1936, app: '/live', key: 'studio-klucz', passphrase: '', streamid: '' },
             { kind: 'srt', host: '', port: 9000, app: '', key: '', passphrase: 'tajne haslo', streamid: '' }] }],
@@ -1579,8 +1579,17 @@ function check(cond, msg) {
   await page.fill(`${se} textarea`, 'TAKE 1001 headline={title}');
   await page.click(`${se} .ce-text`);
   check(/1001\s*Belka tytułowa/.test(await page.textContent(`${se} .ce-page`)), 'reguły grafiki: komendy wpisane w trybie „Tekst” wracają jako lista grafik');
+  // reguła kanału: grafika na przejęcie przez live ingest (on_live – tylko per kanał, CG Playout z „on_live” w features)
+  const le = '[data-cmd-editor="gr-c0-on_live"]';
+  check(await page.inputValue('#gr-c0-on_live') === 'off' && !(await page.$('#gr-on_live')), 'reguły grafiki: on_live tylko w regule kanału, domyślnie nic');
+  await page.selectOption('#gr-c0-on_live', 'cmd');
+  await page.click(`${le} .ce-text`);
+  await page.fill(`${le} textarea`, 'TAKE 7510');
+  await page.click(`${le} .ce-text`);
   await rerender(() => page.click('button:has-text("Zapisz reguły grafiki")'));
   const gr = CG.graphics.rules;
+  check(gr.channels['24'].on_live === 'TAKE 7510' && !('on_live' in gr), 'reguły grafiki: logo na przejęcie live zapisane w regule kanału');
+  check(/przejęcie przez live ingest/.test(await page.textContent('[data-rules-summary]')), 'reguły grafiki: przejęcie live w tabeli Kiedy / Co / Ile');
   check(gr.on_clip === 'TAKE 4001 headline={title}' && gr.on_end === 'TAKE 1001 programs={next_title}' && gr.end_seconds === 45 && gr.shows.length === 1 && gr.shows[0].show_title === '^Wiadomo'
     && gr.shows[0].on_clip === 'TAKE 1001 headline={title}' && !('on_end' in gr.shows[0]),
     'reguły grafiki: zapis globalnych i reguły audycji (jak globalnie = pole pominięte)');
@@ -1598,6 +1607,7 @@ function check(cond, msg) {
   check(await page.getAttribute('input[aria-label="Klucz RTMP 24-1"]', 'type') === 'text', 'sloty: „Pokaż” odsłania klucz');
   check(await page.inputValue('input[aria-label="Adres SRT 24-2"]') === 'srt://127.0.0.1:9000?mode=caller&passphrase=tajne%20haslo', 'sloty: adres SRT z hasłem (host z panelu)');
   check(/NA ANTENIE/.test(await page.textContent('main')), 'sloty: kanał 24 z sygnałem studia NA ANTENIE');
+  check(/live – ramówka wstrzymana/.test(await page.textContent('[data-live-channel="24"] [data-live-graphics]')), 'sloty: przejęcie – grafika live zamiast ramówki');
   const inTab = await page.textContent('[data-inputs-table]');
   check(inTab.includes('rtmp://tv.example.pl:1936/live') && /nadaje/.test(inTab) && /h264 · z dźwiękiem/.test(inTab) && !inTab.includes('studio-klucz') && !inTab.includes('tajne'),
     'sloty: tabela wejść – adres bez klucza i hasła, stan, obraz');

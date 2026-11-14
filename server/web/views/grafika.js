@@ -66,7 +66,7 @@ VIEWS.grafika = async () => {
   return [
     head('Grafika kanału', 'Kiedy jaka strona VizRS wchodzi na antenę (reguły CG Playout), stan VizRS CG Playout, strony VizRS, podgląd anteny i elementy graficzne legacy.', refresh),
     whenPanel,
-    S.status.cg && !(health instanceof Error) ? rulesPanel(graphics, pages, channels) : null,
+    S.status.cg && !(health instanceof Error) ? rulesPanel(graphics, pages, channels, (live?.features || []).includes('on_live')) : null,
     h('div', { class: 'split wide' },
       h('div', { class: 'cols' }, cgPanel,
         panel('Elementy graficzne legacy', null,
@@ -206,6 +206,7 @@ function ruleRows(r) {
       ['on_clip', 'start pozycji', 'wg strony VizRS'],
       ['on_end', `${end(x)} s przed końcem audycji`, `ostatnie ${end(x)} s`],
       ['on_ad', 'przerwa reklamowa' + (global && ad ? ` (${ad})` : ''), 'na czas przerwy'],
+      ['on_live', 'przejęcie przez live ingest (grafika ramówki wstrzymana)', 'na czas przejęcia'],
     ];
     for (const [key, when, len] of list) {
       const v = what(x[key]);
@@ -251,8 +252,10 @@ function rulesSummary(r, pages) {
 }
 
 const KEYS = [['on_clip', 'Na start pozycji'], ['on_end', 'Przed końcem audycji'], ['on_ad', 'Na przerwę reklamową']];
+// Tylko w regule kanału, gdy CG Playout to umie (`features`: on_live): grafika na czas przejęcia kanału przez live ingest.
+const LIVE_KEY = ['on_live', 'Na przejęcie przez live ingest'];
 
-function rulesPanel(doc, pages, cgChannels) {
+function rulesPanel(doc, pages, cgChannels, onLive) {
   if (doc instanceof Error || !doc) {
     const e = doc || new Error('brak odpowiedzi');
     return panel('Reguły grafiki', null, h('div', { class: 'pad' },
@@ -262,7 +265,7 @@ function rulesPanel(doc, pages, cgChannels) {
   const r = doc.rules || {};
   // podpowiedzi nazw pól: z komend wszystkich reguł
   const texts = [];
-  const collect = (x) => KEYS.forEach(([k]) => x?.[k] && texts.push(x[k]));
+  const collect = (x) => [...KEYS, LIVE_KEY].forEach(([k]) => x?.[k] && texts.push(x[k]));
   collect(r); (r.shows || []).forEach(collect);
   Object.values(r.channels || {}).forEach((x) => { collect(x); (x.shows || []).forEach(collect); });
   const used = fieldsUsed(texts);
@@ -279,7 +282,10 @@ function rulesPanel(doc, pages, cgChannels) {
   const knownCh = cgChannels.map((c) => String(c.number));
   const card = (kind, x, i, open) => {
     const p = kind === 'shows' ? 's' : 'c';
-    const eds = Object.fromEntries(KEYS.map(([k, l]) => [k, editor(`gr-${p}${i}-${k}`, `${l} (${kind === 'shows' ? 'audycja' : 'kanał'} ${i + 1})`, value(x[k]), { scoped: true, ad: k === 'on_ad' })]));
+    const keys = kind === 'channels' && onLive ? [...KEYS, LIVE_KEY] : KEYS;
+    // on_live nie ma wartości globalnej: „nic nie wchodzi” albo komendy (np. TAKE 7510 – logo NA ŻYWO)
+    const eds = Object.fromEntries(keys.map(([k, l]) => [k, editor(`gr-${p}${i}-${k}`, `${l} (${kind === 'shows' ? 'audycja' : 'kanał'} ${i + 1})`,
+      k === 'on_live' ? x[k] ?? '' : value(x[k]), { scoped: k !== 'on_live', ad: k === 'on_ad' })]));
     let key;
     if (kind === 'shows') key = h('input', { class: 'mono', value: x.show_title ?? '', placeholder: 'np. ^Wiadomości', 'aria-label': `Audycja (regex tytułu) ${i + 1}` });
     else {
@@ -298,8 +304,9 @@ function rulesPanel(doc, pages, cgChannels) {
       h('summary', null, title, h('span', { class: 'grow' }), rm),
       h('div', { class: 'form' },
         h('label', null, kind === 'shows' ? 'Tytuł audycji (regex)' : 'Kanał'), key,
-        KEYS.flatMap(([k, l]) => [h('label', { for: `gr-${p}${i}-${k}` }, l), eds[k].el]),
-        h('label', null, 'Sekund przed końcem'), end));
+        keys.flatMap(([k, l]) => [h('label', { for: `gr-${p}${i}-${k}` }, l), eds[k].el]),
+        h('label', null, 'Sekund przed końcem'), end),
+      keys.includes(LIVE_KEY) ? h('div', { class: 'hint pad' }, 'Przejęcie przez live ingest: grafika ramówki schodzi i nie wchodzi do końca przejęcia, zamiast niej wchodzi ta (np. logo NA ŻYWO). Po przejęciu wraca grafika ramówki.') : null);
     cards[kind].push(entry);
     return entry.el;
   };
@@ -314,7 +321,8 @@ function rulesPanel(doc, pages, cgChannels) {
       const live = (kind) => cards[kind].filter((c) => !c.removed);
       const scoped = (c) => {
         const o = {};
-        for (const [k] of KEYS) { const v = c.eds[k].read(); if (v != null) o[k] = v; }
+        for (const k of Object.keys(c.eds)) { const v = c.eds[k].read(); if (v != null && !(k === 'on_live' && v === '')) o[k] = v; }
+        if (!c.eds.on_live && c.x.on_live) o.on_live = c.x.on_live; // CG Playout bez on_live w features – bez zmian
         const e = numField(c.end.value);
         if (e != null && !Number.isNaN(e)) o.end_seconds = e;
         if (c.x.shows) o.shows = c.x.shows; // reguły audycji w regule kanału – tylko z config.json, bez zmian

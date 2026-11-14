@@ -227,6 +227,8 @@ function channelCard(c, receivedAt) {
     h('dl', { class: 'kv' },
       h('dt', null, 'Sygnał studia'), h('dd', null, src ? `${src.video || '?'}${src.audio ? ' + dźwięk' : ' bez dźwięku'}` : 'brak'),
       h('dt', null, 'Studio'), h('dd', null, (anytimeNow ? 'także poza audycjami' : 'tylko w audycjach LIVE') + (c.anytime_own == null ? ' (konfiguracja CG)' : ' (panel)')),
+      // przejęcie przez nakładkę (CG Playout z `on_live` w features): grafika ramówki wstrzymana, na antenie grafika live kanału
+      'takeover' in c ? [h('dt', null, 'Grafika'), h('dd', { 'data-live-graphics': '' }, c.takeover ? pill('live – ramówka wstrzymana', 'on') : 'z ramówki')] : null,
       h('dt', null, 'Najbliższa LIVE'), h('dd', null, c.next_live ? `${c.next_live.title} · ${day(c.next_live.start)} ${at(c.next_live.start)}` : '—')),
     h('div', { class: 'now' + (warn ? ' warn' : '') }, left, right),
     h('div', { class: 'bar ctl' }, main,
