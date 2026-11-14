@@ -1582,6 +1582,7 @@ function check(cond, msg) {
   // reguła kanału: grafika na przejęcie przez live ingest (on_live – tylko per kanał, CG Playout z „on_live” w features)
   const le = '[data-cmd-editor="gr-c0-on_live"]';
   check(await page.inputValue('#gr-c0-on_live') === 'off' && !(await page.$('#gr-on_live')), 'reguły grafiki: on_live tylko w regule kanału, domyślnie nic');
+  await page.$eval('#gr-c0-on_live', (el) => { el.closest('details').open = true; }); // karta reguły kanału jest zwinięta
   await page.selectOption('#gr-c0-on_live', 'cmd');
   await page.click(`${le} .ce-text`);
   await page.fill(`${le} textarea`, 'TAKE 7510');
