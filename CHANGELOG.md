@@ -2,6 +2,8 @@
 
 ## Niewydane
 
+## 26.11.7 – wydanie (2026-11-14)
+
 - **Grafika podczas przejęcia przez live ingest (`on_live`):** w Grafice kanału w karcie reguły kanału pole „Na przejęcie przez live ingest” (`on_live`, np. `TAKE 7510` dla logo „NA ŻYWO”) pozwala zdefiniować grafikę wchodzącą na antenę podczas przejęcia kanału przez sygnał live ingest nakładki ffmpeg; grafika ramówki jest w tym czasie wstrzymywana i wraca automatycznie po powrocie do ramówki (w tabeli „Kiedy / Co / Ile” wiersz „przejęcie przez live ingest (grafika ramówki wstrzymana)”). W Slotach na żywo karta kanału pokazuje wiersz **Grafika: live – ramówka wstrzymana** (podczas przejęcia) albo „z ramówki” (pole `takeover`). W Dzienniku emisji (as-run) nowe rodzaje zdarzeń: `live_graphics_on` („przejęcie live – grafika ramówki wstrzymana”) i `live_graphics_off` („koniec przejęcia – grafika ramówki wraca”). **Wymaga VizRS CG Playout z cechą `on_live` w `features`** (starszy CG ukrywa pole w edytorze reguł, a zapisane wcześniej `on_live` zachowuje bez zmian). DOKUMENTACJA §4, INSTRUKCJA §2.
 
 ## 26.11.6 – wydanie (2026-11-14)
