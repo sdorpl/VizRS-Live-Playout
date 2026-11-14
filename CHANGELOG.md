@@ -2,6 +2,8 @@
 
 ## Niewydane
 
+- **Aplikacja VizRS Live – rozmiar okna przy skalowaniu ułamkowym:** okno 1600×900 px logicznych wychodziło poza ekran 1920×1080 przy 125 % (1536×864); teraz jest przycinane do obszaru roboczego monitora (`desktop/src/screen.rs`, ten sam moduł w VizRS CG Artist i oknie Trio). DOKUMENTACJA „Aplikacja VizRS Live”.
+
 - **Aplikacja VizRS Live (`desktop/`) – akceleracja sprzętowa na Linuksie z kartą NVIDIA** (sterownik własnościowy): okno wymusza renderer DMA-BUF WebKitGTK (`WEBKIT_FORCE_DMABUF_RENDERER=1`, `__NV_DISABLE_EXPLICIT_SYNC=1`) – dotąd WebKitGTK sam wyłączał akcelerację i panel rysował się na CPU (animacja 37 → 61 kl./s w oknie połączenia). Zmienna `VIZRS_GPU` (`auto`, `on`, `off`, `x11`, `system`); zmienne `WEBKIT_*` użytkownika mają pierwszeństwo. Moduł `desktop/src/gpu.rs` – ten sam w VizRS CG Artist i oknie Trio (VizRS CG System). DOKUMENTACJA „Aplikacja VizRS Live”.
 
 ## 26.11.5 – wydanie (2026-11-13)

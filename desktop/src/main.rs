@@ -18,6 +18,7 @@ mod connect;
 mod gpu;
 mod paths;
 mod proxy;
+mod screen;
 
 use std::collections::{HashMap, HashSet};
 use std::io::{Read, Write};
@@ -436,13 +437,14 @@ fn open_panel(app: &AppHandle) {
         return error(app, "zły adres panelu");
     };
     let (app_nav, app_new) = (app.clone(), app.clone());
+    let (win_w, win_h) = screen::fit_to_screen(app, 1600.0, 900.0); // skalowanie ułamkowe: okno nie większe niż ekran
     let built = native_look(WebviewWindowBuilder::new(
         app,
         &label,
         WebviewUrl::External(url),
     ))
     .title(&title)
-    .inner_size(1600.0, 900.0)
+    .inner_size(win_w, win_h)
     .min_inner_size(400.0, 500.0)
     .visible(false)
     .initialization_script(script())
