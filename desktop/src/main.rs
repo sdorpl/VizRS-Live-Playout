@@ -420,6 +420,40 @@ fn page_loaded(app: &AppHandle, label: &str) {
     }
 }
 
+/// Linux: proces strony WebKitGTK padł (sterownik GPU, brak pamięci) – WebKitGTK zostawia wtedy puste okno.
+/// Strona wczytuje się od nowa z pierwszej strony bieżącego trybu (pośrednik: z sekretem), najwyżej 3 razy na minutę –
+/// przy awarii za każdym wczytaniem okno zostaje puste zamiast mielić w kółko. Ten sam mechanizm w oknach
+/// VizRS CG Artist i Trio (VizRS CG System).
+fn reload_after_crash(app: &AppHandle, w: &tauri::WebviewWindow) {
+    #[cfg(target_os = "linux")]
+    {
+        let app = app.clone();
+        let _ = w.with_webview(move |pv| {
+            use webkit2gtk::WebViewExt;
+            let recent = std::cell::RefCell::new(Vec::<Instant>::new());
+            pv.inner().connect_web_process_terminated(move |v, reason| {
+                let mut r = recent.borrow_mut();
+                r.retain(|t| t.elapsed() < Duration::from_secs(60));
+                let url = (r.len() < 3)
+                    .then(|| state(&app).page().map(|p| p.1))
+                    .flatten();
+                let what = if url.is_some() {
+                    " – wczytuję stronę ponownie"
+                } else {
+                    " – okno zostaje puste"
+                };
+                eprintln!("proces strony zakończył się ({reason:?}){what}");
+                if let Some(u) = url {
+                    r.push(Instant::now());
+                    v.load_uri(&u);
+                }
+            });
+        });
+    }
+    #[cfg(not(target_os = "linux"))]
+    let _ = (app, w);
+}
+
 fn open_panel(app: &AppHandle) {
     let (page, title, label) = {
         let mut a = state(app);
@@ -487,6 +521,7 @@ fn open_panel(app: &AppHandle) {
             });
             #[cfg(not(target_os = "linux"))]
             let _ = &w;
+            reload_after_crash(app, &w);
             app.set_theme(Some(Theme::Dark));
             let (app2, l2) = (app.clone(), label.clone());
             std::thread::spawn(move || {
