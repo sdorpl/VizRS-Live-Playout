@@ -26,7 +26,11 @@
 | R11 | wydanie 1.0: instrukcja operatora, runbook, obrazy ghcr, przegląd bezpieczeństwa | `docs/INSTRUKCJA.md`, `docs/RUNBOOK.md`, `release.yml` |
 | R12 | Sloty na żywo (MCR), Audycje LIVE, operator i studio w pasku górnym | `views/live.js`, `app.js` |
 
-## Wydanie 26.11.9 (2026-11-14, gałąź `main`)
+## Wydanie 26.11.10 (2026-11-14, gałąź `main`)
+
+Aplikacja VizRS Live (okno): przy NVIDIA rysowanie Skia na CPU – rasteryzacja na GPU wywracała proces strony (puste okno); po awarii procesu strony okno wczytuje stronę od nowa (`desktop/src/gpu.rs`, `main.rs` – jak VizRS CG Artist 26.11.8 i okno Trio). Panel (`server/`) bez zmian względem 26.11.9.
+
+## Wydanie 26.11.9 (2026-11-14)
 
 Aplikacja VizRS Live (okno): na KDE Plasma Wayland przy niecałkowitej skali okno otwiera się przez XWayland – ostre piksele zamiast bufora ×2 zmniejszanego przez kompozytor (`desktop/src/scale.rs`, `gpu.rs` – jak VizRS CG Artist 26.11.7); pierwszy AppImage aplikacji w wydaniu. Panel (`server/`) bez zmian względem 26.11.8.
 
