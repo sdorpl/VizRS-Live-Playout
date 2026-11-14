@@ -2,6 +2,8 @@
 
 ## Niewydane
 
+- **Wydanie:** AppImage okna klienta VizRS Live (`VizRS-Live-<wersja>-x86_64.AppImage`, okno z panelem `vizrs-live` w środku) buduje akcja Release na GitHubie (bundler Tauri, Ubuntu 22.04, krok sprawdza `--version`) – jak AppImage okna Trio w VizRS CG System. DOKUMENTACJA §3.
+
 ## 26.11.10 – wydanie (2026-11-14)
 
 - **Aplikacja VizRS Live – poprawka: puste, „rozjechane” okno na Linuksie z kartą NVIDIA** (zgłoszenie: KDE Plasma 125 %, Quadro P400, sterownik 580): rasteryzacja Skia na GPU wywracała proces strony WebKitGTK (`libnvidia-eglcore`) – po kilku sekundach albo przy zmianie rozmiaru okna treść znikała lub zostawała w starym rozmiarze. Przy NVIDIA warstwy rysuje teraz Skia na CPU, składa je dalej GPU (`WEBKIT_SKIA_ENABLE_CPU_RENDERING=1`). Gdy proces strony mimo to padnie, okno samo wczytuje stronę od nowa. Ten sam `gpu.rs` w VizRS CG Artist 26.11.8 i oknie Trio (VizRS CG System 26.11.7). DOKUMENTACJA §3. Panel (`server/`) bez zmian.
