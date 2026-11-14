@@ -2,6 +2,8 @@
 
 ## Niewydane
 
+## 26.11.6 – wydanie (2026-11-14)
+
 - **Dziennik emisji – centralne miejsce logów systemu emisji:** obok zapisu anteny (as-run) wybór źródła: **live ingest – odbiorniki** (nadawcy RTMP/SRT przychodzący i odchodzący, błędy ich ffmpeg), **przejęcia kanału** (przebiegi kawałek/live, tempo, oś czasu kanału względem zegara), **sidecar VizRS CG** (wiersze kanału i ogólne), **ErsatzTV legacy** (log legacy z wybranego dnia) oraz **wszystko na jednej osi czasu** z kolumną „Źródło”; próg poziomu (uwaga, błędy), filtr, eksport CSV każdego widoku. Klucze strumieni i hasła maskuje CG Playout. Logi VizRS CG włączają się, gdy CG Playout zgłosi `logs` w `features` – **wymaga VizRS CG Playout z tego cyklu** (`GET /api/live/logs`); pośrednik: `GET /api/cg/live/logs/{cg|ingest|takeover}/{kanał}/{RRRR-MM-DD}`. DOKUMENTACJA §3 i §4.
 
 - **Aplikacja VizRS Live – rozmiar okna przy skalowaniu ułamkowym:** okno 1600×900 px logicznych wychodziło poza ekran 1920×1080 przy 125 % (1536×864); teraz jest przycinane do obszaru roboczego monitora (`desktop/src/screen.rs`, ten sam moduł w VizRS CG Artist i oknie Trio). DOKUMENTACJA „Aplikacja VizRS Live”.
